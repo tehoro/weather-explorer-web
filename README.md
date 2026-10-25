@@ -24,7 +24,7 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
   timeline, wind particles, panels), `worker.js` (frame decoding, isobars, highs and lows) and
   `basemap.json` (Natural Earth 1:50m land and borders, public domain).
 - `tools/make_basemap.py` — rebuilds `basemap.json` from the world-atlas TopoJSON.
-- `.github/workflows/deploy.yml` — runs when the backend signals new highlights (`repository_dispatch`, see the backend's `web_notify.py`), with a fallback schedule (09:45–10:45 and 21:45–22:45 UTC, plus every three hours); sync, cache and Pages deploy.
+- `.github/workflows/deploy.yml` — runs when the backend signals new highlights (`repository_dispatch`, see the backend's `web_notify.py`), with a fallback schedule (03:30–04:20 and 15:30–16:20 UTC, plus every three hours); sync, cache and Pages deploy.
 
 ## Sharing and saving
 

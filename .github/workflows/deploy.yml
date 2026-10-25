@@ -3,14 +3,14 @@
 #
 # The backend asks for a sync as soon as new highlights are ready (repository_dispatch). The
 # schedule is the fallback, since GitHub can run scheduled jobs hours late: checks cluster after
-# the 09 and 21 UTC sweeps, plus one every three hours for requested events. A check that finds
+# the 03 and 15 UTC sweeps, plus one every three hours for requested events. A check that finds
 # nothing new takes about half a minute.
 name: Sync and deploy
 
 on:
   schedule:
-    - cron: "45 9,21 * * *"
-    - cron: "15,45 10,22 * * *"
+    - cron: "30,50 3,15 * * *"
+    - cron: "20 4,16 * * *"
     - cron: "5 */3 * * *"
   workflow_dispatch:
   repository_dispatch:
