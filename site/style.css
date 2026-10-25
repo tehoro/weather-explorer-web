@@ -36,7 +36,25 @@ button { font: inherit; color: inherit; }
 }
 .brand h1 { margin: 0; font-size: 19px; letter-spacing: 0.2px; }
 .brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .fresh { color: var(--muted); font-size: 13px; }
+.units { position: relative; }
+.units-btn {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 4px 10px;
+  cursor: pointer; font-size: 13px; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
+}
+.units-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.units-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px;
+  min-width: 210px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.units-panel[hidden] { display: none; }
+.units-panel label { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+.units-panel select {
+  font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 6px;
+}
 
 /* Layout: list | map | details */
 .layout {
@@ -92,9 +110,20 @@ button { font: inherit; color: inherit; }
 .legend .note { color: var(--muted); margin-top: 3px; }
 .zoom { position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 4px; }
 .zoom button {
-  width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line);
-  background: rgba(8, 14, 19, 0.85); cursor: pointer; font-size: 17px;
+  width: 36px; height: 36px; padding: 0; border-radius: 8px; border: 1px solid var(--line);
+  background: rgba(8, 14, 19, 0.85); color: var(--text); cursor: pointer;
+  display: grid; place-items: center; -webkit-appearance: none; appearance: none;
 }
+.zoom button[hidden] { display: none; }
+.zoom svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.zoom .exit { display: none; }
+.full .zoom .enter { display: none; }
+.full .zoom .exit { display: inline; }
+
+/* Full screen: the map and timeline fill the screen. */
+.stage.full { position: fixed; inset: 0; z-index: 50; background: var(--bg); height: 100vh; height: 100dvh; }
+.stage.full .map { min-height: 0; }
+.stage.full .timeline { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
 
 /* Timeline */
 .timeline {
@@ -145,6 +174,7 @@ button { font: inherit; color: inherit; }
 @media (max-width: 720px) {
   .top { padding: 10px 16px; }
   .brand p { display: none; }
+  .units-panel { left: 0; right: auto; }
   .layout { display: flex; flex-direction: column; flex: none; }
   .layout > * { flex: none; }
   .list {
@@ -159,6 +189,7 @@ button { font: inherit; color: inherit; }
   .legend { min-width: 0; padding: 6px 8px 4px; font-size: 11px; }
   .legend canvas { width: 140px; }
   .legend .note { display: none; }
+  .legend .note.credit { display: block; }
   .when { min-width: 0; font-size: 12px; }
   .timeline { gap: 8px; padding: 8px 12px; }
   .details { padding: 14px 16px 20px; }

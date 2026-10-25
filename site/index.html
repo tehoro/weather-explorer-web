@@ -14,7 +14,20 @@
     <h1>Weather Explorer</h1>
     <p>Interesting weather around the world, animated from ECMWF Open Data</p>
   </div>
-  <div class="fresh" id="fresh"></div>
+  <div class="tools">
+    <span class="fresh" id="fresh"></span>
+    <div class="units">
+      <button id="unitsBtn" class="units-btn" aria-expanded="false" aria-controls="unitsPanel" title="Map and units"></button>
+      <div class="units-panel" id="unitsPanel" hidden>
+        <label>Map <select id="mapStyle">
+          <option value="dark">Dark</option><option value="light">Light</option><option value="satellite">Satellite</option>
+        </select></label>
+        <label>Temperature <select data-kind="temperature"></select></label>
+        <label>Wind <select data-kind="wind"></select></label>
+        <label>Rain <select data-kind="rain"></select></label>
+      </div>
+    </div>
+  </div>
 </header>
 
 <main class="layout">
@@ -33,9 +46,14 @@
       <div class="status" id="status" hidden></div>
       <div class="legend" id="legend"></div>
       <div class="zoom">
-        <button id="zoomIn" aria-label="Zoom in">+</button>
-        <button id="zoomOut" aria-label="Zoom out">−</button>
-        <button id="zoomFit" aria-label="Fit the scene">⤢</button>
+        <button id="zoomIn" aria-label="Zoom in" title="Zoom in">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg></button>
+        <button id="zoomOut" aria-label="Zoom out" title="Zoom out">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12"/></svg></button>
+        <button id="zoomFit" aria-label="Show the whole scene" title="Show the whole scene">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5.5"/><path d="M10 1.5v4M10 14.5v4M1.5 10h4M14.5 10h4"/></svg></button>
+        <button id="fullscreen" aria-label="Full screen" title="Full screen">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path class="enter" d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/><path class="exit" d="M8 3v5H3M17 8h-5V3M12 17v-5h5M3 12h5v5"/></svg></button>
       </div>
     </div>
     <div class="timeline">

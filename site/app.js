@@ -3,6 +3,8 @@
 // Everything is drawn in the browser: the colour fill on the GPU (WebGL2), isobars, highs and
 // lows in a worker, wind particles on a canvas. The server only provides files.
 
+import * as Units from "./units.js";
+
 const $ = (s) => document.querySelector(s);
 const DATA = "data/";
 const SPEEDS = [0.5, 1, 2, 4];
@@ -27,6 +29,7 @@ const S = {
   fill: [],             // per frame: {tex, data} once loaded
   uv: [],               // per frame: Uint8Array of u/v pairs
   contour: null,        // {segs, levels, centres, key}
+  tracked: [],          // contour labels on screen, in grid units: [{gx, gy, v}]
   pos: 0,
   playing: false,
   speed: 1,
@@ -124,15 +127,72 @@ fetch("basemap.json").then((r) => r.json()).then((j) => {
   drawBase();
 }).catch(() => {});
 
-const css = getComputedStyle(document.documentElement);
-const colour = (name) => css.getPropertyValue(name).trim();
+// Map styles, as in the app. Satellite uses NASA's Blue Marble imagery from GIBS (public domain,
+// no key), in the same Web Mercator tiling as the data.
+const MAP_STYLES = {
+  dark: { ocean: "#0d1923", land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
+          line: "rgba(255,255,255,0.78)", streak: "rgba(255,255,255,0.75)" },
+  light: { ocean: "#c4d3de", land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
+           line: "rgba(20,30,40,0.78)", streak: "rgba(20,30,40,0.7)" },
+  satellite: { ocean: "#08131f", land: null, coast: "rgba(255,255,255,0.35)", border: "rgba(255,255,255,0.28)",
+               line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
+               tiles: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg",
+               maxZoom: 8, credit: "Imagery: NASA Blue Marble (GIBS)" },
+};
+const STYLE_KEY = "weather-explorer-map";
+let mapStyle = "dark";
+try { mapStyle = MAP_STYLES[localStorage.getItem(STYLE_KEY)] ? localStorage.getItem(STYLE_KEY) : "dark"; } catch { /* default */ }
+const style = () => MAP_STYLES[mapStyle];
+
+const tiles = new Map();
+let tileRedraw = 0;
+function tile(z, x, y) {
+  const key = `${z}/${x}/${y}`;
+  let t = tiles.get(key);
+  if (!t) {
+    t = new Image();
+    t.decoding = "async";
+    t.onload = () => { if (!tileRedraw) tileRedraw = requestAnimationFrame(() => { tileRedraw = 0; drawBase(); }); };
+    t.src = style().tiles.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+    tiles.set(key, t);
+    if (tiles.size > 400) tiles.delete(tiles.keys().next().value);
+  }
+  return t.complete && t.naturalWidth ? t : null;
+}
+
+function drawTiles(g, st) {
+  // Tiles where 1 tile pixel is about 1 screen pixel; a coarser tile fills in until it loads.
+  const z = Math.max(0, Math.min(st.maxZoom, Math.ceil(Math.log2(S.view.s * DPR * 360 / 256))));
+  const draw = (zz) => {
+    const n = 2 ** zz;
+    const [lonL, yT] = toWorld(0, 0), [lonR, yB] = toWorld(W, H);
+    const tx0 = Math.floor((lonL + 180) / 360 * n), tx1 = Math.floor((lonR + 180) / 360 * n);
+    const ty0 = Math.max(0, Math.floor((180 - yT) / 360 * n)), ty1 = Math.min(n - 1, Math.floor((180 - yB) / 360 * n));
+    let missing = false;
+    for (let tx = tx0; tx <= tx1; tx++) {
+      for (let ty = ty0; ty <= ty1; ty++) {
+        const img = tile(zz, ((tx % n) + n) % n, ty);
+        if (!img) { missing = true; continue; }
+        const [x0, y0] = toScreen(tx / n * 360 - 180, 180 - ty / n * 360);
+        const [x1, y1] = toScreen((tx + 1) / n * 360 - 180, 180 - (ty + 1) / n * 360);
+        g.drawImage(img, x0, y0, x1 - x0 + 0.5, y1 - y0 + 0.5);
+      }
+    }
+    return missing;
+  };
+  if (z > 2) draw(Math.max(0, z - 3));
+  draw(z);
+}
 
 function drawBase() {
   const g = base.getContext("2d");
+  const st = style();
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
-  g.fillStyle = colour("--ocean");
+  g.fillStyle = st.ocean;
   g.fillRect(0, 0, W, H);
-  if (!basemap || !S.view) return;
+  if (!S.view) return;
+  if (st.tiles) drawTiles(g, st);
+  if (!basemap) return;
   const [lonL] = toWorld(0, 0), [lonR] = toWorld(W, 0);
   const shifts = [-360, 0, 360].filter((k) => lonR >= -180 + k && lonL <= 180 + k);
   const path = (arrs, close) => {
@@ -148,14 +208,16 @@ function drawBase() {
     }
   };
   path(basemap.land, true);
-  g.fillStyle = colour("--land");
-  g.fill("evenodd");
+  if (st.land) {
+    g.fillStyle = st.land;
+    g.fill("evenodd");
+  }
   g.lineWidth = 0.8;
-  g.strokeStyle = colour("--coast");
+  g.strokeStyle = st.coast;
   g.stroke();
   path(basemap.borders, false);
   g.lineWidth = 0.6;
-  g.strokeStyle = colour("--border");
+  g.strokeStyle = st.border;
   g.stroke();
 }
 
@@ -334,7 +396,7 @@ function drawOverlay() {
       g.moveTo(ax, ay);
       g.lineTo(bx, by);
     }
-    g.strokeStyle = "rgba(255,255,255,0.78)";
+    g.strokeStyle = style().line;
     g.lineWidth = 1.1;
     g.stroke();
 
@@ -355,26 +417,45 @@ function drawOverlay() {
       g.shadowBlur = 0;
     }
 
-    // A few contour values, spread out and clear of the centres.
+    // A few contour values, spread out and clear of the centres. As in the app, labels already
+    // showing follow their contour to its nearest point, so they glide rather than jump; one is
+    // dropped only if its contour has gone or it runs into an edge, a centre or another label.
     const gap = Math.max(140, Math.min(W, H) / 3.2), maxLabels = W > 700 ? 12 : 7;
-    const step = Math.max(1, Math.floor(segs.length / 4 / 400));
-    const cands = [];
-    for (let k = 0, n = 0; k < segs.length; k += 4 * step, n++) {
-      const mx = (segs[k] + segs[k + 2]) / 2, my = (segs[k + 1] + segs[k + 3]) / 2;
-      const [x, y] = gridToScreen(cm.meta, mx, my);
-      if (x < 30 || y < 60 || x > W - 30 || y > H - 50) continue;
+    const labels = [];
+    const label = (k) => {
+      const gx = (segs[k] + segs[k + 2]) / 2, gy = (segs[k + 1] + segs[k + 3]) / 2;
+      const [x, y] = gridToScreen(cm.meta, gx, gy);
       const [ax, ay] = gridToScreen(cm.meta, segs[k], segs[k + 1]);
       const [bx, by] = gridToScreen(cm.meta, segs[k + 2], segs[k + 3]);
-      cands.push({ x, y, a: Math.atan2(by - ay, bx - ax), v: c.levels[k / 4], h: (n * 2654435761) >>> 0 });
+      return { x, y, gx, gy, a: Math.atan2(by - ay, bx - ax), v: c.levels[k / 4] };
+    };
+    const fits = (p, minGap) => p.x >= 30 && p.y >= 60 && p.x <= W - 30 && p.y <= H - 50
+      && !placed.some(([x, y]) => Math.hypot(x - p.x, y - p.y) < 60)
+      && !labels.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < minGap);
+    const radius = Math.max(2, Math.min(cm.meta.nx, cm.meta.ny) / 25);
+    for (const t of S.tracked) {
+      let best = -1, bd = radius * radius;
+      for (let k = 0; k < segs.length; k += 4) {
+        if (c.levels[k / 4] !== t.v) continue;
+        const dx = (segs[k] + segs[k + 2]) / 2 - t.gx, dy = (segs[k + 1] + segs[k + 3]) / 2 - t.gy;
+        const d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = k; }
+      }
+      if (best < 0) continue;
+      const p = label(best);
+      if (fits(p, gap * 0.6)) labels.push(p);
     }
+    // Then new ones, if there's room, from a fixed pseudo-random order.
+    const step = Math.max(1, Math.floor(segs.length / 4 / 400));
+    const cands = [];
+    for (let k = 0, n = 0; k < segs.length; k += 4 * step, n++) cands.push({ k, h: (n * 2654435761) >>> 0 });
     cands.sort((p, q) => p.h - q.h);
-    const labels = [];
-    for (const p of cands) {
+    for (const { k } of cands) {
       if (labels.length >= maxLabels) break;
-      if (placed.some(([x, y]) => Math.hypot(x - p.x, y - p.y) < 60)) continue;
-      if (labels.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < gap)) continue;
-      labels.push(p);
+      const p = label(k);
+      if (fits(p, gap)) labels.push(p);
     }
+    S.tracked = labels.map((p) => ({ gx: p.gx, gy: p.gy, v: p.v }));
     g.font = "600 10.5px ui-monospace, SFMono-Regular, Menlo, monospace";
     g.textAlign = "center";
     g.textBaseline = "middle";
@@ -496,7 +577,7 @@ function stepParticles() {
   while (parts.length < want) parts.push({ x: Math.random() * W, y: Math.random() * H, age: Math.random() * 80 | 0, life: 40 + Math.random() * 60 | 0 });
   parts.length = want;
   const ref = vm.meta.layer === "jet250" ? 70 : 22;
-  g.strokeStyle = "rgba(255,255,255,0.75)";
+  g.strokeStyle = style().streak;
   g.lineWidth = 1;
   g.beginPath();
   for (const p of parts) {
@@ -529,7 +610,7 @@ async function loadScene(entry, sceneIndex, keepView) {
   const scene = entry.item.scenes[sceneIndex];
   S.pkg = scene.package;
   S.meta = null;
-  S.fill = []; S.uv = []; S.contourFrames = []; S.contour = null; parts = [];
+  S.fill = []; S.uv = []; S.contourFrames = []; S.contour = null; S.tracked = []; parts = [];
   S.pos = 0;
   worker.postMessage({ type: "reset" });
   renderList();
@@ -625,7 +706,7 @@ function updateTime() {
   const cap = (sc.captions || []).filter((c) => parseTime(c.at) <= t).pop();
   const el = $("#caption");
   el.hidden = !cap;
-  el.textContent = cap ? cap.text : "";
+  el.textContent = cap ? loc(cap.text) : "";
 }
 function timeAt(pos) {
   const fr = S.meta.fill.frames;
@@ -744,6 +825,36 @@ $("#zoomIn").onclick = () => zoomAt(W / 2, H / 2, 1.5);
 $("#zoomOut").onclick = () => zoomAt(W / 2, H / 2, 1 / 1.5);
 $("#zoomFit").onclick = () => { fit(); viewChanged(false); };
 
+// Full screen: the map and timeline cover the page. Where the browser allows it (not iPhone
+// Safari), the browser's own controls are hidden too.
+const stage = $(".stage");
+function setFull(on) {
+  stage.classList.toggle("full", on);
+  $("#fullscreen").setAttribute("aria-label", on ? "Exit full screen" : "Full screen");
+  $("#fullscreen").title = on ? "Exit full screen" : "Full screen";
+  document.body.style.overflow = on ? "hidden" : "";
+}
+$("#fullscreen").onclick = async () => {
+  const root = document.documentElement;
+  const isFull = document.fullscreenElement || document.webkitFullscreenElement;
+  if (stage.classList.contains("full")) {
+    setFull(false);
+    if (isFull) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
+    return;
+  }
+  setFull(true);
+  try {
+    const req = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (req) await req.call(root);
+  } catch { /* the page-filling view is enough */ }
+};
+const fsChange = () => {
+  if (!(document.fullscreenElement || document.webkitFullscreenElement) && stage.classList.contains("full")) setFull(false);
+};
+document.addEventListener("fullscreenchange", fsChange);
+document.addEventListener("webkitfullscreenchange", fsChange);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && stage.classList.contains("full")) setFull(false); });
+
 function viewChanged(touched = true) {
   if (S.view) S.view.touched = touched;
   $("#readout").hidden = true;
@@ -770,9 +881,8 @@ function readout(px, py) {
   if (m.scale === "sqrt") t *= t;
   const v = m.lo + (m.hi - m.lo) * t;
   const lat = invMercY(y);
-  const digits = Math.abs(v) < 10 ? 1 : 0;
   const ll = `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(((L + 540) % 360) - 180).toFixed(1)}°${((L + 540) % 360) - 180 >= 0 ? "E" : "W"}`;
-  el.innerHTML = `<b>${v.toFixed(digits)} ${m.units}</b> <span class="muted">${ll}</span>`;
+  el.innerHTML = `<b>${esc(Units.format(v, m.units))}</b> <span class="muted">${ll}</span>`;
   el.style.left = `${px}px`;
   el.style.top = `${py}px`;
   el.hidden = false;
@@ -791,12 +901,13 @@ function drawAll() {
 // ------------------------------------------------------------------------------------------
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const loc = Units.localize;
 const safeUrl = (u) => /^https?:\/\//i.test(u || "") ? u : null;
 
 function renderList() {
   const el = $("#list");
   const row = (e) => `<button class="entry" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
-      <span class="t">${esc(e.item.title)}</span><span class="w">${esc(e.item.where?.label || "")}</span></button>`;
+      <span class="t">${esc(loc(e.item.title))}</span><span class="w">${esc(e.item.where?.label || "")}</span></button>`;
   const main = S.entries.filter((e) => !e.requested), req = S.entries.filter((e) => e.requested);
   el.innerHTML = `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : "");
   for (const b of el.querySelectorAll(".entry")) {
@@ -814,18 +925,18 @@ function renderDetails() {
   const when = it.when ? [it.when.start && `from ${fmt(it.when.start)}`, it.when.peak && `peak ${fmt(it.when.peak)}`].filter(Boolean).join(" · ") : "";
   const evidence = (it.evidence || []).map((e) => {
     const u = safeUrl(e.url);
-    return `<li><span class="k">${esc(e.kind || "")}</span>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(e.text)}</a>` : esc(e.text)}</li>`;
+    const text = esc(loc(e.text));
+    return `<li><span class="k">${esc(e.kind || "")}</span>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${text}</a>` : text}</li>`;
   }).join("");
   $("#details").innerHTML = `
-    <h2>${esc(it.title)}</h2>
+    <h2>${esc(loc(it.title))}</h2>
     <p class="where">${esc(it.where?.label || "")}${when ? `<br>${esc(when)}` : ""}</p>
     ${it.hazards?.length ? `<div class="chips">${it.hazards.map((h) => `<span class="chip">${esc(h.replace(/-/g, " "))}</span>`).join("")}</div>` : ""}
-    ${sc.length > 1 ? `<h3>Scenes</h3><div class="scenes">${sc.map((s, i) => `<button data-i="${i}" aria-current="${i === S.sceneIndex}">${esc(s.title || `Scene ${i + 1}`)}</button>`).join("")}</div>` : ""}
-    <h3>What's happening</h3><p>${esc(it.summary)}</p>
-    ${it.why_interesting ? `<h3>Why it's interesting</h3><p>${esc(it.why_interesting)}</p>` : ""}
-    ${it.talking_points?.length ? `<h3>Questions to explore</h3><ul>${it.talking_points.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+    ${sc.length > 1 ? `<h3>Scenes</h3><div class="scenes">${sc.map((s, i) => `<button data-i="${i}" aria-current="${i === S.sceneIndex}">${esc(loc(s.title) || `Scene ${i + 1}`)}</button>`).join("")}</div>` : ""}
+    <h3>What's happening</h3><p>${esc(loc(it.summary))}</p>
+    ${it.why_interesting ? `<h3>Why it's interesting</h3><p>${esc(loc(it.why_interesting))}</p>` : ""}
     ${evidence ? `<h3>Sources</h3><ul class="evidence">${evidence}</ul>` : ""}
-    ${it.confidence ? `<h3>Confidence</h3><p>${esc(it.confidence)}</p>` : ""}`;
+    ${it.confidence ? `<h3>Confidence</h3><p>${esc(loc(it.confidence))}</p>` : ""}`;
   for (const b of $("#details").querySelectorAll(".scenes button")) {
     b.onclick = () => { location.hash = `${S.entry.key}/${b.dataset.i}`; };
   }
@@ -836,18 +947,69 @@ function renderLegend() {
   const lo = S.ramp.lo, hi = S.ramp.hi;
   const cm = contourMeta();
   const el = $("#legend");
-  el.innerHTML = `<div class="lt">${esc(m.title)} <span class="muted">(${esc(m.units)})</span></div>
+  const label = (v) => esc(Units.format(v, m.units, false));
+  el.innerHTML = `<div class="lt">${esc(m.title)} <span class="muted">(${esc(Units.unit(m.units))})</span></div>
     <canvas width="200" height="10"></canvas>
-    <div class="scale"><span>${lo}</span><span>${Math.round((lo + hi) / 2)}</span><span>${hi}</span></div>
+    <div class="scale"><span>${label(lo)}</span><span>${label((lo + hi) / 2)}</span><span>${label(hi)}</span></div>
     ${cm ? `<div class="note">Lines: ${esc(cm.meta.title.toLowerCase())} every ${cm.meta.contour_interval} ${esc(cm.meta.units)}</div>` : ""}
     ${vectorMeta() ? `<div class="note">Streaks: ${esc(vectorMeta().meta.title.toLowerCase())}</div>` : ""}
-    <div class="note">${esc(m.model)}</div>`;
+    <div class="note">${esc(m.model)}</div>
+    ${style().credit ? `<div class="note credit">${esc(style().credit)}</div>` : ""}`;
   const c = el.querySelector("canvas"), g = c.getContext("2d");
   for (let x = 0; x < 200; x++) {
     const [r, gg, b, a] = rampSample(m.stops, lo + (hi - lo) * x / 199);
     g.fillStyle = `rgba(${r},${gg},${b},${Math.max(0.12, a / 255)})`;
     g.fillRect(x, 0, 1, 10);
   }
+}
+
+// Map style and units: "Automatic" units follow the browser's region; choices are remembered in
+// this browser.
+const GEAR = `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h9M15 5h2M3 10h3M9 10h8M3 15h7M13 15h4"/><circle cx="13.5" cy="5" r="1.6"/><circle cx="7.5" cy="10" r="1.6"/><circle cx="11.5" cy="15" r="1.6"/></svg>`;
+function setupUnits() {
+  const btn = $("#unitsBtn"), panel = $("#unitsPanel");
+  const names = { C: "°C", F: "°F", mm: "mm", in: "inches" };
+  for (const sel of panel.querySelectorAll("select[data-kind]")) {
+    const kind = sel.dataset.kind;
+    const auto = Units.CHOICES[kind].find(([v]) => v === Units.DEVICE[kind]);
+    sel.innerHTML = [["auto", `Automatic (${auto ? auto[1] : names[Units.DEVICE[kind]]})`], ...Units.CHOICES[kind]]
+      .map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("");
+    sel.value = Units.choice(kind);
+    sel.onchange = () => {
+      Units.setChoice(kind, sel.value);
+      btn.innerHTML = GEAR + esc(Units.summary());
+      unitsChanged();
+    };
+  }
+  const styleSel = $("#mapStyle");
+  styleSel.value = mapStyle;
+  styleSel.onchange = () => {
+    mapStyle = styleSel.value;
+    try { localStorage.setItem(STYLE_KEY, mapStyle); } catch { /* applied, not kept */ }
+    applyMapStyle();
+  };
+  applyMapStyle();
+  btn.innerHTML = GEAR + esc(Units.summary());
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    btn.setAttribute("aria-expanded", String(!panel.hidden));
+  };
+  document.addEventListener("click", (e) => {
+    if (!panel.hidden && !e.target.closest(".units")) { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); }
+  });
+}
+function applyMapStyle() {
+  mapEl.style.background = style().ocean;
+  particles.getContext("2d").clearRect(0, 0, particles.width, particles.height);
+  if (S.meta) renderLegend();
+  drawAll();
+}
+function unitsChanged() {
+  renderList();
+  if (S.entry) renderDetails();
+  if (S.meta) { renderLegend(); updateTime(); }
+  $("#readout").hidden = true;
 }
 
 const fmtTime = new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC", hour12: false });
@@ -903,6 +1065,7 @@ new ResizeObserver(resize).observe(mapEl);
     console.warn(e);
   }
   if (!gl) status("This browser can't show the weather layer (WebGL2 is needed).");
+  setupUnits();
   try {
     await loadFeed();
     route();
