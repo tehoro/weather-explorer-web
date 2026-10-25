@@ -1053,15 +1053,36 @@ function notice(text) {
 }
 $("#notice").onclick = () => { $("#notice").hidden = true; };
 
+// Key labels, as in the app: round values in the viewer's units (e.g. 50, 100, 150, 200 km/h),
+// about `n` across the bar, each placed where it falls. Returns [[fraction, text], ...].
+function legendTicks(lo, hi, units, n) {
+  const a = Units.convert(lo, units), b = Units.convert(hi, units);
+  const dlo = Math.min(a, b), dhi = Math.max(a, b);
+  if (!(dhi > dlo)) return [];
+  const raw = (dhi - dlo) / n;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((x) => x * mag).find((x) => x >= raw) || 10 * mag;
+  const out = [];
+  for (let t = Math.ceil(dlo / step - 1e-9) * step; t <= dhi + 1e-9; t += step) {
+    const f = (t - dlo) / (dhi - dlo);
+    if (f < -1e-9 || f > 0.96) continue;                   // the right end is left clear
+    if (f > 0 && f < 0.04) continue;                       // too close to a label at the left end
+    const v = Math.round(t * 1e6) / 1e6;
+    out.push([a <= b ? f : 1 - f, v === Math.round(v) ? String(v) : String(Math.abs(v) < 1 ? +v.toPrecision(2) : v.toFixed(1))]);
+  }
+  return out;
+}
+
 function renderLegend() {
   const m = S.meta.fill;
   const lo = S.ramp.lo, hi = S.ramp.hi;
   const cm = contourMeta();
   const el = $("#legend");
-  const label = (v) => esc(Units.format(v, m.units, false));
+  const scale = legendTicks(lo, hi, m.units, matchMedia("(max-width: 720px)").matches ? 4 : 6)
+    .map(([f, text]) => `<span style="left:${(f * 100).toFixed(1)}%">${esc(text)}</span>`).join("");
   el.innerHTML = `<div class="lt">${esc(m.title)} <span class="muted">(${esc(Units.unit(m.units))})</span></div>
     <canvas width="200" height="10"></canvas>
-    <div class="scale"><span>${label(lo)}</span><span>${label((lo + hi) / 2)}</span><span>${label(hi)}</span></div>
+    <div class="scale">${scale}</div>
     ${cm ? `<div class="note">Lines: ${esc(cm.meta.title.toLowerCase())} every ${cm.meta.contour_interval} ${esc(cm.meta.units)}</div>` : ""}
     ${vectorMeta() ? `<div class="note">Streaks: ${esc(vectorMeta().meta.title.toLowerCase())}</div>` : ""}
     <div class="note">${esc(m.model)}</div>

@@ -158,7 +158,9 @@ button { font: inherit; color: inherit; }
 }
 .legend .lt { font-weight: 600; margin-bottom: 4px; }
 .legend canvas { position: static; display: block; width: 200px; height: 10px; border-radius: 2px; }
-.legend .scale { display: flex; justify-content: space-between; color: var(--muted); margin-top: 2px; }
+.legend .scale { position: relative; height: 16px; width: 200px; color: var(--muted); margin-top: 2px; }
+.legend .scale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.legend .scale span[style^="left:0.0%"] { transform: none; }
 .legend .note { color: var(--muted); margin-top: 3px; }
 .zoom { position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 4px; }
 .zoom button {
@@ -274,7 +276,7 @@ button { font: inherit; color: inherit; }
   .entry .w { display: none; }
   .map { min-height: 62vh; }
   .legend { min-width: 0; padding: 6px 8px 4px; font-size: 11px; }
-  .legend canvas { width: 140px; }
+  .legend canvas, .legend .scale { width: 140px; }
   .legend .note { display: none; }
   .legend .note.credit { display: block; }
   .when { min-width: 0; font-size: 12px; }
