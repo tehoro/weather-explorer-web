@@ -1,0 +1,73 @@
+# Every 30 minutes: copy any new highlights from the backend and publish the site to GitHub Pages.
+# Converted scenes are kept in the Actions cache, so each scene is fetched from the backend once.
+name: Sync and deploy
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Restore converted scenes
+        uses: actions/cache/restore@v4
+        with:
+          path: site/data
+          key: data-${{ github.run_id }}
+          restore-keys: data-
+
+      - name: Sync from the backend
+        id: sync
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+        run: |
+          set +e
+          uv run --frozen sync.py
+          code=$?
+          set -e
+          if [ "$code" = 0 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$code" = 3 ]; then echo "changed=false" >> "$GITHUB_OUTPUT"
+          else exit "$code"; fi
+
+      - name: Save converted scenes
+        if: steps.sync.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: site/data
+          key: data-${{ github.run_id }}
+
+      - name: Package the site
+        if: steps.sync.outputs.changed == 'true' || github.event_name != 'schedule'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: sync
+    if: needs.sync.outputs.changed == 'true' || github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

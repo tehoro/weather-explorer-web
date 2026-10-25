@@ -1,0 +1,9 @@
+[project]
+name = "weather-explorer-web"
+version = "0.1.0"
+description = "Public web viewer for the Weather Explorer highlights (static site plus a sync script)"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26",
+    "pillow>=10",
+]
