@@ -1,9 +1,10 @@
 # Copy any new highlights from the backend and publish the site to GitHub Pages. Converted scenes
 # are kept in the Actions cache, so each scene is fetched from the backend once.
 #
-# The backend sweeps at 09 and 21 UTC and the new feed appears about 40 minutes later, so checks
-# cluster after those times. Requested events can appear at any time, so there is also a check
-# every three hours. A check that finds nothing new takes about half a minute.
+# The backend asks for a sync as soon as new highlights are ready (repository_dispatch). The
+# schedule is the fallback, since GitHub can run scheduled jobs hours late: checks cluster after
+# the 09 and 21 UTC sweeps, plus one every three hours for requested events. A check that finds
+# nothing new takes about half a minute.
 name: Sync and deploy
 
 on:
@@ -12,6 +13,8 @@ on:
     - cron: "15,45 10,22 * * *"
     - cron: "5 */3 * * *"
   workflow_dispatch:
+  repository_dispatch:
+    types: [highlights-updated]       # sent by the backend when a sweep or requested highlight is ready
   push:
     branches: [main]
 
@@ -62,7 +65,7 @@ jobs:
           key: data-${{ github.run_id }}
 
       - name: Stamp the release into file names
-        if: steps.sync.outputs.changed == 'true' || github.event_name != 'schedule'
+        if: steps.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           v="${GITHUB_SHA::8}"
           sed -i "s/?v=dev/?v=$v/g" site/index.html
@@ -70,14 +73,14 @@ jobs:
           grep -q "?v=$v" site/index.html && grep -q "VERSION = \"$v\"" site/app.js
 
       - name: Package the site
-        if: steps.sync.outputs.changed == 'true' || github.event_name != 'schedule'
+        if: steps.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
     needs: sync
-    if: needs.sync.outputs.changed == 'true' || github.event_name != 'schedule'
+    if: needs.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
