@@ -9,7 +9,7 @@ the scene data into small static files, and publishes them with the viewer to Gi
 traffic goes to GitHub's CDN; the backend sees one download of each scene per sweep.
 
 ```
-backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py (GitHub Actions, every 30 min)
+backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py (GitHub Actions, after each sweep)
                                                                 │ WebP frames + feed.json
                                                                 ▼
                                                      GitHub Pages ──▶ browsers
@@ -24,7 +24,7 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
   timeline, wind particles, panels), `worker.js` (frame decoding, isobars, highs and lows) and
   `basemap.json` (Natural Earth 1:50m land and borders, public domain).
 - `tools/make_basemap.py` — rebuilds `basemap.json` from the world-atlas TopoJSON.
-- `.github/workflows/deploy.yml` — the schedule (minutes 07 and 37), sync, cache and Pages deploy.
+- `.github/workflows/deploy.yml` — the schedule (09:45–10:45 and 21:45–22:45 UTC after each sweep, plus every three hours for requested events), sync, cache and Pages deploy.
 
 ## Data format
 

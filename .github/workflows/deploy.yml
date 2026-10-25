@@ -1,10 +1,16 @@
-# Every 30 minutes: copy any new highlights from the backend and publish the site to GitHub Pages.
-# Converted scenes are kept in the Actions cache, so each scene is fetched from the backend once.
+# Copy any new highlights from the backend and publish the site to GitHub Pages. Converted scenes
+# are kept in the Actions cache, so each scene is fetched from the backend once.
+#
+# The backend sweeps at 09 and 21 UTC and the new feed appears about 40 minutes later, so checks
+# cluster after those times. Requested events can appear at any time, so there is also a check
+# every three hours. A check that finds nothing new takes about half a minute.
 name: Sync and deploy
 
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    - cron: "45 9,21 * * *"
+    - cron: "15,45 10,22 * * *"
+    - cron: "5 */3 * * *"
   workflow_dispatch:
   push:
     branches: [main]
