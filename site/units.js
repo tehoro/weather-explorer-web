@@ -194,8 +194,9 @@ function formatTime(date, { weekday = true, day = true } = {}) {
   return `${new Intl.DateTimeFormat(undefined, opts).format(date)} ${zoneName(date)}`;
 }
 
-// Times written in the text with a date, such as "18 UTC 24 Oct" or "06-12 UTC 26 Oct". Model run
-// names ("HRES (18 UTC 24 Oct)") stay as written: they name the run.
+// Times written in the text with a date, such as "18 UTC 24 Oct" or "06-12 UTC 26 Oct" (the
+// highlights skill writes them this way). Model run names ("HRES (18 UTC 24 Oct)",
+// "00 UTC 22 Oct run") stay as written: they name the run.
 let year = new Date().getUTCFullYear();
 function setYear(y) { if (y) year = y; }
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -205,6 +206,7 @@ function localizeTimes(text) {
   if (!local() || !text) return text;
   return text.replace(TEXT_TIME, (m, h1, m1, h2, m2, d, mon, at, all) => {
     if (/(HRES|ENS|AIFS|IFS|run)\s*\(?\s*$/i.test(all.slice(Math.max(0, at - 12), at))) return m;
+    if (/^\s*run\b/i.test(all.slice(at + m.length))) return m;     // "00 UTC 22 Oct run"
     const when = (h, mi) => new Date(Date.UTC(year, MONTHS.indexOf(mon), +d, +h, +(mi || 0)));
     const a = when(h1, m1);
     const hm = (t) => new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: ZONE }).format(t);
