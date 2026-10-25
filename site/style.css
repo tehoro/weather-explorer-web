@@ -106,7 +106,13 @@ button { font: inherit; color: inherit; }
 }
 .act[hidden] { display: none; }
 .act svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.save { position: relative; }
+.save, .video { position: relative; }
+.video[hidden] { display: none; }
+.recording {
+  position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; font-size: 16px;
+  background: rgba(8, 14, 19, 0.92); color: var(--text);
+}
+.recording[hidden] { display: none; }
 .save[hidden] { display: none; }
 .save-panel {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: 270px; background: var(--panel);

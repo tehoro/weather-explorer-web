@@ -42,6 +42,18 @@
       <div class="actions">
         <button id="share" class="act" title="Share a link to this view">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3M6 7l4-4 4 4M4 11v5h12v-5"/></svg><span>Share</span></button>
+        <div class="video">
+          <button id="video" class="act" aria-expanded="false" aria-controls="videoPanel" title="Make a video of this scene">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="5" width="11" height="10" rx="1.5"/><path d="m13.5 9 4-2.5v7l-4-2.5"/></svg><span>Video</span></button>
+          <div class="save-panel" id="videoPanel" hidden>
+            <p>Make an MP4 video of this scene from start to end, with its title, time, key and credit, ready for social media.</p>
+            <p class="muted" id="videoNote"></p>
+            <button data-format="square"><span>Square 1:1</span><small>1080×1080</small></button>
+            <button data-format="portrait"><span>Portrait 4:5</span><small>1080×1350</small></button>
+            <button data-format="landscape"><span>Landscape 16:9</span><small>1920×1080</small></button>
+            <p class="muted" id="videoStatus"></p>
+          </div>
+        </div>
         <div class="save">
           <button id="save" class="act" aria-expanded="false" aria-controls="savePanel" title="Save a copy to play offline">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg><span>Save</span></button>
@@ -56,6 +68,7 @@
     </div>
     <div class="map" id="map">
       <div class="notice" id="notice" hidden></div>
+      <div class="recording" id="recording" hidden>Making the video…</div>
       <canvas id="base"></canvas>
       <canvas id="field"></canvas>
       <canvas id="overlay"></canvas>
@@ -160,6 +173,9 @@
     <ul>
       <li><b>Share</b> creates a link to exactly what you're looking at: the highlight, the scene, the moment, the map style
         and your view. Whoever opens it sees their own units and time zone. Links keep working for a week after a highlight is replaced.</li>
+      <li><b>Video</b> makes an MP4 of the current scene from start to end at your chosen speed, square, portrait or
+        landscape, with the title, time, key, caption and ECMWF credit drawn in. Use it for social media. It's made in
+        your browser and takes a few seconds to a minute. It needs a recent browser; where it isn't supported the button doesn't appear.</li>
       <li><b>Save</b> downloads one web page file, either this highlight or all current ones, that plays with no
         connection. Open it in a browser on a computer. Satellite backgrounds still need the internet.</li>
     </ul>

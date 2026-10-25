@@ -134,6 +134,7 @@ const base = $("#base"), field = $("#field"), overlay = $("#overlay"), particles
 let W = 0, H = 0, DPR = 1;
 
 function resize() {
+  if (S.recording) return;                 // a video is being drawn at its own size
   const r = mapEl.getBoundingClientRect();
   DPR = Math.min(2, window.devicePixelRatio || 1);
   W = r.width; H = r.height;
@@ -218,6 +219,7 @@ function tile(z, x, y) {
   let t = tiles.get(key);
   if (!t) {
     t = new Image();
+    t.crossOrigin = "anonymous";            // GIBS allows it; keeps the map usable for video frames
     t.decoding = "async";
     t.onload = () => { if (!tileRedraw) tileRedraw = requestAnimationFrame(() => { tileRedraw = 0; drawBase(); }); };
     t.src = style().tiles.replace("{z}", z).replace("{x}", x).replace("{y}", y);
@@ -248,7 +250,7 @@ function drawTiles(g, st) {
     return missing;
   };
   if (z > 2) draw(Math.max(0, z - 3));
-  draw(z);
+  return draw(z);                          // true while some tiles are still loading
 }
 
 function drawBase() {
@@ -257,9 +259,9 @@ function drawBase() {
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.fillStyle = st.ocean;
   g.fillRect(0, 0, W, H);
-  if (!S.view) return;
-  if (st.tiles) drawTiles(g, st);
-  if (!basemap) return;
+  if (!S.view) return false;
+  const loading = st.tiles ? drawTiles(g, st) : false;
+  if (!basemap) return true;
   const [lonL] = toWorld(0, 0), [lonR] = toWorld(W, 0);
   const shifts = [-360, 0, 360].filter((k) => lonR >= -180 + k && lonL <= 180 + k);
   const path = (arrs, close) => {
@@ -286,6 +288,7 @@ function drawBase() {
   g.lineWidth = 0.6;
   g.strokeStyle = st.border;
   g.stroke();
+  return loading;
 }
 
 // ------------------------------------------------------------------------------------------
@@ -829,6 +832,7 @@ let last = performance.now();
 function tick(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (S.recording) { requestAnimationFrame(tick); return; }
   if (S.playing && S.meta) {
     const n = S.meta.fill.frames.length;
     const next = Math.min(n - 1, S.pos + dt * S.speed);
@@ -1393,6 +1397,287 @@ async function saveCopy(entries) {
   saving = false;
 }
 
+// ------------------------------------------------------------------------------------------
+// Making a video: the current scene from start to end at the chosen speed, drawn frame by frame
+// at 30 fps with its title, time, key and credit, and encoded in the browser as an MP4
+// (WebCodecs, with mp4-muxer to write the file). Nothing is sent anywhere.
+// ------------------------------------------------------------------------------------------
+
+const VIDEO_FORMATS = {
+  square: { w: 1080, h: 1080, label: "Square 1:1" },
+  portrait: { w: 1080, h: 1350, label: "Portrait 4:5" },
+  landscape: { w: 1920, h: 1080, label: "Landscape 16:9" },
+};
+const VIDEO_FPS = 30;
+const MUXER_URL = "https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.5/build/mp4-muxer.min.js";
+
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement("script");
+    el.src = url;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error(`could not load ${url}`));
+    document.head.appendChild(el);
+  });
+}
+
+function setupVideo() {
+  const btn = $("#video"), panel = $("#videoPanel");
+  if (!("VideoEncoder" in window)) { $(".video").hidden = true; return; }   // this browser can't encode
+  const open = (on) => { panel.hidden = !on; btn.setAttribute("aria-expanded", String(on)); };
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    if (panel.hidden) {
+      const fr = S.meta?.fill.frames.length || 0;
+      const secs = fr ? Math.round((fr - 1) / S.speed + 1.5) : 0;
+      $("#videoNote").textContent = fr ? `This scene at ${S.speed < 1 ? "½" : S.speed}× speed: about ${secs} seconds.` : "";
+      $("#videoStatus").textContent = "";
+    }
+    open(panel.hidden);
+  };
+  document.addEventListener("click", (e) => { if (!panel.hidden && !e.target.closest(".video")) open(false); });
+  for (const b of panel.querySelectorAll("[data-format]")) b.onclick = () => makeVideo(b.dataset.format);
+}
+
+// Text wrapped to a width, at most `max` lines (the last one shortened with an ellipsis).
+function wrapText(g, text, width, max) {
+  const words = String(text).split(/\s+/), lines = [];
+  let line = "";
+  for (const w of words) {
+    const t = line ? `${line} ${w}` : w;
+    if (g.measureText(t).width <= width || !line) line = t;
+    else { lines.push(line); line = w; }
+  }
+  if (line) lines.push(line);
+  if (lines.length > max) {
+    lines.length = max;
+    let last = lines[max - 1];
+    while (last && g.measureText(`${last}…`).width > width) last = last.slice(0, -1);
+    lines[max - 1] = `${last.trim()}…`;
+  }
+  return lines;
+}
+
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h);
+}
+
+// The title, time, caption, key and credit, drawn over the map in CSS pixels (W × H).
+function drawVideoFrame(g, layout) {
+  const m = S.meta.fill, sc = S.entry.item.scenes[S.sceneIndex];
+  const pad = 16, font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  g.textBaseline = "alphabetic";
+  g.shadowBlur = 0;
+
+  // Title band.
+  g.fillStyle = "rgba(8,14,19,0.82)";
+  g.fillRect(0, 0, W, layout.top);
+  g.fillStyle = "#e6edf2";
+  g.font = `700 20px ${font}`;
+  layout.title.forEach((l, i) => g.fillText(l, pad, pad + 20 + i * 25));
+  g.fillStyle = "#8fa1ae";
+  g.font = `500 13.5px ${font}`;
+  g.fillText(layout.scene, pad, pad + 20 + layout.title.length * 25 + 2);
+
+  // Key, under the title band on the left.
+  const ky = layout.top + 10, kw = 190;
+  g.font = `600 12px ${font}`;
+  const keyTitle = `${m.title} (${Units.unit(m.units)})`;
+  const kwBox = Math.max(kw, g.measureText(keyTitle).width) + 20;
+  g.fillStyle = "rgba(8,14,19,0.78)";
+  roundRect(g, 10, ky, kwBox, 54, 8);
+  g.fill();
+  g.fillStyle = "#e6edf2";
+  g.fillText(keyTitle, 20, ky + 18);
+  for (let x = 0; x < kw; x++) {
+    const [r, gg, b, a] = rampSample(m.stops, S.ramp.lo + (S.ramp.hi - S.ramp.lo) * x / (kw - 1));
+    g.fillStyle = `rgba(${r},${gg},${b},${Math.max(0.12, a / 255)})`;
+    g.fillRect(20 + x, ky + 25, 1, 8);
+  }
+  g.fillStyle = "#8fa1ae";
+  g.font = `500 11px ${font}`;
+  for (const [f, text] of legendTicks(S.ramp.lo, S.ramp.hi, m.units, 5)) {
+    g.textAlign = f === 0 ? "left" : "center";
+    g.fillText(text, 20 + f * kw, ky + 47);
+  }
+  g.textAlign = "left";
+
+  // Bottom band: time and credit.
+  const fr = m.frames, i = Math.max(0, Math.min(fr.length - 1, Math.round(S.pos)));
+  const valid = timeAt(S.pos), run = fr[i].run ? parseTime(fr[i].run) : null;
+  const lead = run ? Math.round((parseTime(fr[i].valid_time) - run) / 3.6e6) : null;
+  const runText = run ? `${String(run.getUTCHours()).padStart(2, "0")} UTC ${run.getUTCDate()} ${run.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })} run` : "";
+  const tag = lead === null ? m.model : `${lead <= 0 ? "Analysis" : `T+${lead} h`} · ${m.model}${runText ? `, ${runText}` : ""}`;
+  g.fillStyle = "rgba(8,14,19,0.82)";
+  g.fillRect(0, H - layout.bottom, W, layout.bottom);
+  g.fillStyle = "#e6edf2";
+  g.font = `700 22px ${font}`;
+  g.fillText(Units.formatTime(valid), pad, H - layout.bottom + 30);
+  g.fillStyle = "#8fa1ae";
+  g.font = `500 12px ${font}`;
+  g.fillText(tag, pad, H - layout.bottom + 48);
+  g.font = `500 11px ${font}`;
+  g.fillText("Data: ECMWF Open Data, CC BY 4.0 · Weather Explorer · tehoro.github.io/weather-explorer-web", pad, H - 10);
+
+  // Caption, above the bottom band.
+  const t = timeAt(S.pos);
+  const cap = (sc.captions || []).filter((c) => parseTime(c.at) <= t).pop();
+  if (cap) {
+    g.font = `500 15px ${font}`;
+    const lines = wrapText(g, loc(cap.text), W - 80, 2);
+    const cw = Math.max(...lines.map((l) => g.measureText(l).width)) + 28, ch = lines.length * 20 + 14;
+    const cx = (W - cw) / 2, cy = H - layout.bottom - ch - 12;
+    g.fillStyle = "rgba(8,14,19,0.82)";
+    roundRect(g, cx, cy, cw, ch, 8);
+    g.fill();
+    g.fillStyle = "#e6edf2";
+    g.textAlign = "center";
+    lines.forEach((l, k) => g.fillText(l, W / 2, cy + 22 + k * 20));
+    g.textAlign = "left";
+  }
+}
+
+let making = false;
+async function makeVideo(format) {
+  if (making || !S.meta) return;
+  const fmt = VIDEO_FORMATS[format];
+  const say = (t) => { $("#videoStatus").textContent = t; };
+  making = true;
+  const saved = { W, H, DPR, view: S.view, pos: S.pos, playing: S.playing };
+  play(false);
+  const cover = $("#recording");
+  try {
+    // Every frame of the scene must be here first.
+    const n = S.meta.fill.frames.length;
+    const vm = vectorMeta(), cm = contourMeta();
+    say("Waiting for the scene to finish loading…");
+    for (let k = 0; k < 600 && (S.fill.filter(Boolean).length < n || (vm && S.uv.filter(Boolean).length < n)); k++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    say("Preparing…");
+    if (!window.Mp4Muxer) await loadScript(MUXER_URL);
+
+    // Draw at half the video's pixel size with DPR 2, so text and lines are as on a phone.
+    S.recording = true;
+    cover.hidden = false;
+    DPR = 2; W = fmt.w / 2; H = fmt.h / 2;
+    for (const c of [base, field, overlay, particles]) { c.width = fmt.w; c.height = fmt.h; }
+    const g0 = document.createElement("canvas").getContext("2d");
+    g0.font = "700 20px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    const title = wrapText(g0, loc(S.entry.item.title), W - 32, 2);
+    const scene = loc(S.entry.item.scenes[S.sceneIndex].title || "");
+    const layout = { title, scene, top: 16 + 20 + title.length * 25 + 14, bottom: 76 };
+
+    // The scene fitted between the bands (or the viewer's own view, if they zoomed in).
+    const b = sceneBox(), y0 = mercY(b.s), y1 = mercY(b.n);
+    const avail = H - layout.top - layout.bottom;
+    const fitS = Math.min(W / (b.e - b.w), avail / (y1 - y0)) * 0.94;
+    const mid = (layout.top - layout.bottom) / 2;
+    S.view = saved.view?.touched
+      ? { ...saved.view, s: fitS * (saved.view.s / saved.view.fit), fit: fitS, cy: saved.view.cy + mid / (fitS * (saved.view.s / saved.view.fit)) }
+      : { cx: (b.w + b.e) / 2, cy: (y0 + y1) / 2 + mid / fitS, s: fitS, fit: fitS };
+    for (let k = 0; k < 80 && drawBase(); k++) await new Promise((r) => setTimeout(r, 100));   // satellite tiles
+
+    const out = document.createElement("canvas");
+    out.width = fmt.w; out.height = fmt.h;
+    const g = out.getContext("2d");
+
+    const muxer = new Mp4Muxer.Muxer({
+      target: new Mp4Muxer.ArrayBufferTarget(),
+      video: { codec: "avc", width: fmt.w, height: fmt.h },
+      fastStart: "in-memory",
+    });
+    let failure = null;
+    const encoder = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => { failure = e; } });
+    let config = null;
+    for (const codec of ["avc1.640032", "avc1.640028", "avc1.4d0032", "avc1.42e032"]) {
+      const c = { codec, width: fmt.w, height: fmt.h, bitrate: 8e6, framerate: VIDEO_FPS };
+      if ((await VideoEncoder.isConfigSupported(c)).supported) { config = c; break; }
+    }
+    if (!config) throw new Error("no supported H.264 encoder");
+    encoder.configure(config);
+
+    // Contours for a position, computed once per quarter frame and kept.
+    const contours = new Map();
+    const contourAt = async (pos) => {
+      if (!cm) return null;
+      const list = cm.role === "fill" ? S.fill : S.contourFrames;
+      const br = bracket(list, pos);
+      if (!br) return null;
+      const q = Math.round(br.t * 4) / 4, key = `${br.i}:${br.j}:${q}`;
+      if (!contours.has(key)) {
+        const src = (i) => frameSource(`${S.pkg}/${cm.role}/${String(i).padStart(3, "0")}.c12.webp`);
+        const r = await ask({ type: "contours", srcA: src(br.i), srcB: src(br.j), q, centres: cm.meta.layer === "mslp", top: 4095,
+          meta: { nx: cm.meta.nx, ny: cm.meta.ny, lo: cm.meta.lo, hi: cm.meta.hi, contour_interval: cm.meta.contour_interval } });
+        contours.set(key, { key, segs: r.segs, levels: r.levels, centres: r.centres });
+      }
+      return contours.get(key);
+    };
+
+    const hold = Math.round(1.5 * VIDEO_FPS);
+    const total = Math.round((n - 1) / S.speed * VIDEO_FPS) + 1 + hold;
+    S.tracked = [];
+    parts = [];
+    S.pos = 0;
+    for (let k = 0; k < 40; k++) stepParticles();             // let the wind streaks build up first
+    for (let f = 0; f < total; f++) {
+      if (failure) throw failure;
+      S.pos = Math.min(n - 1, f * S.speed / VIDEO_FPS);
+      S.contour = await contourAt(S.pos);
+      drawField();
+      drawOverlay();
+      stepParticles();
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.drawImage(base, 0, 0);
+      g.drawImage(field, 0, 0);
+      g.drawImage(particles, 0, 0);
+      g.drawImage(overlay, 0, 0);
+      g.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawVideoFrame(g, layout);
+      const frame = new VideoFrame(out, { timestamp: Math.round(f * 1e6 / VIDEO_FPS), duration: Math.round(1e6 / VIDEO_FPS) });
+      encoder.encode(frame, { keyFrame: f % (VIDEO_FPS * 2) === 0 });
+      frame.close();
+      if (encoder.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 0));
+      if (f % 15 === 0) {
+        const pct = Math.round(f / total * 100);
+        say(`Making the video… ${pct}%`);
+        cover.textContent = `Making the video… ${pct}%`;
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    }
+    await encoder.flush();
+    if (failure) throw failure;
+    muxer.finalize();
+    const blob = new Blob([muxer.target.buffer], { type: "video/mp4" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `weather-explorer-${S.entry.item.id}-scene${S.sceneIndex + 1}-${format}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    say(`Saved ${MB(blob.size)} (${Math.round(total / VIDEO_FPS)} s, ${fmt.w}×${fmt.h}).`);
+  } catch (e) {
+    console.warn(e);
+    say("Sorry, the video could not be made in this browser.");
+  } finally {
+    S.recording = false;
+    cover.hidden = true;
+    cover.textContent = "Making the video…";
+    DPR = saved.DPR;
+    S.view = saved.view;
+    S.pos = saved.pos;
+    S.contour = null;
+    S.tracked = [];
+    parts = [];
+    resize();
+    frameChanged();
+    if (saved.playing) play(true);
+    making = false;
+  }
+}
+
 window.addEventListener("hashchange", route);
 new ResizeObserver(resize).observe(mapEl);
 
@@ -1409,8 +1694,10 @@ new ResizeObserver(resize).observe(mapEl);
   if (OFFLINE) {
     $("#share").hidden = true;
     $(".save").hidden = true;
+    $(".video").hidden = true;
   } else {
     setupSave();
+    setupVideo();
   }
   try {
     await loadFeed();

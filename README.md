@@ -39,6 +39,11 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
   needs a connection; the dark and light maps don't. `units.js` and `app.js` are plain scripts
   (not modules) so the saved copy can inline them.
 
+- **Video** draws the current scene frame by frame at 30 fps (at the viewer's playback speed) with the
+  title, time, key, caption and credit, and encodes an MP4 in the browser with WebCodecs and
+  [mp4-muxer](https://github.com/Vanilagy/mp4-muxer) (loaded from jsDelivr only when used). Square,
+  4:5 and 16:9. The button is hidden where the browser has no `VideoEncoder`, and in saved copies.
+
 ## Data format
 
 Each scene becomes `data/p/<tag>/<item>-<n>/` with `meta.json` and one lossless greyscale WebP per
