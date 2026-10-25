@@ -1072,8 +1072,14 @@ function renderLegend() {
   }
 }
 
-// Map style and units: "Automatic" units follow the browser's region; choices are remembered in
-// this browser.
+function setupHelp() {
+  const dlg = $("#help");
+  $("#helpBtn").onclick = () => (dlg.showModal ? dlg.showModal() : dlg.setAttribute("open", ""));
+  $("#helpClose").onclick = () => dlg.close();
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });   // click outside
+}
+
+// Units: "Automatic" follows the browser's region; choices are remembered in this browser.
 const GEAR = `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h9M15 5h2M3 10h3M9 10h8M3 15h7M13 15h4"/><circle cx="13.5" cy="5" r="1.6"/><circle cx="7.5" cy="10" r="1.6"/><circle cx="11.5" cy="15" r="1.6"/></svg>`;
 function setupUnits() {
   const btn = $("#unitsBtn"), panel = $("#unitsPanel");
@@ -1090,14 +1096,6 @@ function setupUnits() {
       unitsChanged();
     };
   }
-  const styleSel = $("#mapStyle");
-  styleSel.value = mapStyle;
-  styleSel.onchange = () => {
-    mapStyle = styleSel.value;
-    try { localStorage.setItem(STYLE_KEY, mapStyle); } catch { /* applied, not kept */ }
-    applyMapStyle();
-  };
-  applyMapStyle();
   btn.innerHTML = GEAR + esc(Units.summary());
   btn.onclick = (e) => {
     e.stopPropagation();
@@ -1108,7 +1106,25 @@ function setupUnits() {
     if (!panel.hidden && !e.target.closest(".units")) { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); }
   });
 }
+// Map style: the layers button on the map opens dark / light / satellite.
+function setupLayers() {
+  const btn = $("#layersBtn"), panel = $("#layersPanel");
+  const open = (on) => { panel.hidden = !on; btn.setAttribute("aria-expanded", String(on)); };
+  btn.onclick = (e) => { e.stopPropagation(); open(panel.hidden); };
+  for (const b of panel.querySelectorAll("button")) {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      mapStyle = b.dataset.style;
+      try { localStorage.setItem(STYLE_KEY, mapStyle); } catch { /* applied, not kept */ }
+      applyMapStyle();
+      open(false);
+    };
+  }
+  document.addEventListener("click", (e) => { if (!panel.hidden && !e.target.closest(".layers")) open(false); });
+  applyMapStyle();
+}
 function applyMapStyle() {
+  for (const b of $("#layersPanel").querySelectorAll("button")) b.setAttribute("aria-checked", String(b.dataset.style === mapStyle));
   mapEl.style.background = style().ocean;
   particles.getContext("2d").clearRect(0, 0, particles.width, particles.height);
   if (S.meta) renderLegend();
@@ -1194,7 +1210,6 @@ async function route() {
   }
   if (r.map && MAP_STYLES[r.map] && r.map !== mapStyle) {
     mapStyle = r.map;                       // for this visit; the viewer's own choice isn't changed
-    $("#mapStyle").value = mapStyle;
     applyMapStyle();
   }
   const i = Math.max(0, Math.min(entry.item.scenes.length - 1, r.scene || 0));
@@ -1350,6 +1365,8 @@ new ResizeObserver(resize).observe(mapEl);
   }
   if (!gl) status("This browser can't show the weather layer (WebGL2 is needed).");
   setupUnits();
+  setupLayers();
+  setupHelp();
   if (OFFLINE) {
     $("#share").hidden = true;
     $(".save").hidden = true;

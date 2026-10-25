@@ -17,16 +17,15 @@
   <div class="tools">
     <span class="fresh" id="fresh"></span>
     <div class="units">
-      <button id="unitsBtn" class="units-btn" aria-expanded="false" aria-controls="unitsPanel" title="Map and units"></button>
+      <button id="unitsBtn" class="units-btn" aria-expanded="false" aria-controls="unitsPanel" title="Units"></button>
       <div class="units-panel" id="unitsPanel" hidden>
-        <label>Map <select id="mapStyle">
-          <option value="dark">Dark</option><option value="light">Light</option><option value="satellite">Satellite</option>
-        </select></label>
         <label>Temperature <select data-kind="temperature"></select></label>
         <label>Wind <select data-kind="wind"></select></label>
         <label>Rain <select data-kind="rain"></select></label>
       </div>
     </div>
+    <button id="helpBtn" class="units-btn" aria-haspopup="dialog" title="How to use this page">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M7.8 7.8a2.3 2.3 0 1 1 3.2 2.1c-.6.3-1 .8-1 1.5v.4M10 14.6v.1"/></svg>Help</button>
   </div>
 </header>
 
@@ -73,6 +72,15 @@
           <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5.5"/><path d="M10 1.5v4M10 14.5v4M1.5 10h4M14.5 10h4"/></svg></button>
         <button id="fullscreen" aria-label="Full screen" title="Full screen">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path class="enter" d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/><path class="exit" d="M8 3v5H3M17 8h-5V3M12 17v-5h5M3 12h5v5"/></svg></button>
+        <div class="layers">
+          <button id="layersBtn" aria-label="Map style" title="Map style: dark, light or satellite" aria-expanded="false" aria-controls="layersPanel">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3 2.5 7 10 11l7.5-4z"/><path d="m2.5 10.5 7.5 4 7.5-4"/><path d="m2.5 14 7.5 4 7.5-4"/></svg></button>
+          <div class="layers-panel" id="layersPanel" role="radiogroup" aria-label="Map style" hidden>
+            <button role="radio" data-style="dark"><span class="sw sw-dark"></span>Dark</button>
+            <button role="radio" data-style="light"><span class="sw sw-light"></span>Light</button>
+            <button role="radio" data-style="satellite"><span class="sw sw-satellite"></span>Satellite</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="timeline">
@@ -88,6 +96,73 @@
 
   <article class="details" id="details"></article>
 </main>
+
+<dialog class="help" id="help" aria-labelledby="helpTitle">
+  <div class="help-head">
+    <h2 id="helpTitle">How to use Weather Explorer</h2>
+    <button id="helpClose" class="help-close" aria-label="Close">×</button>
+  </div>
+  <div class="help-body">
+    <h3>What this is</h3>
+    <p>Twice a day, after ECMWF's 00 and 12 UTC forecasts reach
+      <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data" target="_blank" rel="noopener">ECMWF Open Data</a>,
+      Claude (an AI model) scans the world for interesting weather and picks about fifteen highlights. It writes a short
+      explanation for each and sets up one or more animated scenes from the forecast. People using the companion iPhone
+      app can also request an event; those appear under <b>Requested</b> for two days.</p>
+    <p>This is model guidance, chosen and written automatically, not an official forecast or warning. For those, see
+      your National Meteorological Service.</p>
+
+    <h3>Choosing what to watch</h3>
+    <ul>
+      <li><b>Highlights</b> (left, or across the top on a phone): pick an event. Each says where it is and how many scenes it has.</li>
+      <li><b>Scenes</b> (the numbered tabs above the map): each scene shows a different side of the event, such as pressure and
+        upper-air pattern, then gusts, then the ensemble's view. Work through them in order.</li>
+      <li>The panel below or beside the map explains what's happening, why it's interesting, and where the information came from.</li>
+    </ul>
+
+    <h3>Playing the forecast</h3>
+    <ul>
+      <li><b>▶ / ❚❚</b> plays or pauses; drag the slider to move through time. The time shown is UTC, with the forecast's lead time.</li>
+      <li><b>1×</b> changes the speed (½×, 1×, 2×, 4×).</li>
+      <li>Captions on the map point out what to look for as the forecast unfolds.</li>
+    </ul>
+
+    <h3>Moving around the map</h3>
+    <ul>
+      <li>Drag to pan; scroll, pinch or use <b>+</b> and <b>−</b> to zoom.</li>
+      <li><b>Target</b> button: back to the whole scene.</li>
+      <li><b>Full screen</b> button: the map and timeline fill the screen (Esc or the same button to return).</li>
+      <li><b>Layers</b> button: dark, light or satellite background (satellite imagery: NASA Blue Marble).</li>
+      <li>Tap or click anywhere on the map for the value at that point.</li>
+    </ul>
+
+    <h3>Reading the map</h3>
+    <ul>
+      <li><b>Colours</b>: the field named in the key at the top left, such as wind gusts, rain or temperature.</li>
+      <li><b>Lines</b>: isobars (mean sea level pressure, every 4 hPa) or 500 hPa height, with values along them.</li>
+      <li><b>H</b> and <b>L</b>: centres of high and low pressure, with their central pressure.</li>
+      <li><b>Moving streaks</b>: wind direction and speed.</li>
+      <li>"Chance of …" layers come from the ECMWF ensemble (IFS ENS): the percentage of its 51 forecasts showing the event.</li>
+    </ul>
+
+    <h3>Units</h3>
+    <p>Units follow your device's region: for example °F, mph and inches in the US; °C, mph and mm in the UK; °C, km/h and mm
+      in most other places. Change any of them with the units button at the top. Figures in the text change to match. Your
+      choice is remembered in this browser.</p>
+
+    <h3>Sharing and saving</h3>
+    <ul>
+      <li><b>Share</b> creates a link to exactly what you're looking at: the highlight, the scene, the moment, the map style
+        and your view. Whoever opens it sees their own units. Links keep working for a week after a highlight is replaced.</li>
+      <li><b>Save</b> downloads one web page file, either this highlight or all current ones, that plays with no
+        connection. Open it in a browser on a computer. Satellite backgrounds still need the internet.</li>
+    </ul>
+
+    <h3>Data</h3>
+    <p>Forecasts: ECMWF IFS (HRES and ENS) from ECMWF Open Data, © ECMWF, CC BY 4.0, regridded and converted. Map outlines:
+      Natural Earth. Satellite imagery: NASA Blue Marble via GIBS. New highlights appear at about 10 and 22 UTC.</p>
+  </div>
+</dialog>
 
 <footer class="foot">
   <span id="attribution">Data: © ECMWF, CC BY 4.0.</span>

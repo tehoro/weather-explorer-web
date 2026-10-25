@@ -20,7 +20,7 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
 - `sync.py` — fetches the feed, requested events and scene files; writes `site/data/`. Scene files
   never change once built, so each is converted once (kept in the Actions cache). Exit 3 means
   nothing new, and the workflow then skips deploying.
-- `site/` — the viewer: `index.html`, `style.css`, `app.js` (WebGL2 colour fill, pan/zoom,
+- `site/` — the viewer: `index.html` (including the Help text), `style.css`, `app.js` (WebGL2 colour fill, pan/zoom,
   timeline, wind particles, panels), `worker.js` (frame decoding, isobars, highs and lows) and
   `basemap.json` (Natural Earth 1:50m land and borders, public domain).
 - `tools/make_basemap.py` — rebuilds `basemap.json` from the world-atlas TopoJSON.

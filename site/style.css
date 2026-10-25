@@ -84,7 +84,7 @@ button { font: inherit; color: inherit; }
   background: var(--panel); min-width: 0;
 }
 .scene-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap; }
-.tabs { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
+.tabs { position: relative; display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
   display: flex; align-items: center; gap: 7px; flex: 0 0 auto; max-width: 300px;
@@ -171,6 +171,42 @@ button { font: inherit; color: inherit; }
 .zoom .exit { display: none; }
 .full .zoom .enter { display: none; }
 .full .zoom .exit { display: inline; }
+
+/* Map style switcher, under the zoom buttons. */
+.layers { position: relative; }
+.layers-panel {
+  position: absolute; right: calc(100% + 8px); top: 0; display: flex; gap: 6px; padding: 6px;
+  background: rgba(8, 14, 19, 0.92); border: 1px solid var(--line); border-radius: 10px;
+}
+.layers-panel[hidden] { display: none; }
+.zoom .layers-panel button {
+  width: 64px; height: auto; padding: 4px 4px 3px; display: grid; gap: 3px; justify-items: center;
+  font-size: 11.5px; border-radius: 8px; border: 1px solid transparent; background: none;
+}
+.zoom .layers-panel button[aria-checked="true"] { border-color: var(--accent); background: var(--panel-2); }
+.sw { width: 54px; height: 36px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.15); display: block; }
+.sw-dark { background: linear-gradient(135deg, #1b2731 0 45%, #0d1923 45%); }
+.sw-light { background: linear-gradient(135deg, #eceee8 0 45%, #c4d3de 45%); }
+.sw-satellite { background: #1d3b5a url("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/3/2/4.jpeg") center / cover; }
+
+/* Help */
+.help {
+  width: min(680px, calc(100% - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--panel); color: var(--text); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+.help::backdrop { background: rgba(0, 0, 0, 0.55); }
+.help-head {
+  display: flex; justify-content: space-between; align-items: center; padding: 14px 18px;
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel);
+}
+.help-head h2 { margin: 0; font-size: 18px; }
+.help-close { border: 0; background: none; font-size: 26px; line-height: 1; cursor: pointer; color: var(--muted); padding: 0 4px; }
+.help-body { padding: 4px 18px 18px; font-size: 14.5px; }
+.help-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin: 18px 0 6px; }
+.help-body p { margin: 0 0 8px; }
+.help-body ul { margin: 0; padding-left: 18px; }
+.help-body li { margin-bottom: 5px; }
+#helpBtn svg { stroke-width: 1.5; }
 
 /* Full screen: the map and timeline fill the screen. */
 .stage.full { position: fixed; inset: 0; z-index: 50; background: var(--bg); height: 100vh; height: 100dvh; }
