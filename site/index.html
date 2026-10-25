@@ -17,11 +17,12 @@
   <div class="tools">
     <span class="fresh" id="fresh"></span>
     <div class="units">
-      <button id="unitsBtn" class="units-btn" aria-expanded="false" aria-controls="unitsPanel" title="Units"></button>
+      <button id="unitsBtn" class="units-btn" aria-expanded="false" aria-controls="unitsPanel" title="Units and time zone"></button>
       <div class="units-panel" id="unitsPanel" hidden>
         <label>Temperature <select data-kind="temperature"></select></label>
         <label>Wind <select data-kind="wind"></select></label>
         <label>Rain <select data-kind="rain"></select></label>
+        <label>Times <select id="timeZone"></select></label>
       </div>
     </div>
     <button id="helpBtn" class="units-btn" aria-haspopup="dialog" title="How to use this page">
@@ -122,7 +123,8 @@
 
     <h3>Playing the forecast</h3>
     <ul>
-      <li><b>▶ / ❚❚</b> plays or pauses; drag the slider to move through time. The time shown is UTC, with the forecast's lead time.</li>
+      <li><b>▶ / ❚❚</b> plays or pauses; drag the slider to move through time. Under the time is the forecast's lead time and
+        the model run it comes from.</li>
       <li><b>1×</b> changes the speed (½×, 1×, 2×, 4×).</li>
       <li>Captions on the map point out what to look for as the forecast unfolds.</li>
     </ul>
@@ -145,15 +147,18 @@
       <li>"Chance of …" layers come from the ECMWF ensemble (IFS ENS): the percentage of its 51 forecasts showing the event.</li>
     </ul>
 
-    <h3>Units</h3>
+    <h3>Units and times</h3>
     <p>Units follow your device's region: for example °F, mph and inches in the US; °C, mph and mm in the UK; °C, km/h and mm
-      in most other places. Change any of them with the units button at the top. Figures in the text change to match. Your
-      choice is remembered in this browser.</p>
+      in most other places. Change any of them with the units button at the top. Figures in the text change to match.</p>
+    <p>Times are shown in UTC unless you choose <b>Local</b> under <b>Times</b> in the same menu. Local uses your device's
+      time zone with its usual name, such as NZDT, CET or EDT. Times in the text that include a date change too. Model
+      runs keep their UTC names (for example "00 UTC run"), as do times written without a date. Your choices are remembered
+      in this browser.</p>
 
     <h3>Sharing and saving</h3>
     <ul>
       <li><b>Share</b> creates a link to exactly what you're looking at: the highlight, the scene, the moment, the map style
-        and your view. Whoever opens it sees their own units. Links keep working for a week after a highlight is replaced.</li>
+        and your view. Whoever opens it sees their own units and time zone. Links keep working for a week after a highlight is replaced.</li>
       <li><b>Save</b> downloads one web page file, either this highlight or all current ones, that plays with no
         connection. Open it in a browser on a computer. Satellite backgrounds still need the internet.</li>
     </ul>

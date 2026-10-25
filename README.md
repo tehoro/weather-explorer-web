@@ -30,7 +30,7 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
 
 - **Share** copies (or, on phones and iPads, offers through the share sheet) a link to exactly what
   is on screen: `#h=<tag>/<id>&s=<scene>&t=<valid time>&map=<style>&v=<lon>,<lat>,<zoom>`. Units
-  are left out, so each person sees their own. Each highlight is kept in `data/items/` for 7 days
+  and the time zone are left out, so each person sees their own. Each highlight is kept in `data/items/` for 7 days
   after it was last listed, so links keep working after the next sweep; an older one opens with a
   note that it may be out of date, and an expired one opens the latest highlights.
 - **Save** builds a single HTML file in the browser, from files already on the site: the viewer

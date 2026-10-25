@@ -760,7 +760,6 @@ function markLoaded(i) {
   $("#ticks").children[i]?.classList.add("loaded");
 }
 
-const fmtDay = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC", hour12: false });
 function updateTime() {
   const fr = S.meta?.fill.frames;
   if (!fr?.length) return;
@@ -771,7 +770,7 @@ function updateTime() {
   const lead = run ? Math.round((valid - run) / 3.6e6) : null;
   const runText = run ? `${String(run.getUTCHours()).padStart(2, "0")} UTC run` : "";
   const tag = lead === null ? "" : lead <= 0 ? `analysis, ${runText}` : `T+${lead} h, ${runText}`;
-  $("#when").innerHTML = `${fmtDay.format(valid)} UTC<small>${tag}</small>`;
+  $("#when").innerHTML = `${esc(Units.formatTime(valid))}<small>${tag}</small>`;
   scrub.value = String(S.pos);
 
   // Caption: the latest one whose time has passed.
@@ -1021,7 +1020,7 @@ function renderScenes() {
 
 function renderDetails() {
   const it = S.entry.item;
-  const fmt = (s) => s ? fmtDay.format(parseTime(s)) + " UTC" : "";
+  const fmt = (s) => s ? Units.formatTime(parseTime(s)) : "";
   const when = it.when ? [it.when.start && `from ${fmt(it.when.start)}`, it.when.peak && `peak ${fmt(it.when.peak)}`].filter(Boolean).join(" · ") : "";
   const evidence = (it.evidence || []).map((e) => {
     const u = safeUrl(e.url);
@@ -1096,6 +1095,14 @@ function setupUnits() {
       unitsChanged();
     };
   }
+  const tz = $("#timeZone");
+  tz.innerHTML = `<option value="utc">UTC</option><option value="local">${esc(Units.localLabel())}</option>`;
+  tz.value = Units.choice("time") === "local" ? "local" : "utc";
+  tz.onchange = () => {
+    Units.setChoice("time", tz.value);
+    btn.innerHTML = GEAR + esc(Units.summary());
+    unitsChanged();
+  };
   btn.innerHTML = GEAR + esc(Units.summary());
   btn.onclick = (e) => {
     e.stopPropagation();
@@ -1132,23 +1139,23 @@ function applyMapStyle() {
 }
 function unitsChanged() {
   renderList();
-  if (S.entry) renderDetails();
+  renderFresh();
+  if (S.entry) { renderScenes(); renderDetails(); }
   if (S.meta) { renderLegend(); updateTime(); }
   $("#readout").hidden = true;
 }
 
-const fmtTime = new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC", hour12: false });
 function renderFresh() {
   const f = S.feed;
   if (!f?.generated_utc) return;
   const t = parseTime(f.generated_utc);
   if (OFFLINE) {
     const saved = parseTime(OFFLINE.saved);
-    $("#fresh").textContent = `Saved copy · highlights from ${fmtDay.format(t)} UTC · saved ${fmtDay.format(saved)} UTC`;
+    $("#fresh").textContent = `Saved copy · highlights from ${Units.formatTime(t)} · saved ${Units.formatTime(saved)}`;
   } else {
     const h = (Date.now() - t) / 3.6e6;
     const age = h < 1 ? `${Math.max(1, Math.round(h * 60))} min ago` : `${Math.round(h)} h ago`;
-    $("#fresh").textContent = `Highlights from ${fmtTime.format(t)} UTC (${age}) · refreshed twice a day`;
+    $("#fresh").textContent = `Highlights from ${Units.formatTime(t, { day: false })} (${age}) · refreshed twice a day`;
   }
   if (f.attribution) $("#attribution").textContent = f.attribution;
 }
@@ -1164,6 +1171,7 @@ async function loadFeed() {
   });
   const changed = feed.synced_utc !== S.feed?.synced_utc;
   S.feed = feed;
+  Units.setYear(parseTime(feed.generated_utc || "").getUTCFullYear());
   S.entries = [
     ...feed.items.map((item) => ({ key: item.ref || item.id, item })),
     ...(feed.requested || []).map((r) => ({ key: r.item.ref || r.item.id, item: r.item, requested: true })),
