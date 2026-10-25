@@ -2,11 +2,31 @@
 //
 // Everything is drawn in the browser: the colour fill on the GPU (WebGL2), isobars, highs and
 // lows in a worker, wind particles on a canvas. The server only provides files.
+//
+// The same script runs a saved copy (save.js builds one): a single HTML file that sets
+// window.WEATHER_OFFLINE with every file it needs, so it plays with no connection.
 
-import * as Units from "./units.js";
+const Units = window.Units;
+const OFFLINE = window.WEATHER_OFFLINE || null;
 
 const $ = (s) => document.querySelector(s);
 const DATA = "data/";
+
+// A file's URL: from the site, or, in a saved copy, from the data embedded in the page.
+const blobUrls = new Map();
+const MIME = { webp: "image/webp", json: "application/json", js: "text/javascript" };
+function fileUrl(path) {
+  if (!OFFLINE) return path;
+  if (!blobUrls.has(path)) {
+    const b64 = OFFLINE.files[path];
+    if (b64 === undefined) return `missing:${path}`;
+    const bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    blobUrls.set(path, URL.createObjectURL(new Blob([bytes], { type: MIME[path.split(".").pop()] || "" })));
+  }
+  return blobUrls.get(path);
+}
+const dataUrl = (path) => fileUrl(DATA + path);
 const SPEEDS = [0.5, 1, 2, 4];
 const FEED_REFRESH_MS = 10 * 60 * 1000;
 const DEG = Math.PI / 180;
@@ -41,7 +61,38 @@ const S = {
 // Worker
 // ------------------------------------------------------------------------------------------
 
-const worker = new Worker("worker.js");
+// A saved copy starts the worker from its embedded source; if the browser won't run a worker
+// from a local file, the same code runs on the page instead (slower, but it works).
+function inPageWorker() {
+  let reply = null;
+  const self = { postMessage: (data) => setTimeout(() => reply?.({ data })), onmessage: null };
+  new Function("self", OFFLINE.worker)(self);
+  return { postMessage: (data) => self.onmessage({ data }), set onmessage(f) { reply = f; } };
+}
+function startWorker() {
+  if (!OFFLINE) return new Worker("worker.js");
+  let real;
+  try {
+    real = new Worker(URL.createObjectURL(new Blob([OFFLINE.worker], { type: "text/javascript" })));
+  } catch {
+    return inPageWorker();
+  }
+  // Some browsers refuse it only once it starts: then switch over and resend what was asked.
+  let target = real, handler = null, answered = false;
+  const sent = [];
+  real.onmessage = (e) => { answered = true; handler?.(e); };
+  real.onerror = () => {
+    if (answered || target !== real) return;
+    target = inPageWorker();
+    target.onmessage = handler;
+    for (const m of sent) target.postMessage(m);
+  };
+  return {
+    postMessage: (m) => { if (!answered) sent.push(m); target.postMessage(m); },
+    set onmessage(f) { handler = f; if (target !== real) target.onmessage = f; },
+  };
+}
+const worker = startWorker();
 let nextId = 1;
 const pending = new Map();
 worker.onmessage = ({ data }) => {
@@ -112,7 +163,7 @@ function fit() {
 // ------------------------------------------------------------------------------------------
 
 let basemap = null;
-fetch("basemap.json").then((r) => r.json()).then((j) => {
+fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
   const decode = (arr) => {
     const out = new Float32Array(arr.length);
     let x = 0, y = 0;
@@ -519,11 +570,10 @@ async function runContours() {
   if (!w) return;
   contourWant = null;
   contourBusy = true;
-  const old = (S.meta.format || 0) < 3;      // format 2 packages had 16-bit contour frames
-  const url = (i) => `${DATA}${S.pkg}/${w.cm.role}/${String(i).padStart(3, "0")}.${old ? "c16" : "c12"}.webp`;
+  const url = (i) => dataUrl(`${S.pkg}/${w.cm.role}/${String(i).padStart(3, "0")}.c12.webp`);
   try {
     const r = await ask({ type: "contours", urlA: url(w.br.i), urlB: url(w.br.j), q: w.q, centres: w.cm.meta.layer === "mslp",
-      top: old ? 65535 : 4095,
+      top: 4095,
       meta: { nx: w.cm.meta.nx, ny: w.cm.meta.ny, lo: w.cm.meta.lo, hi: w.cm.meta.hi,
               contour_interval: w.cm.meta.contour_interval } });
     if (w.token === S.token) {
@@ -600,10 +650,11 @@ function stepParticles() {
 // ------------------------------------------------------------------------------------------
 
 function frameUrl(role, i, uv) {
-  return `${DATA}${S.pkg}/${role}/${String(i).padStart(3, "0")}${uv ? ".uv" : ""}.webp`;
+  return dataUrl(`${S.pkg}/${role}/${String(i).padStart(3, "0")}${uv ? ".uv" : ""}.webp`);
 }
 
-async function loadScene(entry, sceneIndex, keepView) {
+// opts (from a shared link): time = the valid time to show, paused; view = {lon, lat, z}.
+async function loadScene(entry, sceneIndex, opts = {}) {
   const token = ++S.token;
   S.entry = entry;
   S.sceneIndex = sceneIndex;
@@ -614,19 +665,32 @@ async function loadScene(entry, sceneIndex, keepView) {
   S.pos = 0;
   worker.postMessage({ type: "reset" });
   renderList();
+  renderScenes();
   renderDetails();
   status("Loading…");
-  if (!keepView) S.view = null;
-  const meta = await fetch(`${DATA}${S.pkg}/meta.json`).then((r) => r.json());
+  S.view = null;
+  const meta = await fetch(dataUrl(`${S.pkg}/meta.json`)).then((r) => r.json());
   if (token !== S.token) return;
   S.meta = meta;
   S.ramp = makeLUT(meta.fill.stops);
-  if (!S.view) fit();
+  fit();
+  if (opts.view) {
+    S.view = { ...S.view, cx: opts.view.lon, cy: mercY(opts.view.lat), s: S.view.fit * opts.view.z, touched: true };
+  }
+  // A shared moment: the nearest frame, shown paused.
+  let first = 0;
+  if (opts.time) {
+    const want = parseTime(opts.time).getTime();
+    meta.fill.frames.forEach((f, i) => {
+      if (Math.abs(parseTime(f.valid_time) - want) < Math.abs(parseTime(meta.fill.frames[first].valid_time) - want)) first = i;
+    });
+    S.pos = first;
+  }
   renderLegend();
   setupTimeline();
   drawAll();
 
-  // Frames: the first straight away, then the rest in order, a few at a time.
+  // Frames: the one to show first straight away, then the rest in order, a few at a time.
   const n = meta.fill.frames.length;
   const vm = vectorMeta();
   const cm = contourMeta();
@@ -643,19 +707,20 @@ async function loadScene(entry, sceneIndex, keepView) {
       }
       if (cm && cm.role === "contours") S.contourFrames[i] = true;
       markLoaded(i);
-      if (i === 0) { status(null); drawAll(); }
+      if (i === first) { status(null); frameChanged(); drawAll(); }
     });
   }
-  let next = 0;
+  const order = [first, ...jobs.keys()].filter((i, k, a) => a.indexOf(i) === k);
+  let next = 1;
   const run = async () => {
-    while (next < jobs.length && token === S.token) {
-      const job = jobs[next++];
+    while (next < order.length && token === S.token) {
+      const job = jobs[order[next++]];
       try { await job(); } catch (e) { console.warn(e); }
     }
   };
-  await jobs[next++]().catch((e) => { status("This scene could not be loaded."); console.warn(e); });
+  await jobs[first]().catch((e) => { status("This scene could not be loaded."); console.warn(e); });
   await Promise.all([run(), run(), run(), run()]);
-  if (token === S.token && !S.playing && S.fill.length) play(true);
+  if (token === S.token && !S.playing && S.fill.length && !opts.time) play(true);
 }
 
 function status(text) {
@@ -904,23 +969,49 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const loc = Units.localize;
 const safeUrl = (u) => /^https?:\/\//i.test(u || "") ? u : null;
 
+function navigate(entry, scene) {
+  location.hash = new URLSearchParams({ h: entry.key, s: String(scene) }).toString();
+}
+
 function renderList() {
   const el = $("#list");
-  const row = (e) => `<button class="entry" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
-      <span class="t">${esc(loc(e.item.title))}</span><span class="w">${esc(e.item.where?.label || "")}</span></button>`;
+  const row = (e) => {
+    const n = e.item.scenes.length;
+    const where = [e.item.where?.label, n > 1 ? `${n} scenes` : ""].filter(Boolean).join(" · ");
+    return `<button class="entry" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
+      <span class="t">${esc(loc(e.item.title))}</span><span class="w">${esc(where)}</span></button>`;
+  };
   const main = S.entries.filter((e) => !e.requested), req = S.entries.filter((e) => e.requested);
-  el.innerHTML = `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : "");
+  const shared = S.shared && !S.entries.includes(S.shared) ? [S.shared] : [];
+  el.innerHTML = (shared.length ? `<h2>Shared with you</h2>${shared.map(row).join("")}` : "")
+    + `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : "");
   for (const b of el.querySelectorAll(".entry")) {
     b.onclick = () => {
-      const e = S.entries.find((x) => x.key === b.dataset.key);
-      if (e && e !== S.entry) { location.hash = e.key; }
+      const e = [...shared, ...S.entries].find((x) => x.key === b.dataset.key);
+      if (e && e !== S.entry) navigate(e, 0);
     };
+  }
+}
+
+// Scene tabs above the map: each highlight tells its story in one or more scenes.
+function renderScenes() {
+  const sc = S.entry.item.scenes;
+  const el = $("#scenes");
+  el.innerHTML = sc.map((s, i) => `<button class="tab" role="tab" data-i="${i}" aria-selected="${i === S.sceneIndex}">
+      <span class="n">${i + 1}</span><span class="tt">${esc(loc(s.title) || `Scene ${i + 1}`)}</span></button>`).join("");
+  $("#sceneLabel").textContent = sc.length > 1 ? `${sc.length} scenes` : "Scene";
+  for (const b of el.querySelectorAll(".tab")) {
+    b.onclick = () => { if (+b.dataset.i !== S.sceneIndex) navigate(S.entry, +b.dataset.i); };
+  }
+  // Bring the current tab into view within the row only (scrollIntoView would move the page too).
+  const cur = el.querySelector('[aria-selected="true"]');
+  if (cur && (cur.offsetLeft < el.scrollLeft || cur.offsetLeft + cur.offsetWidth > el.scrollLeft + el.clientWidth)) {
+    el.scrollLeft = cur.offsetLeft - 8;
   }
 }
 
 function renderDetails() {
   const it = S.entry.item;
-  const sc = it.scenes;
   const fmt = (s) => s ? fmtDay.format(parseTime(s)) + " UTC" : "";
   const when = it.when ? [it.when.start && `from ${fmt(it.when.start)}`, it.when.peak && `peak ${fmt(it.when.peak)}`].filter(Boolean).join(" · ") : "";
   const evidence = (it.evidence || []).map((e) => {
@@ -928,19 +1019,28 @@ function renderDetails() {
     const text = esc(loc(e.text));
     return `<li><span class="k">${esc(e.kind || "")}</span>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${text}</a>` : text}</li>`;
   }).join("");
-  $("#details").innerHTML = `
+  const archived = S.entry.archived
+    ? `<p class="archived">This shared highlight is from an earlier set and may be out of date.${OFFLINE ? "" : ` <a href="#" id="latest">See the latest highlights</a>`}</p>` : "";
+  $("#details").innerHTML = `${archived}
     <h2>${esc(loc(it.title))}</h2>
     <p class="where">${esc(it.where?.label || "")}${when ? `<br>${esc(when)}` : ""}</p>
     ${it.hazards?.length ? `<div class="chips">${it.hazards.map((h) => `<span class="chip">${esc(h.replace(/-/g, " "))}</span>`).join("")}</div>` : ""}
-    ${sc.length > 1 ? `<h3>Scenes</h3><div class="scenes">${sc.map((s, i) => `<button data-i="${i}" aria-current="${i === S.sceneIndex}">${esc(loc(s.title) || `Scene ${i + 1}`)}</button>`).join("")}</div>` : ""}
     <h3>What's happening</h3><p>${esc(loc(it.summary))}</p>
     ${it.why_interesting ? `<h3>Why it's interesting</h3><p>${esc(loc(it.why_interesting))}</p>` : ""}
     ${evidence ? `<h3>Sources</h3><ul class="evidence">${evidence}</ul>` : ""}
     ${it.confidence ? `<h3>Confidence</h3><p>${esc(loc(it.confidence))}</p>` : ""}`;
-  for (const b of $("#details").querySelectorAll(".scenes button")) {
-    b.onclick = () => { location.hash = `${S.entry.key}/${b.dataset.i}`; };
-  }
+  const latest = $("#latest");
+  if (latest) latest.onclick = (e) => { e.preventDefault(); if (S.entries[0]) navigate(S.entries[0], 0); };
 }
+
+function notice(text) {
+  const el = $("#notice");
+  el.textContent = text;
+  el.hidden = false;
+  clearTimeout(notice.timer);
+  notice.timer = setTimeout(() => { el.hidden = true; }, 9000);
+}
+$("#notice").onclick = () => { $("#notice").hidden = true; };
 
 function renderLegend() {
   const m = S.meta.fill;
@@ -1017,9 +1117,14 @@ function renderFresh() {
   const f = S.feed;
   if (!f?.generated_utc) return;
   const t = parseTime(f.generated_utc);
-  const h = (Date.now() - t) / 3.6e6;
-  const age = h < 1 ? `${Math.max(1, Math.round(h * 60))} min ago` : `${Math.round(h)} h ago`;
-  $("#fresh").textContent = `Highlights from ${fmtTime.format(t)} UTC (${age}) · refreshed twice a day`;
+  if (OFFLINE) {
+    const saved = parseTime(OFFLINE.saved);
+    $("#fresh").textContent = `Saved copy · highlights from ${fmtDay.format(t)} UTC · saved ${fmtDay.format(saved)} UTC`;
+  } else {
+    const h = (Date.now() - t) / 3.6e6;
+    const age = h < 1 ? `${Math.max(1, Math.round(h * 60))} min ago` : `${Math.round(h)} h ago`;
+    $("#fresh").textContent = `Highlights from ${fmtTime.format(t)} UTC (${age}) · refreshed twice a day`;
+  }
   if (f.attribution) $("#attribution").textContent = f.attribution;
 }
 
@@ -1028,31 +1133,201 @@ function renderFresh() {
 // ------------------------------------------------------------------------------------------
 
 async function loadFeed() {
-  const feed = await fetch(`${DATA}feed.json`, { cache: "no-cache" }).then((r) => {
+  const feed = await fetch(dataUrl("feed.json"), { cache: "no-cache" }).then((r) => {
     if (!r.ok) throw new Error(r.status);
     return r.json();
   });
   const changed = feed.synced_utc !== S.feed?.synced_utc;
   S.feed = feed;
   S.entries = [
-    ...feed.items.map((item) => ({ key: item.id, item })),
-    ...(feed.requested || []).map((r) => ({ key: r.item.id, item: r.item, requested: true })),
+    ...feed.items.map((item) => ({ key: item.ref || item.id, item })),
+    ...(feed.requested || []).map((r) => ({ key: r.item.ref || r.item.id, item: r.item, requested: true })),
   ];
   renderFresh();
   return changed;
 }
 
-function route() {
-  const [key, n] = decodeURIComponent(location.hash.slice(1)).split("/");
-  const entry = S.entries.find((e) => e.key === key) || S.entries[0];
+// Links: #h=<tag>/<id>&s=<scene>, plus t=<valid time>, map=<style> and v=<lon>,<lat>,<zoom> in
+// shared links. The older form #<id>/<scene> still works.
+function parseHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (!h) return {};
+  if (!h.includes("=")) {
+    const [key, n] = h.split("/");
+    return { key, scene: parseInt(n || "0", 10) || 0 };
+  }
+  const p = new URLSearchParams(h);
+  const v = (p.get("v") || "").split(",").map(Number);
+  return {
+    key: p.get("h"), scene: parseInt(p.get("s") || "0", 10) || 0, time: p.get("t"), map: p.get("map"),
+    view: v.length === 3 && v.every(Number.isFinite) && v[2] > 0 ? { lon: v[0], lat: v[1], z: v[2] } : null,
+  };
+}
+
+async function route() {
+  const r = parseHash();
+  let entry = r.key ? S.entries.find((e) => e.key === r.key || e.item.id === r.key) : null;
+  if (!entry && S.shared?.key === r.key) entry = S.shared;
+  if (r.key && !entry) {
+    // A shared highlight that has since been replaced: kept for a week after it was last listed.
+    if (!OFFLINE && /^[0-9A-Za-z]+\/[0-9A-Za-z_.\-]+$/.test(r.key)) {
+      try {
+        const item = await fetch(dataUrl(`items/${r.key}.json`)).then((x) => { if (!x.ok) throw new Error(x.status); return x.json(); });
+        entry = S.shared = { key: r.key, item, archived: true };
+      } catch { /* expired */ }
+    }
+    if (!entry) notice("That shared highlight is no longer available (they are kept for a week). Here are the latest highlights.");
+  }
+  entry ||= S.entries[0];
   if (!entry) {
     $("#list").innerHTML = `<p class="muted pad">No highlights at the moment.</p>`;
     return;
   }
-  const i = Math.max(0, Math.min(entry.item.scenes.length - 1, parseInt(n || "0", 10) || 0));
-  if (entry === S.entry && i === S.sceneIndex) return;
+  if (r.map && MAP_STYLES[r.map] && r.map !== mapStyle) {
+    mapStyle = r.map;                       // for this visit; the viewer's own choice isn't changed
+    $("#mapStyle").value = mapStyle;
+    applyMapStyle();
+  }
+  const i = Math.max(0, Math.min(entry.item.scenes.length - 1, r.scene || 0));
+  if (entry === S.entry && i === S.sceneIndex && !r.time && !r.view) return;
   play(false);
-  loadScene(entry, i, false);
+  loadScene(entry, i, { time: r.time, view: r.view });
+}
+
+// ------------------------------------------------------------------------------------------
+// Sharing: a link to exactly what is on screen (highlight, scene, moment, map, view). Units are
+// left out, so each person sees their own.
+// ------------------------------------------------------------------------------------------
+
+function shareLink() {
+  const p = new URLSearchParams({ h: S.entry.key, s: String(S.sceneIndex) });
+  const fr = S.meta?.fill.frames;
+  if (fr?.length) p.set("t", fr[Math.max(0, Math.min(fr.length - 1, Math.round(S.pos)))].valid_time);
+  p.set("map", mapStyle);
+  if (S.view?.touched) {
+    p.set("v", [S.view.cx.toFixed(2), invMercY(S.view.cy).toFixed(2), (S.view.s / S.view.fit).toFixed(2)].join(","));
+  }
+  return `${location.origin}${location.pathname}#${p.toString()}`;
+}
+
+$("#share").onclick = async () => {
+  if (!S.entry) return;
+  const url = shareLink();
+  history.replaceState(null, "", url);
+  const title = loc(S.entry.item.title);
+  if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+    try { await navigator.share({ title: `${title} — Weather Explorer`, url }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    notice("Link copied. It opens this scene at this moment, with this map and view.");
+  } catch {
+    window.prompt("Copy this link:", url);
+  }
+};
+
+// ------------------------------------------------------------------------------------------
+// Saving a copy: one HTML file holding the viewer and the data, which plays with no connection
+// (like a saved highlight in the app).
+// ------------------------------------------------------------------------------------------
+
+const MB = (b) => b >= 1e6 ? `${(b / 1e6).toFixed(b >= 1e7 ? 0 : 1)} MB` : `${Math.max(1, Math.round(b / 1e3))} kB`;
+const itemBytes = (it) => it.scenes.reduce((n, s) => n + (s.bytes || 0), 0);
+
+function setupSave() {
+  const btn = $("#save"), panel = $("#savePanel");
+  const open = (on) => { panel.hidden = !on; btn.setAttribute("aria-expanded", String(on)); };
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    if (panel.hidden) {
+      // Saved files hold every frame as text, about a third bigger than the downloads.
+      const one = itemBytes(S.entry.item), all = S.entries.reduce((n, x) => n + itemBytes(x.item), 0);
+      $("#saveOne").lastElementChild.textContent = one ? `about ${MB(one * 1.2)}` : "";
+      $("#saveAll").lastElementChild.textContent = all ? `about ${MB(all * 1.2)}` : "";
+      $("#saveAll").hidden = S.entry.archived;
+      $("#saveStatus").textContent = "";
+    }
+    open(panel.hidden);
+  };
+  document.addEventListener("click", (e) => { if (!panel.hidden && !e.target.closest(".save")) open(false); });
+  $("#saveOne").onclick = () => saveCopy([S.entry]);
+  $("#saveAll").onclick = () => saveCopy(S.entries);
+}
+
+function toBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+let saving = false;
+async function saveCopy(entries) {
+  if (saving) return;
+  saving = true;
+  const say = (t) => { $("#saveStatus").textContent = t; };
+  try {
+    say("Preparing…");
+    const get = (p, kind) => fetch(p).then((r) => { if (!r.ok) throw new Error(`${r.status} ${p}`); return r[kind](); });
+    const [page, css, units, app, workerSrc, basemapText] = await Promise.all(
+      ["index.html", "style.css", "units.js", "app.js", "worker.js", "basemap.json"].map((p) => get(p, "text")));
+    const files = { "basemap.json": toBase64(new TextEncoder().encode(basemapText)) };
+
+    // Every file the viewer reads for these scenes.
+    const paths = [];
+    for (const e of entries) {
+      for (const sc of e.item.scenes) {
+        const meta = await get(DATA + sc.package + "/meta.json", "json");
+        files[`${DATA}${sc.package}/meta.json`] = toBase64(new TextEncoder().encode(JSON.stringify(meta)));
+        const n = meta.fill.frames.length;
+        const vec = ["vectors", "fill", "contours"].find((r) => meta[r]?.vectors);
+        for (let i = 0; i < n; i++) {
+          const f = String(i).padStart(3, "0");
+          paths.push(`${sc.package}/fill/${f}.webp`);
+          if (meta.fill.contour_interval) paths.push(`${sc.package}/fill/${f}.c12.webp`);
+          if (meta.contours?.contour_interval) paths.push(`${sc.package}/contours/${f}.c12.webp`);
+          if (vec) paths.push(`${sc.package}/${vec}/${f}.uv.webp`);
+        }
+      }
+    }
+    let done = 0;
+    const queue = [...paths];
+    const collect = async () => {
+      while (queue.length) {
+        const p = queue.shift();
+        files[DATA + p] = toBase64(await get(DATA + p, "arrayBuffer"));
+        if (++done % 10 === 0) say(`Collecting frames… ${Math.round(done / paths.length * 100)}%`);
+      }
+    };
+    await Promise.all([collect(), collect(), collect(), collect(), collect(), collect()]);
+
+    const items = entries.filter((e) => !e.requested).map((e) => e.item);
+    const requested = entries.filter((e) => e.requested).map((e) => ({ item: e.item }));
+    const feed = { generated_utc: S.feed.generated_utc, attribution: S.feed.attribution, items, requested };
+    files[DATA + "feed.json"] = toBase64(new TextEncoder().encode(JSON.stringify(feed)));
+    const saved = new Date().toISOString().slice(0, 16) + "Z";
+    const offline = JSON.stringify({ saved, worker: workerSrc, files }).replace(/</g, "\\u003c");
+
+    say("Writing the file…");
+    const SCRIPT = "script";       // keeps a closing tag out of this file, which saved copies inline
+    const html = page
+      .replace(`<link rel="stylesheet" href="style.css">`, () => `<style>\n${css}\n</style>`)
+      .replace(`<${SCRIPT} src="units.js"></${SCRIPT}>`, () => `<${SCRIPT}>window.WEATHER_OFFLINE = ${offline};</${SCRIPT}>\n<${SCRIPT}>\n${units}\n</${SCRIPT}>`)
+      .replace(`<${SCRIPT} src="app.js"></${SCRIPT}>`, () => `<${SCRIPT}>\n${app}\n</${SCRIPT}>`);
+    const name = entries.length === 1 ? entries[0].item.id : `highlights-${S.feed.generated_utc.slice(0, 10)}`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    a.download = `weather-explorer-${name}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    say(`Saved ${MB(html.length)}. Open the file in a browser to play it, even offline.`);
+  } catch (e) {
+    console.warn(e);
+    say("Sorry, the copy could not be made. Please try again.");
+  }
+  saving = false;
 }
 
 window.addEventListener("hashchange", route);
@@ -1066,22 +1341,29 @@ new ResizeObserver(resize).observe(mapEl);
   }
   if (!gl) status("This browser can't show the weather layer (WebGL2 is needed).");
   setupUnits();
+  if (OFFLINE) {
+    $("#share").hidden = true;
+    $(".save").hidden = true;
+  } else {
+    setupSave();
+  }
   try {
     await loadFeed();
-    route();
+    await route();
   } catch (e) {
     $("#list").innerHTML = `<p class="muted pad">The highlights could not be loaded. Please try again later.</p>`;
     console.warn(e);
   }
   requestAnimationFrame(tick);
+  if (OFFLINE) return;
   setInterval(async () => {
     try {
       if (await loadFeed()) {
-        renderList();
-        if (!S.entries.includes(S.entry)) {
+        if (!S.entries.includes(S.entry) && S.entry !== S.shared) {
           const same = S.entries.find((e) => e.key === S.entry?.key);
-          if (same) { S.entry = same; renderList(); } else route();
+          if (same) S.entry = same; else route();
         }
+        renderList();
       }
     } catch { /* keep showing what we have */ }
   }, FEED_REFRESH_MS);

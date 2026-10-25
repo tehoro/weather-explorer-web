@@ -36,7 +36,26 @@
   </nav>
 
   <section class="stage" aria-label="Map">
+    <div class="scenebar">
+      <span class="scene-label" id="sceneLabel">Scene</span>
+      <div class="tabs" id="scenes" role="tablist" aria-label="Scenes"></div>
+      <div class="actions">
+        <button id="share" class="act" title="Share a link to this view">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3M6 7l4-4 4 4M4 11v5h12v-5"/></svg><span>Share</span></button>
+        <div class="save">
+          <button id="save" class="act" aria-expanded="false" aria-controls="savePanel" title="Save a copy to play offline">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg><span>Save</span></button>
+          <div class="save-panel" id="savePanel" hidden>
+            <p>Save a copy as one web page file that plays without a connection.</p>
+            <button id="saveOne"><span>This highlight</span><small></small></button>
+            <button id="saveAll"><span>All current highlights</span><small></small></button>
+            <p class="muted" id="saveStatus"></p>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="map" id="map">
+      <div class="notice" id="notice" hidden></div>
       <canvas id="base"></canvas>
       <canvas id="field"></canvas>
       <canvas id="overlay"></canvas>
@@ -76,6 +95,7 @@
     guidance, not an official forecast or warning: for those, see your national weather service.</span>
 </footer>
 
-<script src="app.js" type="module"></script>
+<script src="units.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

@@ -26,6 +26,19 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
 - `tools/make_basemap.py` — rebuilds `basemap.json` from the world-atlas TopoJSON.
 - `.github/workflows/deploy.yml` — the schedule (09:45–10:45 and 21:45–22:45 UTC after each sweep, plus every three hours for requested events), sync, cache and Pages deploy.
 
+## Sharing and saving
+
+- **Share** copies (or, on phones and iPads, offers through the share sheet) a link to exactly what
+  is on screen: `#h=<tag>/<id>&s=<scene>&t=<valid time>&map=<style>&v=<lon>,<lat>,<zoom>`. Units
+  are left out, so each person sees their own. Each highlight is kept in `data/items/` for 7 days
+  after it was last listed, so links keep working after the next sweep; an older one opens with a
+  note that it may be out of date, and an expired one opens the latest highlights.
+- **Save** builds a single HTML file in the browser, from files already on the site: the viewer
+  plus every frame of one highlight (a few MB) or all current highlights (tens of MB), embedded as
+  base64. It plays with no connection, like a saved highlight in the app. Satellite imagery still
+  needs a connection; the dark and light maps don't. `units.js` and `app.js` are plain scripts
+  (not modules) so the saved copy can inline them.
+
 ## Data format
 
 Each scene becomes `data/p/<tag>/<item>-<n>/` with `meta.json` and one lossless greyscale WebP per

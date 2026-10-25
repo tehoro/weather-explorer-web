@@ -1,6 +1,9 @@
 // Display units, as in the app: the data stay in m/s, °C and mm/h; labels, readouts and the
 // measurements inside the text are converted. "Automatic" follows the browser's region; the
 // viewer can override each choice, remembered in this browser only.
+//
+// A plain script (window.Units) rather than a module, so a saved copy can inline it.
+window.Units = (() => {
 
 const KEY = "weather-explorer-units";
 
@@ -20,13 +23,13 @@ const MPH_REGIONS = new Set(["US", "PR", "GU", "VI", "AS", "MP", "UM", "GB", "IM
 const IN_REGIONS = new Set(["US", "PR", "GU", "VI", "AS", "MP", "UM", "LR", "MM"]);
 
 const R = region();
-export const DEVICE = {
+const DEVICE = {
   temperature: F_REGIONS.has(R) ? "F" : "C",
   wind: MPH_REGIONS.has(R) ? "mph" : "kmh",
   rain: IN_REGIONS.has(R) ? "in" : "mm",
 };
 
-export const CHOICES = {
+const CHOICES = {
   temperature: [["C", "°C"], ["F", "°F"]],
   wind: [["kmh", "km/h"], ["mph", "mph"], ["ms", "m/s"], ["kn", "knots"]],
   rain: [["mm", "mm"], ["in", "inches"]],
@@ -35,10 +38,10 @@ export const CHOICES = {
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch { saved = {}; }
 
-export function choice(kind) {
+function choice(kind) {
   return saved[kind] || "auto";
 }
-export function setChoice(kind, value) {
+function setChoice(kind, value) {
   saved = { ...saved, [kind]: value };
   try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch { /* not kept, still applied */ }
 }
@@ -50,7 +53,7 @@ function eff(kind) {
 const WIND = { kmh: [3.6, "km/h"], mph: [2.236936, "mph"], ms: [1, "m/s"], kn: [1.943844, "kn"] };
 
 /** Display unit for a data unit. */
-export function unit(u) {
+function unit(u) {
   if (u === "m/s") return WIND[eff("wind")][1];
   if (u === "°C") return eff("temperature") === "F" ? "°F" : "°C";
   if (u === "mm/h") return eff("rain") === "in" ? "in/h" : "mm/h";
@@ -59,7 +62,7 @@ export function unit(u) {
 }
 
 /** A value in a data unit, converted to the display unit. */
-export function convert(v, u) {
+function convert(v, u) {
   if (u === "m/s") return v * WIND[eff("wind")][0];
   if (u === "°C") return eff("temperature") === "F" ? v * 9 / 5 + 32 : v;
   if (u === "mm/h" || u === "mm") return eff("rain") === "in" ? v / 25.4 : v;
@@ -67,7 +70,7 @@ export function convert(v, u) {
 }
 
 /** Value with sensible precision, optionally followed by its unit. */
-export function format(v, u, withUnit = true) {
+function format(v, u, withUnit = true) {
   const c = convert(v, u), du = unit(u);
   let digits;
   if (du.startsWith("in")) digits = Math.abs(c) < 1 ? 2 : 1;
@@ -80,7 +83,7 @@ export function format(v, u, withUnit = true) {
 }
 
 /** Short summary for the units button, e.g. "°C · km/h · mm". */
-export function summary() {
+function summary() {
   return [unit("°C"), unit("m/s"), unit("mm")].join(" · ");
 }
 
@@ -137,7 +140,7 @@ function localizeAll(text) {
 }
 
 /** Rewrites the measurements in a piece of text in the viewer's units. */
-export function localize(text) {
+function localize(text) {
   if (!text) return text;
   // "60–80 mph (130–140 km/h)" becomes one measurement, so it isn't shown twice after conversion;
   // keep whichever half needs no conversion, exactly as written.
@@ -147,3 +150,6 @@ export function localize(text) {
   });
   return localizeAll(collapsed);
 }
+
+return { DEVICE, CHOICES, choice, setChoice, unit, convert, format, summary, localize };
+})();

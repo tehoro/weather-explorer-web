@@ -14,6 +14,8 @@ Each scene's gzipped JSON (uint16 values, base64) becomes a folder of lossless W
 8 bits, about a third of the size, which the browser decodes natively:
 
   data/feed.json                  highlights and requested events, scene data paths rewritten
+  data/items/<tag>/<id>.json      each highlight as shown, kept 7 days for shared links
+  data/archive.json               when each kept highlight expires
   data/p/<tag>/<item>-<n>/meta.json
   data/p/<tag>/<item>-<n>/<role>/000.webp ...     role: fill, contours or vectors
                               000.uv.webp         wind u/v (red/green), when the layer has vectors
@@ -34,7 +36,7 @@ import re
 import shutil
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -44,6 +46,7 @@ HERE = Path(__file__).parent
 BACKEND = os.environ.get("BACKEND_URL", "https://weather-explorer-backend.replit.app").rstrip("/")
 UNCHANGED = 3
 FORMAT = 3             # package layout version; older packages are rebuilt
+KEEP_DAYS = 7          # how long a highlight stays available to shared links after it was last listed
 MISSING = 255          # u8 value for no data; real values use 0..254
 SQRT_LAYERS = {"precip"}   # wide-range fields kept on a square-root scale so light rain keeps detail
 # Feed fields the viewer shows. Requested events are listed by their researched item only: the
@@ -170,7 +173,55 @@ def scenes_of(item: dict, key: str, root: Path, used: set[str]) -> dict | None:
         if rel:
             used.add(rel)
             out.append({k: v for k, v in scene.items() if k != "data"} | {"package": rel})
-    return item | {"scenes": out} if out else None
+    if not out:
+        return None
+    # The item's permanent reference, used by shared links: its package tag and id.
+    return item | {"scenes": out, "ref": f"{out[0]['package'].split('/')[1]}/{item['id']}"}
+
+
+def keep_archive(root: Path, current: list[dict], now: datetime, used: set[str]) -> bool:
+    """Keep each highlight for KEEP_DAYS after it was last listed, so shared links keep working.
+
+      data/items/<tag>/<id>.json      the item as it was shown (with its packages)
+      data/archive.json               {"<tag>/<id>": {"until": ...}}
+
+    Adds the packages of kept items to `used`. Returns True if anything was added or removed."""
+    path = root / "archive.json"
+    try:
+        archive = json.loads(path.read_text())
+    except (OSError, ValueError):
+        archive = {}
+    changed = False
+    until = (now + timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%dT%H:%MZ")
+    for item in current:
+        ref = item["ref"]
+        f = root / "items" / f"{ref}.json"
+        if ref not in archive or not f.exists():
+            changed = True
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(item, ensure_ascii=False, separators=(",", ":")))
+        archive[ref] = {"until": until}
+    stamp = now.strftime("%Y-%m-%dT%H:%MZ")
+    for ref in list(archive):
+        f = root / "items" / f"{ref}.json"
+        if archive[ref]["until"] < stamp or not f.exists():
+            f.unlink(missing_ok=True)
+            del archive[ref]
+            changed = True
+            continue
+        try:
+            used.update(s["package"] for s in json.loads(f.read_text())["scenes"])
+        except (OSError, ValueError, KeyError):
+            pass
+    for d in (root / "items").glob("*"):
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+    path.write_text(json.dumps(archive, separators=(",", ":")))
+    return changed
+
+
+def package_bytes(root: Path, rel: str) -> int:
+    return sum(p.stat().st_size for p in (root / rel).rglob("*") if p.is_file())
 
 
 def main() -> int:
@@ -191,6 +242,11 @@ def main() -> int:
             if item:
                 requested.append({k: r[k] for k in REQUEST_FIELDS if k in r} | {"item": item})
 
+    # Size of each scene, so the viewer can say how big a download will be.
+    for item in items + [r["item"] for r in requested]:
+        for s in item["scenes"]:
+            s["bytes"] = package_bytes(root, s["package"])
+
     site = {"generated_utc": feed.get("generated_utc"), "runs": feed.get("runs"),
             "attribution": feed.get("attribution"), "items": sorted(items, key=lambda i: i.get("rank", 99)),
             "requested": requested}
@@ -199,8 +255,9 @@ def main() -> int:
     old = path.read_text() if path.exists() else None
     old_body = json.dumps({k: v for k, v in json.loads(old).items() if k != "synced_utc"},
                           ensure_ascii=False, separators=(",", ":")) if old else None
+    archived = keep_archive(root, items + [r["item"] for r in requested], datetime.now(timezone.utc), used)
 
-    # Remove packages no longer listed.
+    # Remove packages neither listed nor kept for shared links.
     pdir = root / "p"
     for tag in (pdir.iterdir() if pdir.exists() else []):
         for pkg in tag.iterdir():
@@ -209,7 +266,7 @@ def main() -> int:
         if not any(tag.iterdir()):
             tag.rmdir()
 
-    if body == old_body:
+    if body == old_body and not archived:
         print("[sync] nothing new", flush=True)
         return UNCHANGED
     site["synced_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
