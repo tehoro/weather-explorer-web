@@ -81,32 +81,43 @@ function contours(v, nx, ny, interval) {
   return { segs: new Float32Array(segs), levels: new Float32Array(levels) };
 }
 
-// Highs and lows: points that are the extreme of a wide neighbourhood and stand out from it.
+// Highs and lows, exactly as the app finds them (Contours.pressureCentres): a low below 1004 hPa
+// or a high above 1022 hPa that is the extreme of its 3×3 cells and of a wide neighbourhood,
+// right up to the edges of the scene.
 function centres(v, nx, ny) {
-  const s = Math.max(2, Math.round(Math.min(nx, ny) / 45));
-  const R = Math.max(4, Math.round(Math.min(nx, ny) / 9));
+  const r = Math.max(4, Math.floor(Math.min(nx, ny) / 12));
   const out = [];
-  for (let j = R; j < ny - R; j += s) {
-    for (let i = R; i < nx - R; i += s) {
-      const c = v[j * nx + i];
-      if (c !== c) continue;
-      let isMin = true, isMax = true, sum = 0, n = 0;
-      for (let jj = j - R; jj <= j + R && (isMin || isMax); jj += s) {
-        for (let ii = i - R; ii <= i + R; ii += s) {
-          const x = v[jj * nx + ii];
-          if (x !== x) continue;
-          if (x < c) isMin = false;
-          if (x > c) isMax = false;
-          sum += x; n++;
+  for (let y = 1; y < ny - 1; y++) {
+    for (let x = 1; x < nx - 1; x++) {
+      const c = v[y * nx + x];
+      if (c !== c || !(c < 1004 || c > 1022)) continue;
+      // Cheap 3×3 test first; only those candidates get the wide-radius check.
+      let lmin = true, lmax = true;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const o = v[(y + dy) * nx + x + dx];
+          if (o < c) lmin = false;
+          if (o > c) lmax = false;
         }
       }
-      if (!(isMin || isMax) || n === 0) continue;
-      if (Math.abs(c - sum / n) < 2) continue;      // too flat to call
-      if (out.some(e => Math.hypot(e.x - i, e.y - j) < R)) continue;
-      out.push({ x: i + 0.5, y: j + 0.5, value: c, high: isMax });
+      if (!((lmin && c < 1004) || (lmax && c > 1022))) continue;
+      let ok = true;
+      outer: for (let yy = Math.max(0, y - r); yy <= Math.min(ny - 1, y + r); yy++) {
+        for (let xx = Math.max(0, x - r); xx <= Math.min(nx - 1, x + r); xx++) {
+          const o = v[yy * nx + xx];
+          if ((lmin && o < c) || (!lmin && o > c)) { ok = false; break outer; }
+        }
+      }
+      if (ok) out.push({ x: x + 0.5, y: y + 0.5, value: c, high: !lmin });
     }
   }
-  return out;
+  // Flat highs give clusters of equal maxima: keep one per neighbourhood.
+  const kept = [];
+  for (const e of out) {
+    if (!kept.some((k) => k.high === e.high && Math.abs(k.x - e.x) < r * 2 && Math.abs(k.y - e.y) < r * 2)) kept.push(e);
+  }
+  return kept;
 }
 
 self.onmessage = async ({ data: m }) => {
