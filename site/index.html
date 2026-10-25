@@ -6,7 +6,7 @@
 <title>Weather Explorer</title>
 <meta name="description" content="Interesting weather around the world right now, animated from ECMWF Open Data.">
 <meta name="theme-color" content="#0b1218">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=dev">
 </head>
 <body>
 <header class="top">
@@ -22,7 +22,7 @@
         <label>Temperature <select data-kind="temperature"></select></label>
         <label>Wind <select data-kind="wind"></select></label>
         <label>Rain <select data-kind="rain"></select></label>
-        <label>Times <select id="timeZone"></select></label>
+        <label>Time zone <select id="timeZone"></select></label>
       </div>
     </div>
     <button id="helpBtn" class="units-btn" aria-haspopup="dialog" title="How to use this page">
@@ -150,8 +150,8 @@
     <h3>Units and times</h3>
     <p>Units follow your device's region: for example °F, mph and inches in the US; °C, mph and mm in the UK; °C, km/h and mm
       in most other places. Change any of them with the units button at the top. Figures in the text change to match.</p>
-    <p>Times are shown in UTC unless you choose <b>Local</b> under <b>Times</b> in the same menu. Local uses your device's
-      time zone with its usual name, such as NZDT, CET or EDT. Times in the text that include a date change too. Model
+    <p>Times are shown in UTC unless you change <b>Time zone</b> in the same menu to your own zone, shown by its usual name
+      such as NZDT, CET or EDT. Times in the text that include a date change too. Model
       runs keep their UTC names (for example "00 UTC run"), as do times written without a date. Your choices are remembered
       in this browser.</p>
 
@@ -175,7 +175,7 @@
     guidance, not an official forecast or warning: for those, see your National Meteorological Service.</span>
 </footer>
 
-<script src="units.js"></script>
-<script src="app.js"></script>
+<script src="units.js?v=dev"></script>
+<script src="app.js?v=dev"></script>
 </body>
 </html>

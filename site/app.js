@@ -6,6 +6,9 @@
 // The same script runs a saved copy (save.js builds one): a single HTML file that sets
 // window.WEATHER_OFFLINE with every file it needs, so it plays with no connection.
 
+// Each deploy stamps its release into the file names (?v=…), so a browser never mixes a new page
+// with old cached scripts. "dev" when run locally.
+const VERSION = "dev";
 const Units = window.Units;
 const OFFLINE = window.WEATHER_OFFLINE || null;
 
@@ -79,7 +82,7 @@ function inPageWorker() {
   return { postMessage: (data) => self.onmessage({ data }), set onmessage(f) { reply = f; } };
 }
 function startWorker() {
-  if (!OFFLINE) return new Worker("worker.js");
+  if (!OFFLINE) return new Worker(`worker.js?v=${VERSION}`);
   let real;
   try {
     real = new Worker(URL.createObjectURL(new Blob([OFFLINE.worker], { type: "text/javascript" })));
@@ -1096,7 +1099,7 @@ function setupUnits() {
     };
   }
   const tz = $("#timeZone");
-  tz.innerHTML = `<option value="utc">UTC</option><option value="local">${esc(Units.localLabel())}</option>`;
+  tz.innerHTML = `<option value="utc">UTC</option><option value="local">${esc(Units.zoneName(new Date(), true))}</option>`;
   tz.value = Units.choice("time") === "local" ? "local" : "utc";
   tz.onchange = () => {
     Units.setChoice("time", tz.value);
@@ -1302,7 +1305,7 @@ async function saveCopy(entries) {
     say("Preparing…");
     const get = (p, kind) => fetch(p).then((r) => { if (!r.ok) throw new Error(`${r.status} ${p}`); return r[kind](); });
     const [page, css, units, app, workerSrc, basemapText] = await Promise.all(
-      ["index.html", "style.css", "units.js", "app.js", "worker.js", "basemap.json"].map((p) => get(p, "text")));
+      ["index.html", "style.css", "units.js", "app.js", "worker.js", "basemap.json"].map((p) => get(`${p}?v=${VERSION}`, "text")));
     const files = { "basemap.json": toBase64(new TextEncoder().encode(basemapText)) };
 
     // Every file the viewer reads for these scenes.
@@ -1343,9 +1346,9 @@ async function saveCopy(entries) {
     say("Writing the file…");
     const SCRIPT = "script";       // keeps a closing tag out of this file, which saved copies inline
     const html = page
-      .replace(`<link rel="stylesheet" href="style.css">`, () => `<style>\n${css}\n</style>`)
-      .replace(`<${SCRIPT} src="units.js"></${SCRIPT}>`, () => `<${SCRIPT}>window.WEATHER_OFFLINE = ${offline};</${SCRIPT}>\n<${SCRIPT}>\n${units}\n</${SCRIPT}>`)
-      .replace(`<${SCRIPT} src="app.js"></${SCRIPT}>`, () => `<${SCRIPT}>\n${app}\n</${SCRIPT}>`);
+      .replace(/<link rel="stylesheet" href="style\.css[^"]*">/, () => `<style>\n${css}\n</style>`)
+      .replace(new RegExp(`<${SCRIPT} src="units\\.js[^"]*"></${SCRIPT}>`), () => `<${SCRIPT}>window.WEATHER_OFFLINE = ${offline};</${SCRIPT}>\n<${SCRIPT}>\n${units}\n</${SCRIPT}>`)
+      .replace(new RegExp(`<${SCRIPT} src="app\\.js[^"]*"></${SCRIPT}>`), () => `<${SCRIPT}>\n${app}\n</${SCRIPT}>`);
     const name = entries.length === 1 ? entries[0].item.id : `highlights-${S.feed.generated_utc.slice(0, 10)}`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));

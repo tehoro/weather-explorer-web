@@ -194,11 +194,6 @@ function formatTime(date, { weekday = true, day = true } = {}) {
   return `${new Intl.DateTimeFormat(undefined, opts).format(date)} ${zoneName(date)}`;
 }
 
-/** What the time setting's "local" choice is called here, e.g. "Local (NZDT)". */
-function localLabel() {
-  return `Local (${zoneName(new Date(), true)})`;
-}
-
 // Times written in the text with a date, such as "18 UTC 24 Oct" or "06-12 UTC 26 Oct". Model run
 // names ("HRES (18 UTC 24 Oct)") stay as written: they name the run.
 let year = new Date().getUTCFullYear();
@@ -223,5 +218,5 @@ function localizeTimes(text) {
 }
 
 return { DEVICE, CHOICES, choice, setChoice, unit, convert, format, summary, localize,
-         zoneName, formatTime, localLabel, setYear };
+         zoneName, formatTime, setYear };
 })();

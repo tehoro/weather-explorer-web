@@ -61,6 +61,14 @@ jobs:
           path: site/data
           key: data-${{ github.run_id }}
 
+      - name: Stamp the release into file names
+        if: steps.sync.outputs.changed == 'true' || github.event_name != 'schedule'
+        run: |
+          v="${GITHUB_SHA::8}"
+          sed -i "s/?v=dev/?v=$v/g" site/index.html
+          sed -i "s/^const VERSION = \"dev\";/const VERSION = \"$v\";/" site/app.js
+          grep -q "?v=$v" site/index.html && grep -q "VERSION = \"$v\"" site/app.js
+
       - name: Package the site
         if: steps.sync.outputs.changed == 'true' || github.event_name != 'schedule'
         uses: actions/upload-pages-artifact@v3
