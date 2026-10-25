@@ -39,7 +39,9 @@ function frameSource(path) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return { path, bytes };
 }
-const SPEEDS = [0.5, 1, 2, 4];
+const SPEEDS = [0.5, 1, 2, 4];           // frames per second (frames are mostly 3 h apart)
+const SPEED_KEY = "weather-explorer-speed";
+const DEFAULT_SPEED = 2;                  // 6 forecast hours a second suits most scenes
 const FEED_REFRESH_MS = 10 * 60 * 1000;
 const DEG = Math.PI / 180;
 
@@ -64,7 +66,9 @@ const S = {
   tracked: [],          // contour labels on screen, in grid units: [{gx, gy, v}]
   pos: 0,
   playing: false,
-  speed: 1,
+  speed: (() => {
+    try { const v = Number(localStorage.getItem(SPEED_KEY)); return SPEEDS.includes(v) ? v : DEFAULT_SPEED; } catch { return DEFAULT_SPEED; }
+  })(),
   view: null,           // {cx, cy, s}: centre in (lon, mercY) and pixels per degree
   token: 0,             // bumps on every scene load, to ignore stale results
 };
@@ -802,9 +806,12 @@ $("#play").onclick = () => {
   if (!S.playing && S.pos >= S.meta.fill.frames.length - 1) S.pos = 0;
   play(!S.playing);
 };
+const showSpeed = () => { $("#speed").textContent = S.speed < 1 ? "½×" : `${S.speed}×`; };
+showSpeed();
 $("#speed").onclick = () => {
   S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length];
-  $("#speed").textContent = S.speed < 1 ? "½×" : `${S.speed}×`;
+  try { localStorage.setItem(SPEED_KEY, String(S.speed)); } catch { /* applied, not kept */ }
+  showSpeed();
 };
 scrub.oninput = () => {
   S.pos = parseFloat(scrub.value);
