@@ -27,6 +27,15 @@ function fileUrl(path) {
   return blobUrls.get(path);
 }
 const dataUrl = (path) => fileUrl(DATA + path);
+
+// What the worker should decode for a frame: its URL, or in a saved copy the bytes themselves.
+function frameSource(path) {
+  if (!OFFLINE) return DATA + path;
+  const bin = atob(OFFLINE.files[DATA + path] || "");
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return { path, bytes };
+}
 const SPEEDS = [0.5, 1, 2, 4];
 const FEED_REFRESH_MS = 10 * 60 * 1000;
 const DEG = Math.PI / 180;
@@ -570,9 +579,9 @@ async function runContours() {
   if (!w) return;
   contourWant = null;
   contourBusy = true;
-  const url = (i) => dataUrl(`${S.pkg}/${w.cm.role}/${String(i).padStart(3, "0")}.c12.webp`);
+  const src = (i) => frameSource(`${S.pkg}/${w.cm.role}/${String(i).padStart(3, "0")}.c12.webp`);
   try {
-    const r = await ask({ type: "contours", urlA: url(w.br.i), urlB: url(w.br.j), q: w.q, centres: w.cm.meta.layer === "mslp",
+    const r = await ask({ type: "contours", srcA: src(w.br.i), srcB: src(w.br.j), q: w.q, centres: w.cm.meta.layer === "mslp",
       top: 4095,
       meta: { nx: w.cm.meta.nx, ny: w.cm.meta.ny, lo: w.cm.meta.lo, hi: w.cm.meta.hi,
               contour_interval: w.cm.meta.contour_interval } });
@@ -649,8 +658,8 @@ function stepParticles() {
 // Loading a scene
 // ------------------------------------------------------------------------------------------
 
-function frameUrl(role, i, uv) {
-  return dataUrl(`${S.pkg}/${role}/${String(i).padStart(3, "0")}${uv ? ".uv" : ""}.webp`);
+function frameSrc(role, i, uv) {
+  return frameSource(`${S.pkg}/${role}/${String(i).padStart(3, "0")}${uv ? ".uv" : ""}.webp`);
 }
 
 // opts (from a shared link): time = the valid time to show, paused; view = {lon, lat, z}.
@@ -697,11 +706,11 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   const jobs = [];
   for (let i = 0; i < n; i++) {
     jobs.push(async () => {
-      const r = await ask({ type: "frame", url: frameUrl("fill", i), channels: 1 });
+      const r = await ask({ type: "frame", src: frameSrc("fill", i), channels: 1 });
       if (token !== S.token) return;
       S.fill[i] = { data: r.data, tex: frameTexture(r.data, meta.fill.nx, meta.fill.ny) };
       if (vm) {
-        const u = await ask({ type: "frame", url: frameUrl(vm.role, i, true), channels: 2 });
+        const u = await ask({ type: "frame", src: frameSrc(vm.role, i, true), channels: 2 });
         if (token !== S.token) return;
         S.uv[i] = u.data;
       }

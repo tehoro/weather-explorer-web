@@ -4,13 +4,22 @@
 // Vector frames carry u in the red channel and v in the green one; contour frames (.c12) carry
 // 12-bit values split across red and green.
 
-const frames = new Map();      // url -> Uint8Array (values, or interleaved u/v)
+const frames = new Map();      // path -> Uint8Array (values, or interleaved u/v)
 
-async function decode(url, channels) {
-  if (frames.has(url)) return frames.get(url);
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`${r.status} ${url}`);
-  const bmp = await createImageBitmap(await r.blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
+// src is a URL to fetch, or, in a saved copy, {path, bytes}: a page opened from a local file may
+// not fetch its own embedded data from here, so the page sends the bytes themselves.
+async function decode(src, channels) {
+  const key = typeof src === "string" ? src : src.path;
+  if (frames.has(key)) return frames.get(key);
+  let blob;
+  if (typeof src === "string") {
+    const r = await fetch(src);
+    if (!r.ok) throw new Error(`${r.status} ${src}`);
+    blob = await r.blob();
+  } else {
+    blob = new Blob([src.bytes], { type: "image/webp" });
+  }
+  const bmp = await createImageBitmap(blob, { colorSpaceConversion: "none", premultiplyAlpha: "none" });
   const c = new OffscreenCanvas(bmp.width, bmp.height);
   const g = c.getContext("2d", { willReadFrequently: true });
   g.drawImage(bmp, 0, 0);
@@ -21,7 +30,7 @@ async function decode(url, channels) {
     out[i * channels] = px[i * 4];
     if (channels === 2) out[i * 2 + 1] = px[i * 4 + 1];
   }
-  frames.set(url, out);
+  frames.set(key, out);
   return out;
 }
 
@@ -105,10 +114,10 @@ self.onmessage = async ({ data: m }) => {
     if (m.type === "reset") {
       frames.clear();
     } else if (m.type === "frame") {
-      const d = await decode(m.url, m.channels);
+      const d = await decode(m.src, m.channels);
       self.postMessage({ id: m.id, data: d.slice() });
     } else if (m.type === "contours") {
-      const [a, b] = await Promise.all([decode(m.urlA, 2), decode(m.urlB, 2)]);
+      const [a, b] = await Promise.all([decode(m.srcA, 2), decode(m.srcB, 2)]);
       const v = values(a, b, m.q, m.meta, m.top);
       const { segs, levels } = contours(v, m.meta.nx, m.meta.ny, m.meta.contour_interval);
       const ext = m.centres ? centres(v, m.meta.nx, m.meta.ny) : [];
