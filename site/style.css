@@ -76,6 +76,14 @@ button { font: inherit; color: inherit; }
 .entry:hover { background: var(--panel); }
 .entry[aria-current="true"] { background: var(--panel-2); border-left-color: var(--accent); }
 .entry .t { font-weight: 600; font-size: 14px; display: block; }
+.entry .tag, .details .explainer b { color: var(--accent); }
+.entry .tag {
+  display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+  border: 1px solid var(--accent); border-radius: 4px; padding: 0 5px; margin-bottom: 3px;
+}
+.details .explainer {
+  background: var(--panel-2); border-left: 3px solid var(--accent); padding: 8px 10px; border-radius: 4px; font-size: 13.5px;
+}
 .entry .w { color: var(--muted); font-size: 12.5px; display: block; margin-top: 2px; }
 
 /* Scene tabs, share and save */
@@ -168,6 +176,10 @@ button { font: inherit; color: inherit; }
 .legend .scale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .legend .scale span[style^="left:0.0%"] { transform: none; }
 .legend .note { color: var(--muted); margin-top: 3px; }
+.legend .cats { display: grid; gap: 3px; margin: 2px 0 2px; }
+.legend .cat { display: flex; align-items: center; gap: 2px; }
+.legend .cat i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend .cat span { margin-left: 6px; }
 .zoom { position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 4px; }
 .zoom button {
   width: 36px; height: 36px; padding: 0; border-radius: 8px; border: 1px solid var(--line);

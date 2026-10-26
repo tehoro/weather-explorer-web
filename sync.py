@@ -20,6 +20,7 @@ Each scene's gzipped JSON (uint16 values, base64) becomes a folder of lossless W
   data/p/<tag>/<item>-<n>/<role>/000.webp ...     role: fill, contours or vectors
                               000.uv.webp         wind u/v (red/green), when the layer has vectors
                               000.c12.webp        12-bit values (red/green), when it is contoured
+  Categorical layers (precipitation type) store 1-based indexes into meta "categories" instead.
 
 Scene files never change once built, so a package already on disk is kept and not fetched again.
 Exit status 0 = the site changed, 3 = nothing new (the caller can skip deploying).
@@ -110,15 +111,33 @@ def to_u12_rg(b64: str, nx: int, ny: int) -> np.ndarray:
     return np.dstack([(q12 >> 8).astype(np.uint8), (q12 & 255).astype(np.uint8), np.zeros((ny, nx), np.uint8)])
 
 
+def to_category(b64: str, n: int, lo: float, hi: float, values: list[int]) -> np.ndarray:
+    """A categorical field (e.g. precipitation type) as 1-based indexes into its category list:
+    0 = none of them, 255 = missing. Exact, unlike the scaled 8-bit values."""
+    q = np.frombuffer(base64.b64decode(b64), dtype="<u2")[:n]
+    if q.size < n:
+        q = np.concatenate([q, np.full(n - q.size, 65535, "<u2")])
+    v = np.rint(lo + q.astype(np.float64) * ((hi - lo) / 65534 if hi > lo else 1.0)).astype(int)
+    lookup = {val: k + 1 for k, val in enumerate(values)}
+    out = np.array([lookup.get(x, 0) for x in v.tolist()], dtype=np.uint8)
+    out[q == 65535] = MISSING
+    return out
+
+
 def convert(src: dict, out: Path) -> dict:
     """Write one role's frames as WebP; returns its part of meta.json."""
     nx, ny, n = src["nx"], src["ny"], src["nx"] * src["ny"]
     sqrt = src["layer"] in SQRT_LAYERS
+    cats = src.get("categories")
     vec = src.get("vectors")
     out.mkdir(parents=True, exist_ok=True)
     frames = []
     for i, f in enumerate(src["frames"]):
-        (out / f"{i:03d}.webp").write_bytes(webp(to_u8(f["data"], n, sqrt).reshape(ny, nx)))
+        if cats:
+            u8 = to_category(f["data"], n, src["lo"], src["hi"], [c["value"] for c in cats])
+        else:
+            u8 = to_u8(f["data"], n, sqrt)
+        (out / f"{i:03d}.webp").write_bytes(webp(u8.reshape(ny, nx)))
         if src.get("contour_interval"):
             # 8 bits makes isobars wobble in flat areas, so contoured layers keep 12 bits too.
             (out / f"{i:03d}.c12.webp").write_bytes(webp(to_u12_rg(f["data"], nx, ny)))
@@ -130,7 +149,8 @@ def convert(src: dict, out: Path) -> dict:
         frames.append({"valid_time": f["valid_time"], "run": f.get("run"), "step": f.get("step")})
     return {k: src.get(k) for k in ("layer", "title", "units", "model", "resolution", "run", "box", "nx", "ny",
                                     "projection", "lo", "hi", "stops", "contour_interval", "vectors", "attribution")} | {
-        "scale": "sqrt" if sqrt else "linear", "frames": frames}
+        "scale": "categorical" if cats else "sqrt" if sqrt else "linear", "frames": frames,
+        **({"categories": cats} if cats else {})}
 
 
 def package(scene: dict, key: str, root: Path) -> str | None:

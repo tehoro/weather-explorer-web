@@ -318,9 +318,17 @@ function setupGL() {
     precision highp float;
     in vec2 uv; out vec4 o;
     uniform sampler2D A, B, LUT;
-    uniform float mixT, lo, hi, rlo, rhi, sq;
+    uniform float mixT, lo, hi, rlo, rhi, sq, cat;
     void main() {
       float a = texture(A, uv).r, b = texture(B, uv).r;
+      if (cat > 0.5) {
+        // Categories (e.g. precipitation type): 1-based index, nearest frame, never blended.
+        float idx = floor((mixT < 0.5 ? a : b) * 255.0 + 0.5);
+        if (idx < 0.5 || idx > 254.5) discard;
+        vec4 c = texture(LUT, vec2((idx + 0.5) / 256.0, 0.5));
+        o = vec4(c.rgb * c.a, c.a);
+        return;
+      }
       if (a > 0.997 || b > 0.997) discard;
       float t = mix(a, b, mixT) * 255.0 / 254.0;
       if (sq > 0.5) t = t * t;
@@ -366,32 +374,40 @@ function rampSample(stops, v) {
   return s[s.length - 1][1];
 }
 
-function makeLUT(stops) {
+// Colour lookup: a smooth ramp from the stops, or for a categorical layer one colour per
+// category at its 1-based index (0 = none).
+function makeLUT(stops, categories) {
   const lo = Math.min(...stops.map((s) => s[0])), hi = Math.max(...stops.map((s) => s[0]));
   const px = new Uint8Array(256 * 4);
-  for (let i = 0; i < 256; i++) {
-    const c = rampSample(stops, lo + (hi - lo) * i / 255);
-    px.set(c.map(Math.round), i * 4);
+  if (categories) {
+    categories.forEach((c, k) => px.set(parseColour(c.color), (k + 1) * 4));
+  } else {
+    for (let i = 0; i < 256; i++) {
+      const c = rampSample(stops, lo + (hi - lo) * i / 255);
+      px.set(c.map(Math.round), i * 4);
+    }
   }
   if (gl) {
     if (!lutTex) lutTex = gl.createTexture();
+    const f = categories ? gl.NEAREST : gl.LINEAR;
     gl.bindTexture(gl.TEXTURE_2D, lutTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
   return { lo, hi };
 }
 
-function frameTexture(data, nx, ny) {
+function frameTexture(data, nx, ny, nearest = false) {
   if (!gl) return null;
   const t = gl.createTexture();
+  const f = nearest ? gl.NEAREST : gl.LINEAR;           // categories can't be interpolated
   gl.bindTexture(gl.TEXTURE_2D, t);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, nx, ny, 0, gl.RED, gl.UNSIGNED_BYTE, data);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return t;
@@ -435,6 +451,7 @@ function drawField() {
   const u = (n, v) => gl.uniform1f(gl.getUniformLocation(prog, n), v);
   u("mixT", br.t); u("lo", m.lo); u("hi", m.hi); u("rlo", S.ramp.lo); u("rhi", S.ramp.hi);
   u("sq", m.scale === "sqrt" ? 1 : 0);
+  u("cat", m.categories ? 1 : 0);
   const loc = gl.getAttribLocation(prog, "p");
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.enableVertexAttribArray(loc);
@@ -656,7 +673,7 @@ function stepParticles() {
   const want = Math.round(Math.min(2500, W * H / 450));
   while (parts.length < want) parts.push({ x: Math.random() * W, y: Math.random() * H, age: Math.random() * 80 | 0, life: 40 + Math.random() * 60 | 0 });
   parts.length = want;
-  const ref = vm.meta.layer === "jet250" ? 70 : 22;
+  const ref = { jet250: 70, wind850: 35 }[vm.meta.layer] || 22;     // m/s for full streak speed
   g.strokeStyle = style().streak;
   g.lineWidth = 1;
   g.beginPath();
@@ -702,7 +719,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   const meta = await fetch(dataUrl(`${S.pkg}/meta.json`)).then((r) => r.json());
   if (token !== S.token) return;
   S.meta = meta;
-  S.ramp = makeLUT(meta.fill.stops);
+  S.ramp = makeLUT(meta.fill.stops, meta.fill.categories);
   fit();
   if (opts.view) {
     S.view = { ...S.view, cx: opts.view.lon, cy: mercY(opts.view.lat), s: S.view.fit * opts.view.z, touched: true };
@@ -729,7 +746,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
     jobs.push(async () => {
       const r = await ask({ type: "frame", src: frameSrc("fill", i), channels: 1 });
       if (token !== S.token) return;
-      S.fill[i] = { data: r.data, tex: frameTexture(r.data, meta.fill.nx, meta.fill.ny) };
+      S.fill[i] = { data: r.data, tex: frameTexture(r.data, meta.fill.nx, meta.fill.ny, !!meta.fill.categories) };
       if (vm) {
         const u = await ask({ type: "frame", src: frameSrc(vm.role, i, true), channels: 2 });
         if (token !== S.token) return;
@@ -975,12 +992,17 @@ function readout(px, py) {
   if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) { el.hidden = true; return; }
   const q = f.data[Math.floor(fy * m.ny) * m.nx + Math.floor(fx * m.nx)];
   if (q === 255) { el.hidden = true; return; }
-  let t = q / 254;
-  if (m.scale === "sqrt") t *= t;
-  const v = m.lo + (m.hi - m.lo) * t;
+  let text;
+  if (m.categories) {
+    text = q > 0 && m.categories[q - 1] ? m.categories[q - 1].label : "Nothing falling";
+  } else {
+    let t = q / 254;
+    if (m.scale === "sqrt") t *= t;
+    text = Units.format(m.lo + (m.hi - m.lo) * t, m.units);
+  }
   const lat = invMercY(y);
   const ll = `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(((L + 540) % 360) - 180).toFixed(1)}°${((L + 540) % 360) - 180 >= 0 ? "E" : "W"}`;
-  el.innerHTML = `<b>${esc(Units.format(v, m.units))}</b> <span class="muted">${ll}</span>`;
+  el.innerHTML = `<b>${esc(text)}</b> <span class="muted">${ll}</span>`;
   el.style.left = `${px}px`;
   el.style.top = `${py}px`;
   el.hidden = false;
@@ -1011,8 +1033,9 @@ function renderList() {
   const row = (e) => {
     const n = e.item.scenes.length;
     const where = [e.item.where?.label, n > 1 ? `${n} scenes` : ""].filter(Boolean).join(" · ");
+    const tag = e.item.kind === "explainer" ? `<span class="tag">Explainer</span>` : "";
     return `<button class="entry" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
-      <span class="t">${esc(loc(e.item.title))}</span><span class="w">${esc(where)}</span></button>`;
+      ${tag}<span class="t">${esc(loc(e.item.title))}</span><span class="w">${esc(where)}</span></button>`;
   };
   const main = S.entries.filter((e) => !e.requested), req = S.entries.filter((e) => e.requested);
   const shared = S.shared && !S.entries.includes(S.shared) ? [S.shared] : [];
@@ -1054,7 +1077,9 @@ function renderDetails() {
   }).join("");
   const archived = S.entry.archived
     ? `<p class="archived">This shared highlight is from an earlier set and may be out of date.${OFFLINE ? "" : ` <a href="#" id="latest">See the latest highlights</a>`}</p>` : "";
-  $("#details").innerHTML = `${archived}
+  const explainer = it.kind === "explainer"
+    ? `<p class="explainer"><b>Explainer:</b> a textbook example of how the atmosphere works, picked from the forecast for what it shows; no impacts are implied.</p>` : "";
+  $("#details").innerHTML = `${archived}${explainer}
     <h2>${esc(loc(it.title))}</h2>
     <p class="where">${esc(it.where?.label || "")}${when ? `<br>${esc(when)}` : ""}</p>
     ${it.hazards?.length ? `<div class="chips">${it.hazards.map((h) => `<span class="chip">${esc(h.replace(/-/g, " "))}</span>`).join("")}</div>` : ""}
@@ -1095,11 +1120,34 @@ function legendTicks(lo, hi, units, n) {
   return out;
 }
 
+// Categories grouped by kind ("Rain, light" ... -> Rain: three swatches, light to heavy).
+function categoryGroups(categories) {
+  const groups = [];
+  for (const c of categories) {
+    const [name] = c.label.split(", ");
+    let gp = groups.find((x) => x.name === name);
+    if (!gp) groups.push(gp = { name, colors: [] });
+    gp.colors.push(c.color);
+  }
+  return groups;
+}
+
 function renderLegend() {
   const m = S.meta.fill;
   const lo = S.ramp.lo, hi = S.ramp.hi;
   const cm = contourMeta();
   const el = $("#legend");
+  if (m.categories) {
+    const rows = categoryGroups(m.categories).map((gp) => `<div class="cat">${gp.colors.map((c) =>
+      `<i style="background:${esc(c)}"></i>`).join("")}<span>${esc(gp.name)}</span></div>`).join("");
+    el.innerHTML = `<div class="lt">${esc(m.title)}</div><div class="cats">${rows}</div>
+      <div class="note">Shades: light, moderate, heavy</div>
+      ${vectorMeta() ? `<div class="note">Streaks: ${esc(vectorMeta().meta.title.toLowerCase())}</div>` : ""}
+      ${cm ? `<div class="note">Lines: ${esc(cm.meta.title.toLowerCase())} every ${cm.meta.contour_interval} ${esc(cm.meta.units)}</div>` : ""}
+      <div class="note">${esc(m.model)}</div>
+      ${style().credit ? `<div class="note credit">${esc(style().credit)}</div>` : ""}`;
+    return;
+  }
   const scale = legendTicks(lo, hi, m.units, matchMedia("(max-width: 720px)").matches ? 4 : 6)
     .map(([f, text]) => `<span style="left:${(f * 100).toFixed(1)}%">${esc(text)}</span>`).join("");
   el.innerHTML = `<div class="lt">${esc(m.title)} <span class="muted">(${esc(Units.unit(m.units))})</span></div>
@@ -1494,25 +1542,41 @@ function drawVideoFrame(g, layout) {
   // Key, under the title band on the left.
   const ky = layout.top + 10, kw = 190;
   g.font = `600 12px ${font}`;
-  const keyTitle = `${m.title} (${Units.unit(m.units)})`;
-  const kwBox = Math.max(kw, g.measureText(keyTitle).width) + 20;
-  g.fillStyle = "rgba(8,14,19,0.78)";
-  roundRect(g, 10, ky, kwBox, 54, 8);
-  g.fill();
-  g.fillStyle = "#e6edf2";
-  g.fillText(keyTitle, 20, ky + 18);
-  for (let x = 0; x < kw; x++) {
-    const [r, gg, b, a] = rampSample(m.stops, S.ramp.lo + (S.ramp.hi - S.ramp.lo) * x / (kw - 1));
-    g.fillStyle = `rgba(${r},${gg},${b},${Math.max(0.12, a / 255)})`;
-    g.fillRect(20 + x, ky + 25, 1, 8);
+  if (m.categories) {
+    const groups = categoryGroups(m.categories);
+    g.fillStyle = "rgba(8,14,19,0.78)";
+    roundRect(g, 10, ky, 170, 30 + groups.length * 16, 8);
+    g.fill();
+    g.fillStyle = "#e6edf2";
+    g.fillText(m.title, 20, ky + 18);
+    g.font = `500 11px ${font}`;
+    groups.forEach((gp, k) => {
+      const y = ky + 28 + k * 16;
+      gp.colors.forEach((c, j) => { g.fillStyle = c; g.fillRect(20 + j * 14, y, 12, 10); });
+      g.fillStyle = "#e6edf2";
+      g.fillText(gp.name, 66, y + 9);
+    });
+  } else {
+    const keyTitle = `${m.title} (${Units.unit(m.units)})`;
+    const kwBox = Math.max(kw, g.measureText(keyTitle).width) + 20;
+    g.fillStyle = "rgba(8,14,19,0.78)";
+    roundRect(g, 10, ky, kwBox, 54, 8);
+    g.fill();
+    g.fillStyle = "#e6edf2";
+    g.fillText(keyTitle, 20, ky + 18);
+    for (let x = 0; x < kw; x++) {
+      const [r, gg, b, a] = rampSample(m.stops, S.ramp.lo + (S.ramp.hi - S.ramp.lo) * x / (kw - 1));
+      g.fillStyle = `rgba(${r},${gg},${b},${Math.max(0.12, a / 255)})`;
+      g.fillRect(20 + x, ky + 25, 1, 8);
+    }
+    g.fillStyle = "#8fa1ae";
+    g.font = `500 11px ${font}`;
+    for (const [f, text] of legendTicks(S.ramp.lo, S.ramp.hi, m.units, 5)) {
+      g.textAlign = f === 0 ? "left" : "center";
+      g.fillText(text, 20 + f * kw, ky + 47);
+    }
+    g.textAlign = "left";
   }
-  g.fillStyle = "#8fa1ae";
-  g.font = `500 11px ${font}`;
-  for (const [f, text] of legendTicks(S.ramp.lo, S.ramp.hi, m.units, 5)) {
-    g.textAlign = f === 0 ? "left" : "center";
-    g.fillText(text, 20 + f * kw, ky + 47);
-  }
-  g.textAlign = "left";
 
   // Bottom band: time and credit.
   const fr = m.frames, i = Math.max(0, Math.min(fr.length - 1, Math.round(S.pos)));
