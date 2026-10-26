@@ -31,6 +31,22 @@ function fileUrl(path) {
 }
 const dataUrl = (path) => fileUrl(DATA + path);
 
+// Anonymous visit counts (GoatCounter, loaded by index.html; never in saved copies). Each
+// highlight scene counts as a page ("/h/<id>/<scene>"); Share, Save and Video count as events.
+const counted = new Set();
+function track(path, title, event = false) {
+  if (OFFLINE) return;
+  const send = () => window.goatcounter?.count?.({ path, title, event });
+  if (window.goatcounter?.count) send();
+  else window.addEventListener("load", () => setTimeout(send, 500), { once: true });   // script still loading
+}
+function trackScene(entry, scene) {
+  const path = `/h/${entry.item.id}/${scene + 1}`;
+  if (counted.has(path)) return;                         // once per page load, not on every revisit
+  counted.add(path);
+  track(path, `${entry.item.title} · scene ${scene + 1}`);
+}
+
 // What the worker should decode for a frame: its URL, or in a saved copy the bytes themselves.
 function frameSource(path) {
   if (!OFFLINE) return DATA + path;
@@ -718,6 +734,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   S.view = null;
   const meta = await fetch(dataUrl(`${S.pkg}/meta.json`)).then((r) => r.json());
   if (token !== S.token) return;
+  trackScene(entry, sceneIndex);
   S.meta = meta;
   S.ramp = makeLUT(meta.fill.stops, meta.fill.categories);
   fit();
@@ -1338,6 +1355,7 @@ function shareLink() {
 
 $("#share").onclick = async () => {
   if (!S.entry) return;
+  track("share", "Share link", true);
   const url = shareLink();
   history.replaceState(null, "", url);
   const title = loc(S.entry.item.title);
@@ -1376,8 +1394,8 @@ function setupSave() {
     open(panel.hidden);
   };
   document.addEventListener("click", (e) => { if (!panel.hidden && !e.target.closest(".save")) open(false); });
-  $("#saveOne").onclick = () => saveCopy([S.entry]);
-  $("#saveAll").onclick = () => saveCopy(S.entries);
+  $("#saveOne").onclick = () => { track("save-one", "Save: this highlight", true); saveCopy([S.entry]); };
+  $("#saveAll").onclick = () => { track("save-all", "Save: all highlights", true); saveCopy(S.entries); };
 }
 
 function toBase64(buf) {
@@ -1438,6 +1456,8 @@ async function saveCopy(entries) {
     const SCRIPT = "script";       // keeps a closing tag out of this file, which saved copies inline
     const html = page
       .replace(/<link rel="stylesheet" href="style\.css[^"]*">/, () => `<style>\n${css}\n</style>`)
+      // No visit counting in saved copies (the comment and the GoatCounter script).
+      .replace(new RegExp(`<!-- Anonymous visit counts[\\s\\S]*?</${SCRIPT}>\\n`), "")
       .replace(new RegExp(`<${SCRIPT} src="units\\.js[^"]*"></${SCRIPT}>`), () => `<${SCRIPT}>window.WEATHER_OFFLINE = ${offline};</${SCRIPT}>\n<${SCRIPT}>\n${units}\n</${SCRIPT}>`)
       .replace(new RegExp(`<${SCRIPT} src="app\\.js[^"]*"></${SCRIPT}>`), () => `<${SCRIPT}>\n${app}\n</${SCRIPT}>`);
     const name = entries.length === 1 ? entries[0].item.id : `highlights-${S.feed.generated_utc.slice(0, 10)}`;
@@ -1495,7 +1515,9 @@ function setupVideo() {
     open(panel.hidden);
   };
   document.addEventListener("click", (e) => { if (!panel.hidden && !e.target.closest(".video")) open(false); });
-  for (const b of panel.querySelectorAll("[data-format]")) b.onclick = () => makeVideo(b.dataset.format);
+  for (const b of panel.querySelectorAll("[data-format]")) {
+    b.onclick = () => { track(`video-${b.dataset.format}`, `Video: ${b.dataset.format}`, true); makeVideo(b.dataset.format); };
+  }
 }
 
 // Text wrapped to a width, at most `max` lines (the last one shortened with an ellipsis).
