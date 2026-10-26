@@ -130,7 +130,7 @@ function ask(msg) {
 // ------------------------------------------------------------------------------------------
 
 const mapEl = $("#map");
-const base = $("#base"), field = $("#field"), overlay = $("#overlay"), particles = $("#particles");
+const base = $("#base"), field = $("#field"), coast = $("#coast"), overlay = $("#overlay"), particles = $("#particles");
 let W = 0, H = 0, DPR = 1;
 
 function resize() {
@@ -138,7 +138,7 @@ function resize() {
   const r = mapEl.getBoundingClientRect();
   DPR = Math.min(2, window.devicePixelRatio || 1);
   W = r.width; H = r.height;
-  for (const c of [base, field, overlay, particles]) {
+  for (const c of [base, field, coast, overlay, particles]) {
     c.width = Math.round(W * DPR);
     c.height = Math.round(H * DPR);
   }
@@ -184,11 +184,16 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
   const decode = (arr) => {
     const out = new Float32Array(arr.length);
     let x = 0, y = 0;
+    let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < arr.length; i += 2) {
       x += arr[i]; y += arr[i + 1];
       out[i] = x / j.scale;
       out[i + 1] = mercY(y / j.scale);
+      if (out[i] < lo) lo = out[i];
+      if (out[i] > hi) hi = out[i];
     }
+    out.lo = lo;                            // longitude range: lines are continuous across 180°,
+    out.hi = hi;                            // so a ring can run beyond ±180 (e.g. Eurasia)
     return out;
   };
   basemap = { land: j.land.map(decode), borders: j.borders.map(decode) };
@@ -202,7 +207,7 @@ const MAP_STYLES = {
           line: "rgba(255,255,255,0.78)", streak: "rgba(255,255,255,0.75)" },
   light: { ocean: "#c4d3de", land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
            line: "rgba(20,30,40,0.78)", streak: "rgba(20,30,40,0.7)" },
-  satellite: { ocean: "#08131f", land: null, coast: "rgba(255,255,255,0.35)", border: "rgba(255,255,255,0.28)",
+  satellite: { ocean: "#08131f", land: null, coast: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.4)",
                line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
                tiles: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg",
                maxZoom: 8, credit: "Imagery: NASA Blue Marble (GIBS)" },
@@ -261,13 +266,16 @@ function drawBase() {
   g.fillRect(0, 0, W, H);
   if (!S.view) return false;
   const loading = st.tiles ? drawTiles(g, st) : false;
+  const cg = coast.getContext("2d");
+  cg.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cg.clearRect(0, 0, W, H);
   if (!basemap) return true;
   const [lonL] = toWorld(0, 0), [lonR] = toWorld(W, 0);
-  const shifts = [-360, 0, 360].filter((k) => lonR >= -180 + k && lonL <= 180 + k);
-  const path = (arrs, close) => {
+  const path = (g, arrs, close) => {
     g.beginPath();
-    for (const k of shifts) {
+    for (const k of [-360, 0, 360]) {
       for (const a of arrs) {
+        if (a.hi + k < lonL || a.lo + k > lonR) continue;       // this copy is off screen
         for (let i = 0; i < a.length; i += 2) {
           const [x, y] = toScreen(a[i] + k, a[i + 1]);
           i ? g.lineTo(x, y) : g.moveTo(x, y);
@@ -276,18 +284,21 @@ function drawBase() {
       }
     }
   };
-  path(basemap.land, true);
+  // Land is filled under the weather colours; coastlines and borders go on their own canvas
+  // above them, so they stay visible where the colours are strong (e.g. over the Baltic).
+  path(g, basemap.land, true);
   if (st.land) {
     g.fillStyle = st.land;
     g.fill("evenodd");
   }
-  g.lineWidth = 0.8;
-  g.strokeStyle = st.coast;
-  g.stroke();
-  path(basemap.borders, false);
-  g.lineWidth = 0.6;
-  g.strokeStyle = st.border;
-  g.stroke();
+  path(cg, basemap.land, true);
+  cg.lineWidth = 0.8;
+  cg.strokeStyle = st.coast;
+  cg.stroke();
+  path(cg, basemap.borders, false);
+  cg.lineWidth = 0.6;
+  cg.strokeStyle = st.border;
+  cg.stroke();
   return loading;
 }
 
@@ -1562,7 +1573,7 @@ async function makeVideo(format) {
     S.recording = true;
     cover.hidden = false;
     DPR = 2; W = fmt.w / 2; H = fmt.h / 2;
-    for (const c of [base, field, overlay, particles]) { c.width = fmt.w; c.height = fmt.h; }
+    for (const c of [base, field, coast, overlay, particles]) { c.width = fmt.w; c.height = fmt.h; }
     const g0 = document.createElement("canvas").getContext("2d");
     g0.font = "700 20px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     const title = wrapText(g0, loc(S.entry.item.title), W - 32, 2);
@@ -1631,6 +1642,7 @@ async function makeVideo(format) {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.drawImage(base, 0, 0);
       g.drawImage(field, 0, 0);
+      g.drawImage(coast, 0, 0);
       g.drawImage(particles, 0, 0);
       g.drawImage(overlay, 0, 0);
       g.setTransform(DPR, 0, 0, DPR, 0, 0);
