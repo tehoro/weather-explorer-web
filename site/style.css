@@ -162,6 +162,16 @@ button { font: inherit; color: inherit; }
   padding: 5px 9px; border-radius: 6px; font-size: 13px; pointer-events: none; white-space: nowrap;
   transform: translate(-50%, calc(-100% - 10px));
 }
+/* The exact point the value is for: a small dot, joined to the bubble by a short line. */
+.readout::before {
+  content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 10px;
+  background: rgba(255, 255, 255, 0.8); transform: translateX(-50%);
+}
+.readout::after {
+  content: ""; position: absolute; left: 50%; top: calc(100% + 10px); width: 7px; height: 7px; border-radius: 50%;
+  background: #fff; border: 2px solid #0b1218; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+  transform: translate(-50%, -50%);
+}
 .status {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   background: rgba(8, 14, 19, 0.85); padding: 6px 12px; border-radius: 6px; font-size: 13px; color: var(--muted);
