@@ -217,7 +217,9 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
 }).catch(() => {});
 
 // Map styles, as in the app. Satellite uses NASA's Blue Marble imagery from GIBS (public domain,
-// no key), in the same Web Mercator tiling as the data.
+// no key), in the same Web Mercator tiling as the data. Relief is this site's own tiles, built
+// from NOAA ETOPO 2022 by tools/make_relief.py; a saved copy fetches them from the live site.
+const RELIEF = OFFLINE ? "https://tehoro.github.io/weather-explorer-web/relief/" : "relief/";
 const MAP_STYLES = {
   dark: { ocean: "#0d1923", land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
           line: "rgba(255,255,255,0.78)", streak: "rgba(255,255,255,0.75)" },
@@ -227,6 +229,9 @@ const MAP_STYLES = {
                line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
                tiles: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg",
                maxZoom: 8, credit: "Imagery: NASA Blue Marble (GIBS)" },
+  relief: { ocean: "#0f2034", land: null, coast: "rgba(255,255,255,0.5)", border: "rgba(255,255,255,0.32)",
+            line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
+            tiles: RELIEF + "{z}/{x}/{y}.webp", maxZoom: 6, credit: "Relief: NOAA ETOPO 2022" },
 };
 const STYLE_KEY = "weather-explorer-map";
 let mapStyle = "dark";
@@ -236,14 +241,14 @@ const style = () => MAP_STYLES[mapStyle];
 const tiles = new Map();
 let tileRedraw = 0;
 function tile(z, x, y) {
-  const key = `${z}/${x}/${y}`;
+  const key = style().tiles.replace("{z}", z).replace("{x}", x).replace("{y}", y);
   let t = tiles.get(key);
   if (!t) {
     t = new Image();
     t.crossOrigin = "anonymous";            // GIBS allows it; keeps the map usable for video frames
     t.decoding = "async";
     t.onload = () => { if (!tileRedraw) tileRedraw = requestAnimationFrame(() => { tileRedraw = 0; drawBase(); }); };
-    t.src = style().tiles.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+    t.src = key;
     tiles.set(key, t);
     if (tiles.size > 400) tiles.delete(tiles.keys().next().value);
   }
@@ -1224,7 +1229,7 @@ function setupUnits() {
     if (!panel.hidden && !e.target.closest(".units")) { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); }
   });
 }
-// Map style: the layers button on the map opens dark / light / satellite.
+// Map style: the layers button on the map opens dark / light / satellite / relief.
 function setupLayers() {
   const btn = $("#layersBtn"), panel = $("#layersPanel");
   const open = (on) => { panel.hidden = !on; btn.setAttribute("aria-expanded", String(on)); };

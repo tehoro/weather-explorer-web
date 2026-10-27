@@ -88,12 +88,13 @@
         <button id="fullscreen" aria-label="Full screen" title="Full screen">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path class="enter" d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5"/><path class="exit" d="M8 3v5H3M17 8h-5V3M12 17v-5h5M3 12h5v5"/></svg></button>
         <div class="layers">
-          <button id="layersBtn" aria-label="Map style" title="Map style: dark, light or satellite" aria-expanded="false" aria-controls="layersPanel">
+          <button id="layersBtn" aria-label="Map style" title="Map style: dark, light, satellite or relief" aria-expanded="false" aria-controls="layersPanel">
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3 2.5 7 10 11l7.5-4z"/><path d="m2.5 10.5 7.5 4 7.5-4"/><path d="m2.5 14 7.5 4 7.5-4"/></svg></button>
           <div class="layers-panel" id="layersPanel" role="radiogroup" aria-label="Map style" hidden>
             <button role="radio" data-style="dark"><span class="sw sw-dark"></span>Dark</button>
             <button role="radio" data-style="light"><span class="sw sw-light"></span>Light</button>
             <button role="radio" data-style="satellite"><span class="sw sw-satellite"></span>Satellite</button>
+            <button role="radio" data-style="relief"><span class="sw sw-relief"></span>Relief</button>
           </div>
         </div>
       </div>
@@ -151,7 +152,12 @@
       <li>Drag to pan; scroll, pinch or use <b>+</b> and <b>−</b> to zoom.</li>
       <li><b>Target</b> button: back to the whole scene.</li>
       <li><b>Full screen</b> button: the map and timeline fill the screen (Esc or the same button to return).</li>
-      <li><b>Layers</b> button: dark, light or satellite background (satellite imagery: NASA Blue Marble).</li>
+      <li><b>Layers</b> button: dark, light, satellite or relief background (satellite imagery: NASA Blue Marble).</li>
+      <li><b>Relief</b> shows the lie of the land, lit from the north-west: greens for low ground, browns for hills and
+        mountains, pale grey and white for the highest ground and the ice sheets of Greenland and Antarctica, and darker
+        blues for deeper sea. Use it to see how mountains and coasts shape the weather: winds funnelled through gaps and
+        down slopes (such as the bora), rain piled up on windward ranges, or a low-level jet running along the foot of the
+        Rockies or the Andes. The background never changes by itself. (Heights: NOAA ETOPO 2022.)</li>
       <li>Tap or click anywhere on the map for the value at that point.</li>
     </ul>
 

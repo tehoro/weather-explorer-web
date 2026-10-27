@@ -218,6 +218,7 @@ button { font: inherit; color: inherit; }
 .sw-dark { background: linear-gradient(135deg, #1b2731 0 45%, #0d1923 45%); }
 .sw-light { background: linear-gradient(135deg, #eceee8 0 45%, #c4d3de 45%); }
 .sw-satellite { background: #1d3b5a url("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/3/2/4.jpeg") center / cover; }
+.sw-relief { background: #1b3753 url("relief/3/4/2.webp") center / cover; }
 
 /* Help */
 .help {
