@@ -395,8 +395,8 @@ function rampSample(stops, v) {
   return s[s.length - 1][1];
 }
 
-// Precipitation type in the colours of ECMWF's OpenCharts, whatever the scene file says: one strong
-// hue per type (codes as in ECMWF's ptype), a little lighter when light and darker when heavy.
+// Precipitation type in the colours of ECMWF's OpenCharts, whatever the scene file says: one hue
+// per type (codes as in ECMWF's ptype), darker and duller when light, at full strength when heavy.
 const PTYPE = { 1: ["Rain", "#3ce213"], 3: ["Freezing rain", "#ff044b"], 5: ["Snow", "#9d68ee"],
                 6: ["Wet snow", "#4543fa"], 7: ["Sleet (rain and snow)", "#1fb8a6"], 8: ["Ice pellets", "#ff8000"],
                 12: ["Freezing drizzle", "#fb6ec0"] };
@@ -407,7 +407,7 @@ function ptypeStyle(categories) {
     const [name, hex] = PTYPE[Math.floor(c.value / 10)] || [];
     if (!name) return c;
     const level = ["light", "moderate", "heavy"][c.value % 10 - 1];
-    const color = c.value % 10 === 1 ? shade(hex, 255, 0.2, "d0") : c.value % 10 === 2 ? hex + "f0" : shade(hex, 0, 0.3, "ff");
+    const color = c.value % 10 === 1 ? shade(hex, 0, 0.45, "c0") : c.value % 10 === 2 ? shade(hex, 0, 0.2, "e8") : hex + "ff";
     return { ...c, label: `${name}, ${level}`, color };
   });
 }
