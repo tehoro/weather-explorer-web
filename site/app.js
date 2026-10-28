@@ -395,6 +395,23 @@ function rampSample(stops, v) {
   return s[s.length - 1][1];
 }
 
+// Precipitation type in the colours of ECMWF's OpenCharts, whatever the scene file says: one strong
+// hue per type (codes as in ECMWF's ptype), a little lighter when light and darker when heavy.
+const PTYPE = { 1: ["Rain", "#3ce213"], 3: ["Freezing rain", "#ff044b"], 5: ["Snow", "#9d68ee"],
+                6: ["Wet snow", "#4543fa"], 7: ["Sleet (rain and snow)", "#1fb8a6"], 8: ["Ice pellets", "#ff8000"],
+                12: ["Freezing drizzle", "#fb6ec0"] };
+function ptypeStyle(categories) {
+  const shade = (hex, to, f, alpha) => "#" + [1, 3, 5].map((i) =>
+    Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - f) + to * f).toString(16).padStart(2, "0")).join("") + alpha;
+  return categories.map((c) => {
+    const [name, hex] = PTYPE[Math.floor(c.value / 10)] || [];
+    if (!name) return c;
+    const level = ["light", "moderate", "heavy"][c.value % 10 - 1];
+    const color = c.value % 10 === 1 ? shade(hex, 255, 0.2, "d0") : c.value % 10 === 2 ? hex + "f0" : shade(hex, 0, 0.3, "ff");
+    return { ...c, label: `${name}, ${level}`, color };
+  });
+}
+
 // Colour lookup: a smooth ramp from the stops, or for a categorical layer one colour per
 // category at its 1-based index (0 = none).
 function makeLUT(stops, categories) {
@@ -739,6 +756,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   S.view = null;
   const meta = await fetch(dataUrl(`${S.pkg}/meta.json`)).then((r) => r.json());
   if (token !== S.token) return;
+  if (meta.fill.layer === "ptype") meta.fill.categories = ptypeStyle(meta.fill.categories);
   trackScene(entry, sceneIndex);
   S.meta = meta;
   S.ramp = makeLUT(meta.fill.stops, meta.fill.categories);
