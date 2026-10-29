@@ -68,9 +68,9 @@ jobs:
         if: steps.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           v="${GITHUB_SHA::8}"
-          sed -i "s/?v=dev/?v=$v/g" site/index.html
+          sed -i "s/?v=dev/?v=$v/g" site/index.html site/3d/index.html
           sed -i "s/^const VERSION = \"dev\";/const VERSION = \"$v\";/" site/app.js
-          grep -q "?v=$v" site/index.html && grep -q "VERSION = \"$v\"" site/app.js
+          grep -q "?v=$v" site/index.html && grep -q "?v=$v" site/3d/index.html && grep -q "VERSION = \"$v\"" site/app.js
 
       - name: Package the site
         if: steps.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'

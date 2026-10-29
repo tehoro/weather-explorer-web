@@ -743,6 +743,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   const token = ++S.token;
   S.entry = entry;
   S.sceneIndex = sceneIndex;
+  $("#view3d").hidden = OFFLINE || !entry.item.view3d;
   const scene = entry.item.scenes[sceneIndex];
   S.pkg = scene.package;
   S.meta = null;
@@ -1375,6 +1376,17 @@ function shareLink() {
   }
   return `${location.origin}${location.pathname}#${p.toString()}`;
 }
+
+// The 3D view (3d/, tropical cyclones only, built by build3d.py) opens at the moment on screen,
+// and its back button returns to this view.
+$("#view3d").onclick = () => {
+  if (!S.entry?.item.view3d) return;
+  track("3d", "3D view", true);
+  const fr = S.meta?.fill.frames;
+  const p = new URLSearchParams({ d: S.entry.item.view3d, back: new URL(shareLink()).hash.slice(1) });
+  if (fr?.length) p.set("t", fr[Math.max(0, Math.min(fr.length - 1, Math.round(S.pos)))].valid_time);
+  location.assign(`3d/?${p}`);
+};
 
 $("#share").onclick = async () => {
   if (!S.entry) return;

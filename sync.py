@@ -16,6 +16,7 @@ Each scene's gzipped JSON (uint16 values, base64) becomes a folder of lossless W
   data/feed.json                  highlights and requested events, scene data paths rewritten
   data/items/<tag>/<id>.json      each highlight as shown, kept 7 days for shared links
   data/archive.json               when each kept highlight expires
+  data/3d/<item id>-<run>/        3D view of a tropical cyclone (build3d.py), item "view3d"
   data/p/<tag>/<item>-<n>/meta.json
   data/p/<tag>/<item>-<n>/<role>/000.webp ...     role: fill, contours or vectors
                               000.uv.webp         wind u/v (red/green), when the layer has vectors
@@ -42,6 +43,8 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+
+import build3d
 
 HERE = Path(__file__).parent
 BACKEND = os.environ.get("BACKEND_URL", "https://weather-explorer-backend.replit.app").rstrip("/")
@@ -261,6 +264,10 @@ def main() -> int:
             item = scenes_of(r["item"], key, root, used)
             if item:
                 requested.append({k: r[k] for k in REQUEST_FIELDS if k in r} | {"item": item})
+
+    # 3D views for tropical cyclones, from Open Data for the highlights' own run (build3d.py).
+    hres = (feed.get("runs") or {}).get("hres")
+    build3d.build(items + [r["item"] for r in requested], root, build3d.parse_time(hres) if hres else None)
 
     # Size of each scene, so the viewer can say how big a download will be.
     for item in items + [r["item"] for r in requested]:

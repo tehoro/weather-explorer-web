@@ -44,6 +44,24 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
   [mp4-muxer](https://github.com/Vanilagy/mp4-muxer) (loaded from jsDelivr only when used). Square,
   4:5 and 16:9. The button is hidden where the browser has no `VideoEncoder`, and in saved copies.
 
+## 3D view (tropical cyclones)
+
+Highlights tagged `tropical-cyclone` get a **3D** button. `site/3d/` is a three.js model of the
+highlight's box that you can turn, tilt and zoom: clouds and the warm core ray-marched from
+humidity and temperature on 12 pressure levels, wind particles at 925 hPa (inflow) and 200 hPa
+(outflow), rain, and the sea coloured by 10 m wind with isobars. It opens at the moment the map was
+showing, returns to the same map view, and makes its own MP4 (same encoder as the map's Video).
+
+`build3d.py` (called by `sync.py`) fetches the fields straight from ECMWF Open Data for the
+highlights' own run, about 1,500 range requests per storm, and writes
+`data/3d/<item>-<run>/meta.json` and `bundle.bin.gz` (4–10 MB, unpacked in the browser). The item
+gets `"view3d"`. Bundles are kept while the item is listed and rebuilt only for a new run. A storm
+whose build fails simply has no 3D button until the next sync. The backend is not involved.
+
+```bash
+uv run build3d.py          # build bundles for the published feed's cyclones into site/data/3d
+```
+
 ## Data format
 
 Each scene becomes `data/p/<tag>/<item>-<n>/` with `meta.json` and one lossless greyscale WebP per

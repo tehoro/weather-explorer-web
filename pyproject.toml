@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Public web viewer for the Weather Explorer highlights (static site plus a sync script)"
 requires-python = ">=3.12"
 dependencies = [
+    "eccodes>=2.38",
+    "eccodeslib>=2.50.0.33",
     "numpy>=1.26",
     "pillow>=10",
+    "truststore>=0.10",
 ]

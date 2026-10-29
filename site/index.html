@@ -44,6 +44,8 @@
       <span class="scene-label" id="sceneLabel">Scene</span>
       <div class="tabs" id="scenes" role="tablist" aria-label="Scenes"></div>
       <div class="actions">
+        <button id="view3d" class="act" hidden title="Explore this storm in 3D">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 17 6.5v7L10 17.5 3 13.5v-7z"/><path d="M3 6.5 10 10.5l7-4M10 10.5v7"/></svg><span>3D</span></button>
         <button id="share" class="act" title="Share a link to this view">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3M6 7l4-4 4 4M4 11v5h12v-5"/></svg><span>Share</span></button>
         <div class="video">
@@ -191,6 +193,11 @@
 
     <h3>Sharing and saving</h3>
     <ul>
+      <li><b>3D</b> (tropical cyclones) opens a 3D model of the storm that you can turn, tilt and zoom: clouds and the warm
+        core from humidity and temperature on 12 pressure levels, winds spiralling in near the sea and out at the top, rain,
+        and the sea coloured by wind speed with isobars. It starts at the moment you were looking at, and can make its own video.
+        Heights are exaggerated, and the clouds are inferred from humidity rather than taken from the model's cloud. It needs
+        a download of about 10 MB.</li>
       <li><b>Share</b> creates a link to exactly what you're looking at: the highlight, the scene, the moment, the map style
         and your view. Whoever opens it sees their own units and time zone. Links keep working for a week after a highlight is replaced.</li>
       <li><b>Video</b> makes an MP4 of the current scene from start to end at your chosen speed, square, portrait or

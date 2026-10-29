@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weather Explorer 3D</title>
+<link rel="icon" href="../favicon.ico">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<style>
+  :root { --panel: rgba(10, 16, 28, 0.72); --line: rgba(255, 255, 255, 0.12); --text: #e8eef7; --muted: #98a6ba; --accent: #5cc8ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(ellipse at 50% 0%, #1b2d4a 0%, #0a1222 55%, #04070d 100%); }
+  canvas { display: block; touch-action: none; }
+  .panel { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  #title { top: 16px; left: 16px; max-width: min(440px, calc(100vw - 32px)); padding: 12px 14px; }
+  #title h1 { margin: 0 0 4px; font-size: 17px; font-weight: 650; }
+  #title .sub { color: var(--muted); font-size: 12.5px; }
+  #title details { margin-top: 8px; font-size: 12.5px; color: #c9d4e3; }
+  #title summary { cursor: pointer; color: var(--accent); }
+  #layers { top: 16px; right: 16px; width: 220px; padding: 10px 12px; font-size: 13px; }
+  #layers h2 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  #layers label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+  #layers .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  #layers .slider { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
+  #layers input[type=range] { width: 100%; }
+  #layers button { margin-top: 8px; width: 100%; }
+  #timeline { left: 50%; bottom: 16px; transform: translateX(-50%); width: min(760px, calc(100vw - 32px));
+    padding: 10px 14px; display: flex; align-items: center; gap: 12px; }
+  #timeline input { flex: 1; accent-color: var(--accent); }
+  #time { min-width: 170px; text-align: right; font-variant-numeric: tabular-nums; }
+  #time .lead { color: var(--muted); font-size: 12px; }
+  button { background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; font: inherit; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,0.16); }
+  #play { width: 40px; height: 34px; padding: 0; font-size: 15px; }
+  #credit { position: absolute; left: 16px; bottom: 84px; font-size: 11px; color: var(--muted); max-width: 60vw; }
+  .label { position: absolute; transform: translate(-50%, -100%); pointer-events: none; white-space: nowrap;
+    font-size: 12px; text-shadow: 0 1px 3px #000, 0 0 8px #000; }
+  .label.place::after { content: ""; display: block; width: 1px; height: 18px; margin: 2px auto 0; background: rgba(255,255,255,0.6); }
+  .label.eye { font-weight: 650; color: #ffd27a; }
+  .label.level { transform: translate(0, -120%); font-size: 11.5px; font-weight: 600; }
+  #loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); text-align: center; }
+  #loading button { display: block; margin: 12px auto 0; }
+  #title .bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  #title .bar button { padding: 4px 10px; font-size: 13px; }
+  #title .bar button[hidden] { display: none; }
+  #videoPanel { position: absolute; top: 44px; left: 12px; width: 260px; padding: 10px 12px; z-index: 5; font-size: 13px; }
+  #videoPanel p { margin: 0 0 8px; color: #c9d4e3; }
+  #videoPanel button { display: flex; justify-content: space-between; width: 100%; margin-bottom: 6px; }
+  #videoPanel small { color: var(--muted); }
+  #recording { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(4,8,16,0.88);
+    color: var(--text); font-size: 16px; }
+  #recording[hidden] { display: none; }
+  #toggle-layers { display: none; }
+  #compass { position: absolute; right: 16px; bottom: 84px; width: 76px; height: 76px; padding: 0; border-radius: 50%; cursor: pointer; }
+  #compass svg { display: block; width: 100%; height: 100%; }
+  #compass text { font-size: 11px; font-weight: 700; fill: #c9d4e3; text-anchor: middle; dominant-baseline: central; }
+  #compass text.n { fill: #ff6b5b; }
+  .label.cardinal { transform: translate(-50%, -50%); font-size: 15px; font-weight: 700; color: rgba(255,255,255,0.75); }
+  .label.cardinal.n { color: #ff8a7a; }
+  @media (max-width: 700px) {
+    #title { right: 16px; padding: 10px 12px; }
+    #title h1 { font-size: 15px; }
+    #layers { top: auto; bottom: 84px; right: 16px; display: none; }
+    #layers.open { display: block; }
+    #toggle-layers { display: block; position: absolute; right: 16px; bottom: 84px; }
+    #layers.open + #toggle-layers { display: none; }
+    #credit { bottom: 84px; max-width: 55vw; font-size: 10px; }
+    #compass { width: 56px; height: 56px; bottom: 130px; }
+    #timeline { padding: 8px 10px; gap: 10px; }
+    #time { min-width: 0; font-size: 11.5px; white-space: nowrap; }
+    #time .lead { font-size: 10.5px; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="loading">Loading the storm…</div>
+<div id="recording" hidden>Making the video…</div>
+<div id="title" class="panel">
+  <div class="bar">
+    <button id="back" title="Back to the map">← Map</button>
+    <button id="video" title="Make a video of this 3D view">Video</button>
+    <button id="fullscreen" title="Full screen">⛶</button>
+  </div>
+  <div id="videoPanel" class="panel" hidden>
+    <p id="videoNote"></p>
+    <button data-format="square">Square 1:1 <small>1080×1080</small></button>
+    <button data-format="portrait">Portrait 4:5 <small>1080×1350</small></button>
+    <button data-format="landscape">Landscape 16:9 <small>1920×1080</small></button>
+    <p id="videoStatus"></p>
+  </div>
+  <h1 id="h1">Weather Explorer 3D</h1>
+  <div class="sub" id="sub"></div>
+  <details>
+    <summary>What you're seeing</summary>
+    <p><b>Clouds</b> are drawn where relative humidity is high (above the threshold you set). They're a stand-in for
+    cloud, not the model's cloud itself, and Open Data has only 12 pressure levels between 1000 and 100 hPa.</p>
+    <p><b>Warm core</b> shows air warmer than the average across the box at the same height, the signature of a tropical cyclone.</p>
+    <p><b>Inflow</b> (teal) traces 925 hPa winds spiralling in near the sea; <b>outflow</b> (amber) traces 200 hPa winds fanning out at the top. Each streak is a puff of air: the bright head is where it is now, the tail where it has been, and brighter means faster. A faint frame round the box marks each level.
+    The sea is coloured by 10 m wind speed, with isobars every 4 hPa.</p>
+    <p>Heights are exaggerated (the slider says by how much): the real atmosphere here is about 16 km deep and the box about 3000 km wide.</p>
+  </details>
+</div>
+<div id="layers" class="panel">
+  <h2>Layers</h2>
+  <label><input type="checkbox" id="L-cloud" checked><span class="sw" style="background:#e9eef5"></span>Clouds</label>
+  <label><input type="checkbox" id="L-warm"><span class="sw" style="background:#ff8a3d"></span>Warm core</label>
+  <label><input type="checkbox" id="L-in" checked><span class="sw" style="background:#4fe3d0"></span>Inflow (925 hPa)</label>
+  <label><input type="checkbox" id="L-out" checked><span class="sw" style="background:#ffb547"></span>Outflow (200 hPa)</label>
+  <label><input type="checkbox" id="L-rain" checked><span class="sw" style="background:#8fb8ff"></span>Rain</label>
+  <label><input type="checkbox" id="L-iso" checked><span class="sw" style="background:#cfd8e3"></span>Isobars</label>
+  <label><input type="checkbox" id="L-follow"><span class="sw" style="background:#ffd27a"></span>Follow the eye</label>
+  <span class="slider">Wind arrow brightness<input type="range" id="fg" min="5" max="100" value="30"></span>
+  <span class="slider">Vertical exaggeration <b id="exv">60×</b><input type="range" id="ex" min="15" max="150" value="60"></span>
+  <span class="slider">Cloud at humidity ≥ <b id="thv">85%</b><input type="range" id="th" min="70" max="100" value="85"></span>
+  <span class="slider">Cloud density<input type="range" id="dn" min="2" max="40" value="14"></span>
+  <button id="quality">Quality: high</button>
+</div>
+<button id="toggle-layers" class="panel">Layers</button>
+<button id="compass" class="panel" title="Compass: click to turn north up">
+  <svg viewBox="-38 -38 76 76">
+    <circle r="34" fill="none" stroke="rgba(255,255,255,0.15)"/>
+    <g id="dial">
+      <g stroke="rgba(255,255,255,0.35)">
+        <line y1="-34" y2="-29"/><line x1="34" x2="29"/><line y1="34" y2="29"/><line x1="-34" x2="-29"/>
+      </g>
+      <polygon points="0,-20 5,0 -5,0" fill="#ff6b5b"/>
+      <polygon points="0,20 5,0 -5,0" fill="rgba(255,255,255,0.55)"/>
+      <circle r="2.2" fill="#0a1222"/>
+      <text class="n" y="-27">N</text><text x="27">E</text><text y="27">S</text><text x="-27">W</text>
+    </g>
+  </svg>
+</button>
+<div id="credit"></div>
+<div id="timeline" class="panel">
+  <button id="play" title="Play / pause (space)">▶</button>
+  <input type="range" id="slider" min="0" max="1000" value="0" step="1">
+  <div id="time"></div>
+</div>
+<div id="labels"></div>
+<script type="module" src="app3d.js?v=dev"></script>
+</body>
+</html>
