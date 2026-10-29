@@ -24,7 +24,7 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
   timeline, wind particles, panels), `worker.js` (frame decoding, isobars, highs and lows) and
   `basemap.json` (Natural Earth 1:50m land and borders, public domain).
 - `tools/make_basemap.py` — rebuilds `basemap.json` from the world-atlas TopoJSON.
-- `.github/workflows/deploy.yml` — runs when the backend signals new highlights (`repository_dispatch`, see the backend's `web_notify.py`), with a fallback schedule (03:30–04:20 and 15:30–16:20 UTC, plus every three hours); sync, cache and Pages deploy.
+- `.github/workflows/deploy.yml` — sync and deploy, then the 3D jobs (see "3D view" below). Runs when the backend signals new highlights (`repository_dispatch`, see the backend's `web_notify.py`), with a fallback schedule (03:30–04:20 and 15:30–16:20 UTC, plus every three hours); sync, cache and Pages deploy.
 
 ## Sharing and saving
 
@@ -52,14 +52,19 @@ humidity and temperature on 12 pressure levels, wind particles at 925 hPa (inflo
 (outflow), rain, and the sea coloured by 10 m wind with isobars. It opens at the moment the map was
 showing, returns to the same map view, and makes its own MP4 (same encoder as the map's Video).
 
-`build3d.py` (called by `sync.py`) fetches the fields straight from ECMWF Open Data for the
-highlights' own run, about 1,500 range requests per storm, and writes
-`data/3d/<item>-<run>/meta.json` and `bundle.bin.gz` (4–10 MB, unpacked in the browser). The item
-gets `"view3d"`. Bundles are kept while the item is listed and rebuilt only for a new run. A storm
-whose build fails simply has no 3D button until the next sync. The backend is not involved.
+`build3d.py` fetches the fields straight from ECMWF Open Data for the highlights' own run, about
+1,500 range requests per storm (6–15 minutes each on GitHub's runners), and writes
+`data/3d/<item>-<run>/meta.json` and `bundle.bin.gz` (4–12 MB, unpacked in the browser). The item
+gets `"view3d"`. The backend is not involved.
+
+So the map update never waits for it, it runs as separate workflow jobs **after** the site is
+deployed (`build3d`, then `deploy3d` if anything changed). `sync.py` only attaches bundles that
+already exist. A new storm therefore shows its 3D button one deploy later than its map. A storm
+whose build fails has no 3D button, and is retried after the next sync. Bundles are kept while
+the item is listed and rebuilt only for a new run.
 
 ```bash
-uv run build3d.py          # build bundles for the published feed's cyclones into site/data/3d
+uv run build3d.py          # build missing bundles for site/data/feed.json; exit 0 = changed, 3 = nothing new
 ```
 
 ## Data format

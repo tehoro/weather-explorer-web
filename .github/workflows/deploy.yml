@@ -88,3 +88,70 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # 3D views for tropical cyclones (build3d.py). They take minutes per storm to fetch from Open Data,
+  # so they are built after the site is live and then deployed again; sync.py only attaches bundles
+  # that already exist. Runs after every successful sync, so a storm whose build failed is retried.
+  build3d:
+    needs: [sync, deploy]
+    if: always() && needs.sync.result == 'success' && needs.deploy.result != 'failure'
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.build.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Restore converted scenes
+        uses: actions/cache/restore@v4
+        with:
+          path: site/data
+          key: data-${{ github.run_id }}-3d
+          restore-keys: data-
+
+      - name: Build 3D views
+        id: build
+        run: |
+          set +e
+          uv run --frozen build3d.py
+          code=$?
+          set -e
+          if [ "$code" = 0 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$code" = 3 ]; then echo "changed=false" >> "$GITHUB_OUTPUT"
+          else exit "$code"; fi
+
+      - name: Save converted scenes
+        if: steps.build.outputs.changed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: site/data
+          key: data-${{ github.run_id }}-3d
+
+      - name: Stamp the release into file names
+        if: steps.build.outputs.changed == 'true'
+        run: |
+          v="${GITHUB_SHA::8}"
+          sed -i "s/?v=dev/?v=$v/g" site/index.html site/3d/index.html
+          sed -i "s/^const VERSION = \"dev\";/const VERSION = \"$v\";/" site/app.js
+          grep -q "?v=$v" site/index.html && grep -q "?v=$v" site/3d/index.html && grep -q "VERSION = \"$v\"" site/app.js
+
+      - name: Package the site
+        if: steps.build.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          name: github-pages-3d
+
+  deploy3d:
+    needs: build3d
+    if: needs.build3d.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-3d

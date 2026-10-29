@@ -265,9 +265,11 @@ def main() -> int:
             if item:
                 requested.append({k: r[k] for k in REQUEST_FIELDS if k in r} | {"item": item})
 
-    # 3D views for tropical cyclones, from Open Data for the highlights' own run (build3d.py).
+    # 3D views for tropical cyclones that are already built for the highlights' run. Missing ones
+    # are built after the site is deployed (build3d.py, a later workflow job), so the map update
+    # doesn't wait for them.
     hres = (feed.get("runs") or {}).get("hres")
-    build3d.build(items + [r["item"] for r in requested], root, build3d.parse_time(hres) if hres else None)
+    build3d.build(items + [r["item"] for r in requested], root, build3d.parse_time(hres) if hres else None, fetch=False)
 
     # Size of each scene, so the viewer can say how big a download will be.
     for item in items + [r["item"] for r in requested]:

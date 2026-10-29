@@ -17,7 +17,11 @@ Volumes are resampled from pressure levels to evenly spaced heights (standard at
 
 A bundle depends only on the item and the run, so one already on disk is kept.
 
-  uv run build3d.py [--data site/data] [--feed site/data/feed.json]    (sync.py calls build())
+  uv run build3d.py [--data site/data]
+
+sync.py only attaches bundles already built (build(fetch=False)), so the map update is never held
+up. The workflow then runs this script after deploying: it builds any missing bundles for the
+synced feed, marks the items, and exits 0 if the site changed (deploy again) or 3 if not.
 """
 from __future__ import annotations
 
@@ -270,50 +274,73 @@ def build_one(item: dict, run: datetime, out: Path) -> None:
     print(f"[3d] built {out.name} ({meta['bytes'] / 1e6:.1f} MB)", flush=True)
 
 
-def build(items: list[dict], data: Path, run: datetime | None = None) -> set[str]:
+def build(items: list[dict], data: Path, run: datetime | None = None, fetch: bool = True) -> set[str]:
     """Make sure each tropical-cyclone item has a 3D bundle for `run` (the highlights' run, so the
-    3D view matches them; the latest on Open Data if not given); set item["view3d"]
-    to its folder (relative to the data folder). Returns the folders in use; others are removed.
-    A failure only means that item has no 3D view this time."""
+    3D view matches them; the latest on Open Data if not given); set item["view3d"] to its folder
+    (relative to the data folder), and remove it from items without one. Returns the folders in use.
+
+    fetch=False (sync.py) only attaches bundles already on disk, so the map update never waits
+    for Open Data. fetch=True (the workflow's 3D job, after the site is deployed) builds missing
+    bundles and removes unused ones. A failed build only means that item has no 3D view this time."""
+    for item in items:
+        item.pop("view3d", None)
     wanted = [i for i in items if HAZARD in (i.get("hazards") or [])]
     used: set[str] = set()
-    if wanted:
+    if wanted and fetch:
         try:
             run = run or latest_run()
         except Exception as e:
             print(f"[3d] {e}", file=sys.stderr, flush=True)
             run = None
-        for item in wanted:
-            if run is None:
-                break
-            rel = f"3d/{item['id']}-{run:%Y%m%d%H}"
+    for item in wanted:
+        if run is None:
+            break
+        rel = f"3d/{item['id']}-{run:%Y%m%d%H}"
+        try:
+            if json.loads((data / rel / "meta.json").read_text()).get("format") != FORMAT:
+                raise ValueError
+        except (OSError, ValueError):
+            if not fetch:
+                continue
             try:
-                if json.loads((data / rel / "meta.json").read_text()).get("format") != FORMAT:
-                    raise ValueError
-            except (OSError, ValueError):
-                try:
-                    build_one(item, run, data / rel)
-                except Exception as e:
-                    print(f"[3d] {item['id']}: {e}", file=sys.stderr, flush=True)
-                    shutil.rmtree(data / f"{rel}.part", ignore_errors=True)
-                    continue
-            item["view3d"] = rel
-            used.add(rel)
-    for d in (data / "3d").glob("*") if (data / "3d").exists() else []:
-        if f"3d/{d.name}" not in used:
-            shutil.rmtree(d, ignore_errors=True)
+                build_one(item, run, data / rel)
+            except Exception as e:
+                print(f"[3d] {item['id']}: {e}", file=sys.stderr, flush=True)
+                shutil.rmtree(data / f"{rel}.part", ignore_errors=True)
+                continue
+        item["view3d"] = rel
+        used.add(rel)
+    if fetch:
+        for d in (data / "3d").glob("*") if (data / "3d").exists() else []:
+            if f"3d/{d.name}" not in used:
+                shutil.rmtree(d, ignore_errors=True)
     return used
+
+
+def update_site(data: Path) -> bool:
+    """The workflow's 3D job: build bundles for the synced feed (data/feed.json) and mark its items,
+    and the copies kept for shared links (data/items/). Returns True if the site changed."""
+    path = data / "feed.json"
+    feed = json.loads(path.read_text())
+    before = json.dumps(feed, sort_keys=True)
+    items = feed.get("items", []) + [r["item"] for r in feed.get("requested", []) if r.get("item")]
+    hres = (feed.get("runs") or {}).get("hres")
+    used = build(items, data, parse_time(hres) if hres else None)
+    print(f"[3d] {len(used)} bundle(s): {', '.join(sorted(used)) or 'none'}", flush=True)
+    if json.dumps(feed, sort_keys=True) == before:
+        return False
+    for item in items:
+        kept = data / "items" / f"{item.get('ref')}.json"
+        if item.get("ref") and kept.exists():
+            kept.write_text(json.dumps(item, ensure_ascii=False, separators=(",", ":")))
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(feed, ensure_ascii=False, separators=(",", ":")))
+    tmp.replace(path)
+    return True
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=str(HERE / "site" / "data"))
-    ap.add_argument("--feed", default="https://tehoro.github.io/weather-explorer-web/data/feed.json",
-                    help="feed to read the highlights from (URL or file)")
     a = ap.parse_args()
-    src = a.feed
-    feed = json.loads(_get(src) if src.startswith("http") else Path(src).read_text())
-    items = feed.get("items", []) + [r["item"] for r in feed.get("requested", []) if r.get("item")]
-    hres = (feed.get("runs") or {}).get("hres")
-    used = build(items, Path(a.data), parse_time(hres) if hres else None)
-    print(f"[3d] {len(used)} bundle(s): {', '.join(sorted(used)) or 'none'}")
+    sys.exit(0 if update_site(Path(a.data)) else 3)   # 3 = nothing new, as sync.py
