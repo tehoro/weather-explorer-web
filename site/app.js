@@ -86,6 +86,7 @@ const S = {
     try { const v = Number(localStorage.getItem(SPEED_KEY)); return SPEEDS.includes(v) ? v : DEFAULT_SPEED; } catch { return DEFAULT_SPEED; }
   })(),
   view: null,           // {cx, cy, s}: centre in (lon, mercY) and pixels per degree
+  flight: null,         // a move to a new scene's view in progress (flyTo)
   token: 0,             // bumps on every scene load, to ignore stale results
 };
 
@@ -158,7 +159,8 @@ function resize() {
     c.width = Math.round(W * DPR);
     c.height = Math.round(H * DPR);
   }
-  // Keep the scene fitted until the viewer pans or zooms.
+  // Keep the scene fitted until the viewer pans or zooms (a flight in progress just lands).
+  if (S.flight) { S.view = S.flight.to; S.flight = null; }
   if (S.entry && (!S.view || !S.view.touched)) fit();
   drawAll();
 }
@@ -189,6 +191,57 @@ function fit() {
   const y0 = mercY(b.s), y1 = mercY(b.n);
   const s = Math.min(W / (b.e - b.w), H / (y1 - y0)) * 0.94;
   S.view = { cx: (b.w + b.e) / 2, cy: (y0 + y1) / 2, s, fit: s };
+}
+
+// Flying between views, as MapKit does: zoom out, pan, zoom in. The path is van Wijk and
+// Nuij's "smooth and efficient zooming and panning" (as in d3.interpolateZoom and Mapbox
+// flyTo), in world units, with w = the width of the view. tick() moves it along.
+const RHO = 1.42;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+function flyTo(to) {
+  const from = S.view;
+  S.flight = null;
+  S.view = to;
+  if (!from || reducedMotion.matches || document.hidden || S.recording) return;
+  // Go the short way round, across 180° if need be.
+  const x0 = from.cx + 360 * Math.round((to.cx - from.cx) / 360), y0 = from.cy;
+  const w0 = W / from.s, w1 = W / to.s;
+  const dx = to.cx - x0, dy = to.cy - y0, d = Math.hypot(dx, dy);
+  const r2 = RHO * RHO;
+  let S_, at;
+  if (d < 1e-6) {
+    S_ = Math.abs(Math.log(w1 / w0)) / RHO;
+    at = (t) => [x0, y0, w0 * Math.pow(w1 / w0, t)];
+  } else {
+    const b0 = (w1 * w1 - w0 * w0 + r2 * r2 * d * d) / (2 * w0 * r2 * d);
+    const b1 = (w1 * w1 - w0 * w0 - r2 * r2 * d * d) / (2 * w1 * r2 * d);
+    const q0 = Math.log(Math.sqrt(b0 * b0 + 1) - b0), q1 = Math.log(Math.sqrt(b1 * b1 + 1) - b1);
+    S_ = (q1 - q0) / RHO;
+    at = (t) => {
+      const s = t * S_, c = Math.cosh(q0);
+      const u = w0 / (r2 * d) * (c * Math.tanh(RHO * s + q0) - Math.sinh(q0));
+      return [x0 + u * dx, y0 + u * dy, w0 * c / Math.cosh(RHO * s + q0)];
+    };
+  }
+  if (!(S_ > 0.01)) return;               // already there
+  // About 1.5–3 s, longer for longer flights; never wider than the Mercator world is tall.
+  const wMax = Math.max(340 * W / H, w0, w1);
+  S.view = { ...to, cx: x0, cy: y0, s: from.s };
+  S.flight = { to, at, wMax, start: performance.now(), ms: Math.max(1050, Math.min(3000, 675 * S_)) };
+}
+
+function stepFlight(now) {
+  const f = S.flight;
+  const t = Math.min(1, (now - f.start) / f.ms);
+  if (t >= 1) {
+    S.flight = null;
+    S.view = f.to;
+  } else {
+    const e = t * t * (3 - 2 * t);       // ease in and out
+    const [cx, cy, w] = f.at(e);
+    S.view = { ...f.to, cx, cy, s: W / Math.min(w, f.wMax) };
+  }
+  drawAll();
 }
 
 // ------------------------------------------------------------------------------------------
@@ -702,7 +755,7 @@ function stepParticles() {
   const g = particles.getContext("2d");
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   const vm = vectorMeta();
-  const br = vm && bracket(S.uv, S.pos);
+  const br = !S.flight && vm && bracket(S.uv, S.pos);
   if (!br) { g.clearRect(0, 0, W, H); return; }
   g.globalCompositeOperation = "destination-in";
   g.fillStyle = "rgba(0,0,0,0.9)";
@@ -754,17 +807,22 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   renderScenes();
   renderDetails();
   status("Loading…");
-  S.view = null;
+  // The new view comes from the scene's box, so the flight there starts while its data loads.
+  const from = S.view;
+  fit();
+  if (opts.view) {
+    S.view = { ...S.view, cx: opts.view.lon, cy: mercY(opts.view.lat), s: S.view.fit * opts.view.z, touched: true };
+  }
+  const to = S.view;
+  S.view = from;
+  flyTo(to);
+  drawAll();
   const meta = await fetch(dataUrl(`${S.pkg}/meta.json`)).then((r) => r.json());
   if (token !== S.token) return;
   if (meta.fill.layer === "ptype") meta.fill.categories = ptypeStyle(meta.fill.categories);
   trackScene(entry, sceneIndex);
   S.meta = meta;
   S.ramp = makeLUT(meta.fill.stops, meta.fill.categories);
-  fit();
-  if (opts.view) {
-    S.view = { ...S.view, cx: opts.view.lon, cy: mercY(opts.view.lat), s: S.view.fit * opts.view.z, touched: true };
-  }
   // A shared moment: the nearest frame, shown paused.
   let first = 0;
   if (opts.time) {
@@ -902,6 +960,7 @@ function tick(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (S.recording) { requestAnimationFrame(tick); return; }
+  if (S.flight) stepFlight(now);
   if (S.playing && S.meta) {
     const n = S.meta.fill.frames.length;
     const next = Math.min(n - 1, S.pos + dt * S.speed);
@@ -931,6 +990,7 @@ const pointers = new Map();
 let dragStart = null, moved = false;
 mapEl.addEventListener("pointerdown", (e) => {
   if (e.target.closest(".zoom")) return;
+  S.flight = null;
   mapEl.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
   dragStart = { x: e.offsetX, y: e.offsetY };
@@ -1012,6 +1072,7 @@ document.addEventListener("webkitfullscreenchange", fsChange);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && stage.classList.contains("full")) setFull(false); });
 
 function viewChanged(touched = true) {
+  S.flight = null;                         // panning or zooming stops a flight where it is
   if (S.view) S.view.touched = touched;
   $("#readout").hidden = true;
   particles.getContext("2d").clearRect(0, 0, particles.width, particles.height);
@@ -1676,6 +1737,7 @@ async function makeVideo(format) {
   const fmt = VIDEO_FORMATS[format];
   const say = (t) => { $("#videoStatus").textContent = t; };
   making = true;
+  if (S.flight) { S.view = S.flight.to; S.flight = null; }
   const saved = { W, H, DPR, view: S.view, pos: S.pos, playing: S.playing };
   play(false);
   const cover = $("#recording");
