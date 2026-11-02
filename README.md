@@ -20,6 +20,10 @@ model made by [Anthropic](https://www.anthropic.com), working in
 goals, the design rules and the priorities, tested the results and decided what to keep. Claude
 wrote the code, ran the tests and wrote the commit messages.
 
+Neil developed Weather Explorer as an **ECMWF Visiting Scientist**. ECMWF supported
+the work by providing the Claude Opus 5.5 usage, through its enterprise account, with which the
+code was written. That support does not make it an ECMWF product or service (see below).
+
 Two of Neil's rules shape the design: only ECMWF's free **Open Data** is used, so anyone can
 reproduce every field; and everything that scales with the number of viewers (decoding, colouring,
 contours, particles, the 3D view) runs **in the browser**, so the site is static files on GitHub
@@ -32,8 +36,9 @@ forecasts, chosen and described by an AI model. It can be wrong, out of date or 
 forecasts and warnings, use your national weather service. Nobody should rely on this for safety,
 travel, operations or any decision.
 
-**Not an ECMWF service.** It uses ECMWF's free Open Data, but it is not an operational ECMWF
-service or product. ECMWF does not run, endorse or support it.
+**Not an ECMWF service.** It uses ECMWF's free Open Data and was developed with ECMWF's support
+(see above), but it is not an official or operational ECMWF product or service. ECMWF does not
+run it, maintain it or vouch for its content.
 
 **AI-chosen and AI-written content.** The highlights, captions and citations are written by an AI
 model, checked automatically for structure but not reviewed by a person before publication.
@@ -206,6 +211,9 @@ Apache 2.0), [NumPy](https://numpy.org), [Pillow](https://python-pillow.org) and
 **AI.** The code was written by Claude Opus 5.5 ([Anthropic](https://www.anthropic.com)). The
 highlights are chosen and written by an AI model in the backend (currently GPT-6.1 Sol from
 [OpenAI](https://openai.com); Claude Opus 5.5 is the alternative).
+
+**ECMWF** supported the development, as part of Neil Gordon's role as an ECMWF Visiting Scientist,
+by providing Claude Opus 5.5 usage through its enterprise account.
 
 **People.** Neil Gordon directed the project. Thanks to the early testers.
 
