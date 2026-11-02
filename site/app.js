@@ -380,14 +380,18 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
 const RELIEF = OFFLINE ? "https://tehoro.github.io/weather-explorer-web/relief/" : "relief/";
 const MAP_STYLES = {
   dark: { ocean: "#0d1923", land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
+          grid: ["rgba(170,190,205,0.4)", "rgba(200,215,225,0.85)", "rgba(0,0,0,0.7)"],
           line: "rgba(255,255,255,0.78)", streak: "rgba(255,255,255,0.75)" },
   light: { ocean: "#c4d3de", land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
+           grid: ["rgba(70,85,100,0.45)", "rgba(40,55,70,0.85)", "rgba(255,255,255,0.75)"],
            line: "rgba(20,30,40,0.78)", streak: "rgba(20,30,40,0.7)" },
   satellite: { ocean: "#08131f", land: null, coast: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.4)",
+               grid: ["rgba(255,255,255,0.45)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
                line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
                tiles: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg",
                maxZoom: 8, credit: "Imagery: NASA Blue Marble (GIBS)" },
   relief: { ocean: "#0f2034", land: null, coast: "rgba(255,255,255,0.5)", border: "rgba(255,255,255,0.32)",
+            grid: ["rgba(255,255,255,0.4)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
             line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
             tiles: RELIEF + "{z}/{x}/{y}.webp", maxZoom: 6, credit: "Relief: NOAA ETOPO 2022" },
 };
@@ -609,7 +613,111 @@ function drawBase() {
   cg.lineWidth = 0.6;
   cg.strokeStyle = st.border;
   cg.stroke();
+  drawGrid(cg, st, vb);
   return loading;
+}
+
+// Latitude and longitude lines, so north can be read anywhere on the map (meridians lean away
+// from the middle of the view): about five across the screen. Parallels are labelled at the
+// sides (or on the line, if the key or buttons are in the way), meridians at the top and bottom.
+const fmtLat = (lat) => lat === 0 ? "0°" : `${Math.abs(lat)}°${lat > 0 ? "N" : "S"}`;
+const fmtLon = (lon) => {
+  const l = ((lon % 360) + 540) % 360 - 180;
+  return l === 0 || l === -180 ? `${Math.abs(l)}°` : `${Math.abs(l)}°${l > 0 ? "E" : "W"}`;
+};
+function drawGrid(g, st, vb) {
+  const span = Math.min(W, H) / S.view.s / DEG;          // degrees across the shorter side
+  const step = [1, 2, 5, 10, 15, 30].find((d) => span / d <= 5) || 30;
+  const fine = Math.max(0.1, step / 20);
+  // Meridians converge at the poles: at wide steps only every 90° goes all the way.
+  const reach = (lon) => step >= 10 && lon % 90 !== 0 ? 80 : 89.9;
+  // Labels keep clear of the key and the zoom buttons (not drawn in a video).
+  const mp = mapEl.getBoundingClientRect();
+  const ui = S.recording ? [] : [...document.querySelectorAll("#legend, #map .zoom")].map((e) => e.getBoundingClientRect())
+    .filter((r) => r.width).map((r) => [r.left - mp.left - 6, r.top - mp.top - 6, r.right - mp.left + 6, r.bottom - mp.top + 6]);
+  const free = (x0, y0, x1, y1) => !ui.some(([a, b, c, d]) => x1 > a && x0 < c && y1 > b && y0 < d);
+  // Each edge: which axis it is on, where, and how a label sits against it.
+  const E = 4;
+  const edges = { left: [0, E, "left", "middle"], right: [0, W - E, "right", "middle"],
+                  top: [1, E, "center", "top"], bottom: [1, H - E, "center", "bottom"] };
+  const box = (x, y, align, base, text) => {
+    const w = text.length * 6.2 + 4, h = 12;
+    const x0 = align === "left" ? x : align === "right" ? x - w : x - w / 2;
+    const y0 = base === "top" ? y : base === "bottom" ? y - h : y - h / 2;
+    return [x0, y0, x0 + w, y0 + h];
+  };
+  // Draws the line through pts; returns where it crosses each edge, inside the screen, and its
+  // points on screen (for a label on the line when no edge is free).
+  const line = (pts) => {
+    let pen = false, prev = null;
+    const hits = { on: [] };
+    for (const [lon, lat] of pts) {
+      const [x, y, c] = toScreen(lon, lat);
+      if (c < 0.05) { pen = false; prev = null; continue; }
+      pen ? g.lineTo(x, y) : g.moveTo(x, y);
+      pen = true;
+      if (x > 20 && y > 12 && x < W - 20 && y < H - 12) hits.on.push([x, y]);
+      if (prev) {
+        for (const [name, [axis, v]] of Object.entries(edges)) {
+          const p = prev, q = [x, y];
+          if (hits[name] || (p[axis] - v) * (q[axis] - v) > 0 || p[axis] === q[axis]) continue;
+          const t = (v - p[axis]) / (q[axis] - p[axis]), r = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+          if (r[1 - axis] > 12 && r[1 - axis] < (axis ? W : H) - 12) hits[name] = r;
+        }
+      }
+      prev = [x, y];
+    }
+    return hits;
+  };
+  const labels = [];
+  const clear = (b) => free(...b) && !labels.some((l) => b[2] > l[5][0] && b[0] < l[5][2] && b[3] > l[5][1] && b[1] < l[5][3]);
+  const place = (hits, order, text, along) => {
+    for (const name of order) {
+      if (!hits[name]) continue;
+      const [, , align, base] = edges[name];
+      const nudge = { left: [2, 0], right: [-2, 0], top: [0, 2], bottom: [0, -2] }[name];
+      const x = hits[name][0] + nudge[0], y = hits[name][1] + nudge[1];
+      const b = box(x, y, align, base, text);
+      if (clear(b)) {
+        labels.push([text, x, y, align, base, b]);
+        return;
+      }
+    }
+    for (const [x, y] of along ? hits.on.sort(along) : []) {
+      const b = box(x, y, "center", "middle", text);
+      if (clear(b)) { labels.push([text, x, y, "center", "middle", b]); return; }
+    }
+  };
+  g.beginPath();
+  for (let i = Math.ceil(vb.s / step); i * step <= vb.n; i++) {
+    const lat = i * step;
+    if (Math.abs(lat) >= 90) continue;
+    const pts = [];
+    for (let lon = vb.w; lon <= vb.e + fine / 2; lon += fine) pts.push([lon, lat]);
+    place(line(pts), ["left", "right"], fmtLat(lat), (p, q) => p[0] - q[0]);
+  }
+  for (let i = Math.ceil(vb.w / step); i * step <= vb.e; i++) {
+    const lon = i * step, top = reach(lon), pts = [];
+    for (let lat = Math.max(vb.s, -top); lat <= Math.min(vb.n, top) + fine / 2; lat += fine) pts.push([lon, Math.min(lat, top)]);
+    place(line(pts), ["bottom", "top"], fmtLon(lon));
+  }
+  g.lineWidth = 0.7;
+  g.strokeStyle = st.grid[0];
+  g.setLineDash([3, 4]);                   // dashed, so they don't read as isobars
+  g.stroke();
+  g.setLineDash([]);
+  g.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+  g.lineWidth = 3;
+  g.lineJoin = "round";
+  for (const [text, x, y, align, base] of labels) {
+    g.textAlign = align;
+    g.textBaseline = base;
+    g.strokeStyle = st.grid[2];
+    g.strokeText(text, x, y);
+    g.fillStyle = st.grid[1];
+    g.fillText(text, x, y);
+  }
+  g.textBaseline = "alphabetic";
 }
 
 // ------------------------------------------------------------------------------------------
