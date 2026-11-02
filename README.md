@@ -50,7 +50,18 @@ cookies and collects no personal data. Units and time-zone choices are kept in y
 ## A reading guide to the code
 
 There is no build step: plain JavaScript, HTML and CSS, so you can read and change the files
-directly.
+directly. Start with:
+
+- [**Code map**](docs/code-map.md): every file, and `app.js` section by section, with experiments
+  to try.
+- [**One highlight, end to end**](https://github.com/tehoro/weather-explorer-backend/blob/main/docs/walkthrough.md):
+  a real highlight followed from the forecast files, through the AI research and the backend, to
+  the shader that colours each pixel.
+- [**Glossary**](https://github.com/tehoro/weather-explorer-backend/blob/main/docs/glossary.md) and
+  [**design decisions**](https://github.com/tehoro/weather-explorer-backend/blob/main/docs/design-decisions.md)
+  (in the backend repository, shared by both).
+
+The main files:
 
 | Read | To see |
 |---|---|
