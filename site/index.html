@@ -43,6 +43,10 @@
     <div class="scenebar">
       <span class="scene-label" id="sceneLabel">Scene</span>
       <div class="tabs" id="scenes" role="tablist" aria-label="Scenes"></div>
+      <div class="scene-pick" id="scenePick" hidden>
+        <button class="tab" id="scenePickBtn" aria-haspopup="true" aria-expanded="false" aria-controls="sceneMenu"></button>
+        <div class="scene-menu" id="sceneMenu" hidden></div>
+      </div>
       <div class="actions">
         <button id="view3d" class="act" hidden title="Explore this storm in 3D">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 17 6.5v7L10 17.5 3 13.5v-7z"/><path d="M3 6.5 10 10.5l7-4M10 10.5v7"/></svg><span>3D</span></button>

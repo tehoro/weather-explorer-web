@@ -1161,12 +1161,46 @@ function renderScenes() {
   for (const b of el.querySelectorAll(".tab")) {
     b.onclick = () => { if (+b.dataset.i !== S.sceneIndex) navigate(S.entry, +b.dataset.i); };
   }
+  const title = (i) => esc(loc(sc[i].title) || `Scene ${i + 1}`);
+  $("#scenePickBtn").innerHTML = `<span class="n">${S.sceneIndex + 1}</span><span class="tt">${title(S.sceneIndex)}</span>`
+    + `<span class="of">of ${sc.length}</span>`;
+  $("#sceneMenu").innerHTML = sc.map((s, i) => `<button data-i="${i}" aria-current="${i === S.sceneIndex}">
+      <span class="n">${i + 1}</span><span>${title(i)}</span></button>`).join("");
+  for (const b of $("#sceneMenu").querySelectorAll("button")) {
+    b.onclick = () => { openSceneMenu(false); if (+b.dataset.i !== S.sceneIndex) navigate(S.entry, +b.dataset.i); };
+  }
+  fitScenes();
+}
+
+// If the tabs don't all fit (a narrow window or large text), show one button that opens a list of
+// the scenes instead, so the second and third aren't hidden off the edge.
+function fitScenes() {
+  const el = $("#scenes"), pick = $("#scenePick");
+  if (!S.entry) return;
+  el.hidden = false; pick.hidden = true;
+  const many = S.entry.item.scenes.length > 1;
+  if (many && el.scrollWidth > el.clientWidth + 2) {
+    el.hidden = true; pick.hidden = false;
+    return;
+  }
+  openSceneMenu(false);
   // Bring the current tab into view within the row only (scrollIntoView would move the page too).
   const cur = el.querySelector('[aria-selected="true"]');
   if (cur && (cur.offsetLeft < el.scrollLeft || cur.offsetLeft + cur.offsetWidth > el.scrollLeft + el.clientWidth)) {
     el.scrollLeft = cur.offsetLeft - 8;
   }
 }
+function openSceneMenu(on) {
+  $("#sceneMenu").hidden = !on;
+  $("#scenePickBtn").setAttribute("aria-expanded", String(on));
+  if (on) $("#sceneMenu").querySelector('[aria-current="true"]')?.focus();
+}
+$("#scenePickBtn").onclick = (e) => { e.stopPropagation(); openSceneMenu($("#sceneMenu").hidden); };
+document.addEventListener("click", (e) => { if (!$("#sceneMenu").hidden && !e.target.closest(".scene-pick")) openSceneMenu(false); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("#sceneMenu").hidden) { openSceneMenu(false); $("#scenePickBtn").focus(); }
+});
+new ResizeObserver(() => fitScenes()).observe(document.querySelector(".scenebar"));
 
 function renderDetails() {
   const it = S.entry.item;
