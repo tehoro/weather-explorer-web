@@ -1639,13 +1639,13 @@ function drawVideoFrame(g, layout) {
   const fr = m.frames, i = Math.max(0, Math.min(fr.length - 1, Math.round(S.pos)));
   const valid = timeAt(S.pos), run = fr[i].run ? parseTime(fr[i].run) : null;
   const lead = run ? Math.round((parseTime(fr[i].valid_time) - run) / 3.6e6) : null;
-  const runText = run ? `${String(run.getUTCHours()).padStart(2, "0")} UTC ${run.getUTCDate()} ${run.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })} run` : "";
+  const runText = run ? `${String(run.getUTCHours()).padStart(2, "0")} UTC ${run.getUTCDate()} ${run.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })} ${run.getUTCFullYear()} run` : "";
   const tag = lead === null ? m.model : `${lead <= 0 ? "Analysis" : `T+${lead} h`} · ${m.model}${runText ? `, ${runText}` : ""}`;
   g.fillStyle = "rgba(8,14,19,0.82)";
   g.fillRect(0, H - layout.bottom, W, layout.bottom);
   g.fillStyle = "#e6edf2";
   g.font = `700 22px ${font}`;
-  g.fillText(Units.formatTime(valid), pad, H - layout.bottom + 30);
+  g.fillText(Units.formatTime(valid, { year: true }), pad, H - layout.bottom + 30);
   g.fillStyle = "#8fa1ae";
   g.font = `500 12px ${font}`;
   g.fillText(tag, pad, H - layout.bottom + 48);

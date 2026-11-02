@@ -186,11 +186,13 @@ function zoneName(date, inLocal = local()) {
   return name;
 }
 
-/** A moment for display, e.g. "Mon 26 Oct, 12:00 UTC" or "Tue 27 Oct, 01:00 NZDT". */
-function formatTime(date, { weekday = true, day = true } = {}) {
+/** A moment for display, e.g. "Mon 26 Oct, 12:00 UTC" or "Tue 27 Oct, 01:00 NZDT"; `year` adds the
+ *  year (videos, which outlive the week they show). */
+function formatTime(date, { weekday = true, day = true, year = false } = {}) {
   const opts = { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: local() ? ZONE : "UTC" };
   if (weekday) opts.weekday = "short";
   if (day) { opts.day = "numeric"; opts.month = "short"; }
+  if (year) opts.year = "numeric";
   return `${new Intl.DateTimeFormat(undefined, opts).format(date)} ${zoneName(date)}`;
 }
 

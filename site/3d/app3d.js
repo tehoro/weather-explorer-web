@@ -604,7 +604,8 @@ addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
 });
 
-const timeText = (t) => `${fmt(t, { weekday: "short", day: "numeric", month: "short" })}, ${fmt(t, { hour: "2-digit", minute: "2-digit" })} UTC`;
+const timeText = (t, year = false) =>
+  `${fmt(t, { weekday: "short", day: "numeric", month: "short", ...(year && { year: "numeric" }) })}, ${fmt(t, { hour: "2-digit", minute: "2-digit" })} UTC`;
 const leadText = (t) => `+${Math.round((t - run) / 3.6e6)} h · lowest ${eyeNow().hpa.toFixed(0)} hPa`;
 const timeNow = () => new Date(times[fa].getTime() + ff * (times[fa + 1] - times[fa]));
 
@@ -730,7 +731,7 @@ function drawVideoOverlay(g, w, h) {
   gb.addColorStop(0, "rgba(4,8,16,0)"); gb.addColorStop(1, "rgba(4,8,16,0.85)");
   g.fillStyle = gb; g.fillRect(0, h - 90, w, 90);
   const t = timeNow();
-  g.fillStyle = "#fff"; g.font = `700 17px ${FONT}`; g.fillText(timeText(t), 16, h - 40);
+  g.fillStyle = "#fff"; g.font = `700 17px ${FONT}`; g.fillText(timeText(t, true), 16, h - 40);
   g.fillStyle = "#b5c2d4"; g.font = `500 12px ${FONT}`; g.fillText(leadText(t), 16, h - 22);
   g.font = `500 9.5px ${FONT}`; g.fillStyle = "rgba(200,210,225,0.8)";
   g.fillText(`${meta.attribution} Clouds inferred from humidity; heights ×${exag}.`, 16, h - 7);
