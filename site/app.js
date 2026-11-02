@@ -1014,8 +1014,8 @@ function windAt(vm, br, x, y) {
   return [u * (xe - x0) / le + v * (xn - x0) / ln, u * (ye - y0) / le + v * (yn - y0) / ln];
 }
 // Streaks move by time, not by screen refresh, so they run at the same speed at 60 or 120 Hz
-// and in a video: half the speed they had at 60 Hz before 2 Nov 2026 (the speed videos had).
-const STREAK_SPEED = 30;                   // steps a second
+// and in a video: the speed they had on a 60 Hz screen.
+const STREAK_SPEED = 60;                   // steps a second
 function stepParticles(dt) {
   const f = dt * STREAK_SPEED;
   const g = particles.getContext("2d");
