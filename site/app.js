@@ -1013,14 +1013,18 @@ function windAt(vm, br, x, y) {
   const le = Math.hypot(xe - x0, ye - y0) || 1, ln = Math.hypot(xn - x0, yn - y0) || 1;
   return [u * (xe - x0) / le + v * (xn - x0) / ln, u * (ye - y0) / le + v * (yn - y0) / ln];
 }
-function stepParticles() {
+// Streaks move by time, not by screen refresh, so they run at the same speed at 60 or 120 Hz
+// and in a video: half the speed they had at 60 Hz before 2 Nov 2026 (the speed videos had).
+const STREAK_SPEED = 30;                   // steps a second
+function stepParticles(dt) {
+  const f = dt * STREAK_SPEED;
   const g = particles.getContext("2d");
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   const vm = vectorMeta();
   const br = !S.flight && vm && bracket(S.uv, S.pos);
   if (!br) { g.clearRect(0, 0, W, H); return; }
   g.globalCompositeOperation = "destination-in";
-  g.fillStyle = "rgba(0,0,0,0.9)";
+  g.fillStyle = `rgba(0,0,0,${Math.pow(0.9, f)})`;
   g.fillRect(0, 0, W, H);
   g.globalCompositeOperation = "source-over";
   const want = Math.round(Math.min(2500, W * H / 450));
@@ -1032,12 +1036,12 @@ function stepParticles() {
   g.beginPath();
   for (const p of parts) {
     const w = windAt(vm, br, p.x, p.y);
-    if (!w || ++p.age > p.life) {
+    if (!w || (p.age += f) > p.life) {
       p.x = Math.random() * W; p.y = Math.random() * H; p.age = 0;
       continue;
     }
     const k = 2.2 / ref * Math.min(2.5, Math.sqrt(S.view.s / S.view.fit));
-    const nx = p.x + w[0] * k * 3, ny = p.y + w[1] * k * 3;     // w is in screen directions
+    const nx = p.x + w[0] * k * 3 * f, ny = p.y + w[1] * k * 3 * f;     // w is in screen directions
     g.moveTo(p.x, p.y);
     g.lineTo(nx, ny);
     p.x = nx; p.y = ny;
@@ -1240,7 +1244,7 @@ function tick(now) {
       if (S.held > 1.5) { S.held = 0; S.pos = 0; frameChanged(); }
     }
   }
-  stepParticles();
+  stepParticles(dt);
   requestAnimationFrame(tick);
 }
 
@@ -2106,14 +2110,14 @@ async function makeVideo(format) {
     S.tracked = [];
     parts = [];
     S.pos = 0;
-    for (let k = 0; k < 40; k++) stepParticles();             // let the wind streaks build up first
+    for (let k = 0; k < 40; k++) stepParticles(1 / VIDEO_FPS);  // let the wind streaks build up first
     for (let f = 0; f < total; f++) {
       if (failure) throw failure;
       S.pos = Math.min(n - 1, f * S.speed / VIDEO_FPS);
       S.contour = await contourAt(S.pos);
       drawField();
       drawOverlay();
-      stepParticles();
+      stepParticles(1 / VIDEO_FPS);
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.drawImage(base, 0, 0);
       g.drawImage(field, 0, 0);
