@@ -1,5 +1,5 @@
 // Display units, as in the app: the data stay in m/s, °C and mm/h; labels, readouts and the
-// measurements inside the text are converted. "Automatic" follows the browser's region; the
+// measurements inside the text are converted. "Automatic" follows the browser's time zone; the
 // viewer can override each choice, remembered in this browser only.
 //
 // A plain script (window.Units) rather than a module, so a saved copy can inline it.
@@ -7,7 +7,23 @@ window.Units = (() => {
 
 const KEY = "weather-explorer-units";
 
+const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+// Time zones of the places that use °F, mph or inches. The region comes from the time zone, not
+// the language: many people elsewhere keep "English (US)", and Safari reports only the language.
+const IMPERIAL_ZONES = {
+  US: /^(America\/(New_York|Detroit|Chicago|Denver|Phoenix|Boise|Los_Angeles|Anchorage|Juneau|Sitka|Metlakatla|Yakutat|Nome|Adak|Menominee|Indiana\/\w+|Kentucky\/\w+|North_Dakota\/\w+)|Pacific\/Honolulu|US\/\w+)$/,
+  PR: /^America\/Puerto_Rico$/, VI: /^America\/St_Thomas$/, GU: /^Pacific\/Guam$/, MP: /^Pacific\/Saipan$/,
+  AS: /^Pacific\/Pago_Pago$/, UM: /^Pacific\/(Midway|Wake)$/, BS: /^America\/Nassau$/, BZ: /^America\/Belize$/,
+  KY: /^America\/Cayman$/, PW: /^Pacific\/Palau$/, FM: /^Pacific\/(Chuuk|Pohnpei|Kosrae)$/,
+  MH: /^Pacific\/(Majuro|Kwajalein)$/, GB: /^(Europe\/London|GB)$/, IM: /^Europe\/Isle_of_Man$/,
+  JE: /^Europe\/Jersey$/, GG: /^Europe\/Guernsey$/, LR: /^Africa\/Monrovia$/, MM: /^Asia\/(Yangon|Rangoon)$/,
+};
+
 function region() {
+  for (const [r, re] of Object.entries(IMPERIAL_ZONES)) if (re.test(ZONE)) return r;
+  if (!/^(UTC|Etc\/|GMT)/.test(ZONE)) return "metric";   // a real zone elsewhere: °C, km/h, mm
+  // No usable time zone (some privacy settings report UTC): fall back to the language.
   for (const tag of navigator.languages?.length ? navigator.languages : [navigator.language || "en-GB"]) {
     try {
       const r = new Intl.Locale(tag).maximize().region;
@@ -151,10 +167,9 @@ function localize(text) {
   return localizeTimes(localizeAll(collapsed));
 }
 
-// ---- Times: UTC (the default) or the browser's own time zone ------------------------------
+// ---- Times: the browser's own time zone (the default) or UTC ------------------------------
 
-const ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-const local = () => choice("time") === "local";
+const local = () => choice("time") !== "utc";
 
 // Official abbreviations where the browser's English data lacks them; otherwise "UTC+8" etc.
 const ABBR = {

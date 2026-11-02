@@ -1699,8 +1699,8 @@ function setupUnits() {
     };
   }
   const tz = $("#timeZone");
-  tz.innerHTML = `<option value="utc">UTC</option><option value="local">${esc(Units.zoneName(new Date(), true))}</option>`;
-  tz.value = Units.choice("time") === "local" ? "local" : "utc";
+  tz.innerHTML = `<option value="local">${esc(Units.zoneName(new Date(), true))}</option><option value="utc">UTC</option>`;
+  tz.value = Units.choice("time") === "utc" ? "utc" : "local";
   tz.onchange = () => {
     Units.setChoice("time", tz.value);
     btn.innerHTML = GEAR + esc(Units.summary());
