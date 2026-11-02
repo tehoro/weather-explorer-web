@@ -20,8 +20,8 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
 - `sync.py` — fetches the feed, requested events and scene files; writes `site/data/`. Scene files
   never change once built, so each is converted once (kept in the Actions cache). Exit 3 means
   nothing new, and the workflow then skips deploying.
-- `site/` — the viewer: `index.html` (including the Help text), `style.css`, `app.js` (WebGL2 colour fill, pan/zoom,
-  timeline, wind particles, panels), `worker.js` (frame decoding, isobars, highs and lows) and
+- `site/` — the viewer: `index.html` (including the Help text), `style.css`, `app.js` (equal-area map projection centred on the view,
+  WebGL2 colour fill, pan/zoom, timeline, wind particles, panels), `worker.js` (frame decoding, isobars, highs and lows) and
   `basemap.json` (Natural Earth 1:50m land and borders, public domain).
 - `tools/make_basemap.py` — rebuilds `basemap.json` from the world-atlas TopoJSON.
 - `.github/workflows/deploy.yml` — sync and deploy, then the 3D jobs (see "3D view" below). Runs when the backend signals new highlights (`repository_dispatch`, see the backend's `web_notify.py`), with a fallback schedule (03:30–04:20 and 15:30–16:20 UTC, plus every three hours); sync, cache and Pages deploy.

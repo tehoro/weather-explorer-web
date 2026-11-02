@@ -61,6 +61,7 @@ const DEFAULT_SPEED = 2;                  // 6 forecast hours a second suits mos
 const FEED_REFRESH_MS = 10 * 60 * 1000;
 const DEG = Math.PI / 180;
 
+// Scene grids and satellite tiles are regular in Web Mercator y; the map itself is not (below).
 const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * DEG / 2)) / DEG;
 const invMercY = (y) => (2 * Math.atan(Math.exp(y * DEG)) - Math.PI / 2) / DEG;
 const parseTime = (s) => new Date(s);     // "2026-10-25T09:00Z" is valid ISO 8601
@@ -85,7 +86,7 @@ const S = {
   speed: (() => {
     try { const v = Number(localStorage.getItem(SPEED_KEY)); return SPEEDS.includes(v) ? v : DEFAULT_SPEED; } catch { return DEFAULT_SPEED; }
   })(),
-  view: null,           // {cx, cy, s}: centre in (lon, mercY) and pixels per degree
+  view: null,           // {lon, lat, s, fit}: centre in degrees and pixels per Earth radius
   flight: null,         // a move to a new scene's view in progress (flyTo)
   token: 0,             // bumps on every scene load, to ignore stale results
 };
@@ -165,14 +166,89 @@ function resize() {
   drawAll();
 }
 
-// World (lon, mercY) <-> screen (CSS pixels).
-function toScreen(lon, y) {
-  const v = S.view;
-  return [(lon - v.cx) * v.s + W / 2, (v.cy - y) * v.s + H / 2];
+// The map projection: Lambert azimuthal equal-area, centred on the middle of the view. Areas are
+// true everywhere, and across a scene shapes are too, to within a few per cent, even near the
+// poles (Mercator makes 75°N look four times bigger than 60°N). Panning turns the globe under
+// the view, so north is always straight up through the centre. Plane units are Earth radii; the
+// whole globe fits in a disc of radius 2.
+function projection(v) {
+  if (v._p?.lon === v.lon && v._p.lat === v.lat) return v._p;
+  const lon0 = v.lon, sp = Math.sin(v.lat * DEG), cp = Math.cos(v.lat * DEG);
+  const p = {
+    lon: v.lon, lat: v.lat, sp, cp,
+    // -> [x, y, cos of the distance from the centre] (negative on the far side of the globe)
+    fwd(lon, lat) {
+      const l = (lon - lon0) * DEG, sl = Math.sin(lat * DEG), cl = Math.cos(lat * DEG), cd = Math.cos(l);
+      const cosc = sp * sl + cp * cl * cd;
+      const k = Math.sqrt(2 / Math.max(1e-9, 1 + cosc));
+      return [k * cl * Math.sin(l), k * (cp * sl - sp * cl * cd), cosc];
+    },
+    // -> [lon, lat], or null off the globe
+    inv(x, y) {
+      const r = Math.hypot(x, y);
+      if (r > 2) return null;
+      if (r < 1e-12) return [lon0, v.lat];
+      const c = 2 * Math.asin(r / 2), sc = Math.sin(c), cc = Math.cos(c);
+      return [lon0 + Math.atan2(x * sc, r * cp * cc - y * sp * sc) / DEG,
+              Math.asin(Math.max(-1, Math.min(1, cc * sp + y * sc * cp / r))) / DEG];
+    },
+  };
+  Object.defineProperty(v, "_p", { value: p, writable: true, configurable: true, enumerable: false });
+  return p;
+}
+
+// World (lon, lat) <-> screen (CSS pixels). toScreen also gives the cosine of the distance from
+// the centre, to leave out the far side of the globe; toWorld gives null off the globe.
+function toScreen(lon, lat) {
+  const v = S.view, [x, y, c] = projection(v).fwd(lon, lat);
+  return [W / 2 + x * v.s, H / 2 - y * v.s, c];
 }
 function toWorld(px, py) {
   const v = S.view;
-  return [v.cx + (px - W / 2) / v.s, v.cy - (py - H / 2) / v.s];
+  return projection(v).inv((px - W / 2) / v.s, (H / 2 - py) / v.s);
+}
+
+// The view centred on the point (dx, dy) pixels from the middle of view v.
+function offsetView(v, dx, dy) {
+  const c = projection(v).inv(dx / v.s, -dy / v.s);
+  return c ? { ...v, lon: ((c[0] + 540) % 360) - 180, lat: c[1] } : v;
+}
+
+// The smallest scale that keeps the whole screen within 90° of the centre: no further out than
+// a view of one hemisphere.
+const globeScale = () => Math.hypot(W, H) / 2 / Math.SQRT2;
+
+// Moves the view so that the point q (lon, lat) is at (px, py): a step in the plane, then
+// corrections, since moving the centre also changes the projection a little.
+function keepAt(q, px, py) {
+  if (!q) return;
+  for (let k = 0; k < 4; k++) {
+    const [x, y] = toScreen(q[0], q[1]);
+    if (Math.hypot(x - px, y - py) < 0.05) break;
+    S.view = offsetView(S.view, x - px, y - py);
+  }
+}
+
+// Longitude and latitude ranges on screen (plus a margin), for culling and clipping the basemap.
+// With a pole in view, all longitudes, in the window centred on the view.
+function visibleBox() {
+  const v = S.view;
+  let l0 = Infinity, l1 = -Infinity, s = 90, n = -90;
+  for (let i = 0; i <= 12; i++) {
+    for (let j = 0; j <= 12; j++) {
+      const q = toWorld(W * i / 12, H * j / 12);
+      if (!q) continue;
+      const dl = ((q[0] - v.lon + 540) % 360) - 180;
+      l0 = Math.min(l0, dl); l1 = Math.max(l1, dl);
+      s = Math.min(s, q[1]); n = Math.max(n, q[1]);
+    }
+  }
+  const m = 3;
+  const pole = (lat) => { const [x, y, c] = toScreen(0, lat); return c > 0 && x > -m && y > -m && x < W + m && y < H + m; };
+  if (pole(90)) { n = 90; l0 = -180; l1 = 180; }
+  if (pole(-90)) { s = -90; l0 = -180; l1 = 180; }
+  if (l1 - l0 + 2 * m >= 360) { l0 = -180 + m; l1 = 180 - m; }
+  return { w: v.lon + l0 - m, e: v.lon + l1 + m, s: Math.max(-90, s - m), n: Math.min(90, n + m) };
 }
 
 function sceneBox() {
@@ -182,36 +258,60 @@ function sceneBox() {
   return { w, s, e, n };
 }
 
+// The view that fits box b in w × h pixels. The box's outline bulges towards the pole, so the
+// view is centred on the middle of the outline, not on the box's middle latitude.
+function fitBox(b, w, h) {
+  let v = { lon: (b.w + b.e) / 2, lat: (b.s + b.n) / 2, s: 1 };
+  for (let pass = 0; pass < 3; pass++) {
+    const p = projection(v);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i <= 16; i++) {
+      const lon = b.w + (b.e - b.w) * i / 16, lat = b.s + (b.n - b.s) * i / 16;
+      for (const [x, y] of [p.fwd(lon, b.s), p.fwd(lon, b.n), p.fwd(b.w, lat), p.fwd(b.e, lat)]) {
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      }
+    }
+    const s = Math.min(w / (x1 - x0), h / (y1 - y0)) * 0.94;
+    const c = p.inv((x0 + x1) / 2, (y0 + y1) / 2);
+    v = { lon: c[0], lat: c[1], s, fit: s };
+  }
+  return v;
+}
+
 function fit() {
   if (!W || !H) {
     const r = mapEl.getBoundingClientRect();
     W = r.width; H = r.height;
   }
-  const b = sceneBox();
-  const y0 = mercY(b.s), y1 = mercY(b.n);
-  const s = Math.min(W / (b.e - b.w), H / (y1 - y0)) * 0.94;
-  S.view = { cx: (b.w + b.e) / 2, cy: (y0 + y1) / 2, s, fit: s };
+  S.view = fitBox(sceneBox(), W, H);
 }
 
 // Flying between views, as MapKit does: zoom out, pan, zoom in. The path is van Wijk and
 // Nuij's "smooth and efficient zooming and panning" (as in d3.interpolateZoom and Mapbox
-// flyTo), in world units, with w = the width of the view. tick() moves it along.
+// flyTo), with w = the width of the view in Earth radii and the centre moving along the great
+// circle between the two (so the globe turns underneath). tick() moves it along.
 const RHO = 1.42;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const unitVec = (lon, lat) => [Math.cos(lat * DEG) * Math.cos(lon * DEG), Math.cos(lat * DEG) * Math.sin(lon * DEG), Math.sin(lat * DEG)];
 function flyTo(to) {
   const from = S.view;
   S.flight = null;
   S.view = to;
   if (!from || reducedMotion.matches || document.hidden || S.recording) return;
-  // Go the short way round, across 180° if need be.
-  const x0 = from.cx + 360 * Math.round((to.cx - from.cx) / 360), y0 = from.cy;
+  const A = unitVec(from.lon, from.lat), B = unitVec(to.lon, to.lat);
+  const d = Math.acos(Math.max(-1, Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2])));
+  const along = (u) => {
+    if (d < 1e-6) return [from.lon, from.lat];
+    const a = Math.sin((1 - u) * d) / Math.sin(d), b = Math.sin(u * d) / Math.sin(d);
+    const [x, y, z] = [0, 1, 2].map((k) => a * A[k] + b * B[k]);
+    return [Math.atan2(y, x) / DEG, Math.atan2(z, Math.hypot(x, y)) / DEG];
+  };
   const w0 = W / from.s, w1 = W / to.s;
-  const dx = to.cx - x0, dy = to.cy - y0, d = Math.hypot(dx, dy);
   const r2 = RHO * RHO;
   let S_, at;
   if (d < 1e-6) {
     S_ = Math.abs(Math.log(w1 / w0)) / RHO;
-    at = (t) => [x0, y0, w0 * Math.pow(w1 / w0, t)];
+    at = (t) => [0, w0 * Math.pow(w1 / w0, t)];
   } else {
     const b0 = (w1 * w1 - w0 * w0 + r2 * r2 * d * d) / (2 * w0 * r2 * d);
     const b1 = (w1 * w1 - w0 * w0 - r2 * r2 * d * d) / (2 * w1 * r2 * d);
@@ -220,14 +320,14 @@ function flyTo(to) {
     at = (t) => {
       const s = t * S_, c = Math.cosh(q0);
       const u = w0 / (r2 * d) * (c * Math.tanh(RHO * s + q0) - Math.sinh(q0));
-      return [x0 + u * dx, y0 + u * dy, w0 * c / Math.cosh(RHO * s + q0)];
+      return [u, w0 * c / Math.cosh(RHO * s + q0)];
     };
   }
   if (!(S_ > 0.01)) return;               // already there
-  // About 1.5–3 s, longer for longer flights; never wider than the Mercator world is tall.
-  const wMax = Math.max(340 * W / H, w0, w1);
-  S.view = { ...to, cx: x0, cy: y0, s: from.s };
-  S.flight = { to, at, wMax, start: performance.now(), ms: Math.max(1050, Math.min(3000, 675 * S_)) };
+  // About 1.5–3 s, longer for longer flights; never showing more than a hemisphere.
+  const wMax = Math.max(W / globeScale(), w0, w1);
+  S.view = { ...to, lon: from.lon, lat: from.lat, s: from.s };
+  S.flight = { to, at, along, wMax, start: performance.now(), ms: Math.max(1050, Math.min(3000, 675 * S_)) };
 }
 
 function stepFlight(now) {
@@ -238,14 +338,15 @@ function stepFlight(now) {
     S.view = f.to;
   } else {
     const e = t * t * (3 - 2 * t);       // ease in and out
-    const [cx, cy, w] = f.at(e);
-    S.view = { ...f.to, cx, cy, s: W / Math.min(w, f.wMax) };
+    const [u, w] = f.at(e);
+    const [lon, lat] = f.along(u);
+    S.view = { ...f.to, lon, lat, s: W / Math.min(w, f.wMax) };
   }
   drawAll();
 }
 
 // ------------------------------------------------------------------------------------------
-// Basemap: Natural Earth land and borders, drawn in the same Mercator as the data
+// Basemap: Natural Earth land and borders, in the same projection as the data
 // ------------------------------------------------------------------------------------------
 
 let basemap = null;
@@ -253,16 +354,20 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
   const decode = (arr) => {
     const out = new Float32Array(arr.length);
     let x = 0, y = 0;
-    let lo = Infinity, hi = -Infinity;
+    let lo = Infinity, hi = -Infinity, south = 90, north = -90;
     for (let i = 0; i < arr.length; i += 2) {
       x += arr[i]; y += arr[i + 1];
       out[i] = x / j.scale;
-      out[i + 1] = mercY(y / j.scale);
+      out[i + 1] = y / j.scale;
       if (out[i] < lo) lo = out[i];
       if (out[i] > hi) hi = out[i];
+      if (out[i + 1] < south) south = out[i + 1];
+      if (out[i + 1] > north) north = out[i + 1];
     }
     out.lo = lo;                            // longitude range: lines are continuous across 180°,
     out.hi = hi;                            // so a ring can run beyond ±180 (e.g. Eurasia)
+    out.south = south;
+    out.north = north;
     return out;
   };
   basemap = { land: j.land.map(decode), borders: j.borders.map(decode) };
@@ -270,7 +375,7 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
 }).catch(() => {});
 
 // Map styles, as in the app. Satellite uses NASA's Blue Marble imagery from GIBS (public domain,
-// no key), in the same Web Mercator tiling as the data. Relief is this site's own tiles, built
+// no key), in Web Mercator tiles that are warped into the map's projection on the GPU. Relief is this site's own tiles, built
 // from NOAA ETOPO 2022 by tools/make_relief.py; a saved copy fetches them from the live site.
 const RELIEF = OFFLINE ? "https://tehoro.github.io/weather-explorer-web/relief/" : "relief/";
 const MAP_STYLES = {
@@ -291,45 +396,136 @@ let mapStyle = "dark";
 try { mapStyle = MAP_STYLES[localStorage.getItem(STYLE_KEY)] ? localStorage.getItem(STYLE_KEY) : "dark"; } catch { /* default */ }
 const style = () => MAP_STYLES[mapStyle];
 
+// Tiles are drawn on a WebGL canvas of their own, each as a mesh fine enough to follow the
+// projection's curves, and copied onto the base canvas.
+const tileCanvas = document.createElement("canvas");
+const tgl = tileCanvas.getContext("webgl2", { premultipliedAlpha: true, antialias: false });
+let tileProg = null, tileBuf = null;
+function setupTileGL() {
+  if (!tgl) return;
+  const vs = `#version 300 es
+    in vec2 p; in vec2 t; out vec2 uv;
+    void main() { uv = t; gl_Position = vec4(p, 0.0, 1.0); }`;
+  const fs = `#version 300 es
+    precision mediump float;
+    in vec2 uv; out vec4 o; uniform sampler2D img;
+    void main() { o = texture(img, uv); }`;
+  tileProg = linkProgram(tgl, vs, fs);
+  tileBuf = tgl.createBuffer();
+}
+
 const tiles = new Map();
 let tileRedraw = 0;
 function tile(z, x, y) {
   const key = style().tiles.replace("{z}", z).replace("{x}", x).replace("{y}", y);
   let t = tiles.get(key);
   if (!t) {
-    t = new Image();
-    t.crossOrigin = "anonymous";            // GIBS allows it; keeps the map usable for video frames
-    t.decoding = "async";
-    t.onload = () => { if (!tileRedraw) tileRedraw = requestAnimationFrame(() => { tileRedraw = 0; drawBase(); }); };
-    t.src = key;
+    t = { img: new Image(), tex: null };
+    t.img.crossOrigin = "anonymous";        // GIBS allows it; needed to use it in WebGL and video
+    t.img.decoding = "async";
+    t.img.onload = () => { if (!tileRedraw) tileRedraw = requestAnimationFrame(() => { tileRedraw = 0; drawBase(); }); };
+    t.img.src = key;
     tiles.set(key, t);
-    if (tiles.size > 400) tiles.delete(tiles.keys().next().value);
+    if (tiles.size > 400) {
+      const [k, old] = tiles.entries().next().value;
+      if (old.tex) tgl.deleteTexture(old.tex);
+      tiles.delete(k);
+    }
   }
-  return t.complete && t.naturalWidth ? t : null;
+  if (!t.img.complete || !t.img.naturalWidth) return null;
+  if (!t.tex) {
+    t.tex = tgl.createTexture();
+    tgl.bindTexture(tgl.TEXTURE_2D, t.tex);
+    tgl.texImage2D(tgl.TEXTURE_2D, 0, tgl.RGBA, tgl.RGBA, tgl.UNSIGNED_BYTE, t.img);
+    tgl.texParameteri(tgl.TEXTURE_2D, tgl.TEXTURE_MIN_FILTER, tgl.LINEAR);
+    tgl.texParameteri(tgl.TEXTURE_2D, tgl.TEXTURE_MAG_FILTER, tgl.LINEAR);
+    tgl.texParameteri(tgl.TEXTURE_2D, tgl.TEXTURE_WRAP_S, tgl.CLAMP_TO_EDGE);
+    tgl.texParameteri(tgl.TEXTURE_2D, tgl.TEXTURE_WRAP_T, tgl.CLAMP_TO_EDGE);
+  }
+  return t.tex;
 }
 
-function drawTiles(g, st) {
-  // Tiles where 1 tile pixel is about 1 screen pixel; a coarser tile fills in until it loads.
-  const z = Math.max(0, Math.min(st.maxZoom, Math.ceil(Math.log2(S.view.s * DPR * 360 / 256))));
-  const draw = (zz) => {
+function drawTiles(g, st, vb) {
+  if (!tgl) return false;
+  if (!tileProg) setupTileGL();
+  tileCanvas.width = base.width; tileCanvas.height = base.height;
+  tgl.viewport(0, 0, tileCanvas.width, tileCanvas.height);
+  tgl.clearColor(0, 0, 0, 0);
+  tgl.clear(tgl.COLOR_BUFFER_BIT);
+  tgl.useProgram(tileProg);
+  tgl.bindBuffer(tgl.ARRAY_BUFFER, tileBuf);
+  const pl = tgl.getAttribLocation(tileProg, "p"), tl = tgl.getAttribLocation(tileProg, "t");
+  tgl.enableVertexAttribArray(pl);
+  tgl.enableVertexAttribArray(tl);
+  tgl.vertexAttribPointer(pl, 2, tgl.FLOAT, false, 16, 0);
+  tgl.vertexAttribPointer(tl, 2, tgl.FLOAT, false, 16, 8);
+  // Tiles where 1 tile pixel is about 1 screen pixel at the centre; fewer if a pole is in view.
+  const shrink = Math.max(0.2, Math.cos(S.view.lat * DEG));
+  let z = Math.max(0, Math.min(st.maxZoom, Math.ceil(Math.log2(S.view.s * DPR * 2 * Math.PI * shrink / 256))));
+  const ys = (zz) => {
     const n = 2 ** zz;
-    const [lonL, yT] = toWorld(0, 0), [lonR, yB] = toWorld(W, H);
-    const tx0 = Math.floor((lonL + 180) / 360 * n), tx1 = Math.floor((lonR + 180) / 360 * n);
-    const ty0 = Math.max(0, Math.floor((180 - yT) / 360 * n)), ty1 = Math.min(n - 1, Math.floor((180 - yB) / 360 * n));
+    return [Math.max(0, Math.floor((180 - mercY(vb.n)) / 360 * n)), Math.min(n - 1, Math.floor((180 - mercY(vb.s)) / 360 * n))];
+  };
+  const count = (zz) => {
+    const n = 2 ** zz, [y0, y1] = ys(zz);
+    return (Math.floor((vb.e + 180) / 360 * n) - Math.floor((vb.w + 180) / 360 * n) + 1) * (y1 - y0 + 1);
+  };
+  while (z > 0 && count(z) > 160) z--;
+  const draw = (zz) => {
+    const n = 2 ** zz, [ty0, ty1] = ys(zz);
+    const tx0 = Math.floor((vb.w + 180) / 360 * n), tx1 = Math.floor((vb.e + 180) / 360 * n);
+    const cells = Math.max(6, 64 >> zz);
     let missing = false;
     for (let tx = tx0; tx <= tx1; tx++) {
       for (let ty = ty0; ty <= ty1; ty++) {
-        const img = tile(zz, ((tx % n) + n) % n, ty);
-        if (!img) { missing = true; continue; }
-        const [x0, y0] = toScreen(tx / n * 360 - 180, 180 - ty / n * 360);
-        const [x1, y1] = toScreen((tx + 1) / n * 360 - 180, 180 - (ty + 1) / n * 360);
-        g.drawImage(img, x0, y0, x1 - x0 + 0.5, y1 - y0 + 0.5);
+        const tex = tile(zz, ((tx % n) + n) % n, ty);
+        if (!tex) { missing = true; continue; }
+        // Mesh vertices at even steps in Mercator y, as the tile's pixels are.
+        const pts = [];
+        for (let j = 0; j <= cells; j++) {
+          const lat = invMercY(180 - (ty + j / cells) / n * 360);
+          for (let i = 0; i <= cells; i++) {
+            const [x, y, c] = toScreen((tx + i / cells) / n * 360 - 180, lat);
+            pts.push([x / W * 2 - 1, 1 - y / H * 2, c, i / cells, j / cells]);
+          }
+        }
+        const v = [];
+        const at = (i, j) => pts[j * (cells + 1) + i];
+        for (let j = 0; j < cells; j++) {
+          for (let i = 0; i < cells; i++) {
+            const q = [at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1)];
+            if (q.some((p) => p[2] < 0)) continue;              // far side of the globe
+            for (const p of [q[0], q[1], q[2], q[2], q[1], q[3]]) v.push(p[0], p[1], p[3], p[4]);
+          }
+        }
+        if (!v.length) continue;
+        tgl.bindTexture(tgl.TEXTURE_2D, tex);
+        tgl.bufferData(tgl.ARRAY_BUFFER, new Float32Array(v), tgl.STREAM_DRAW);
+        tgl.drawArrays(tgl.TRIANGLES, 0, v.length / 4);
       }
     }
     return missing;
   };
-  if (z > 2) draw(Math.max(0, z - 3));
-  return draw(z);                          // true while some tiles are still loading
+  if (z > 2) draw(Math.max(0, z - 3));      // a coarser tile fills in until the right one loads
+  const missing = draw(z);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(tileCanvas, 0, 0);
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  return missing;                          // true while some tiles are still loading
+}
+
+// Whether a ring contains a point, in longitude and latitude (the rings are plain polygons there,
+// Antarctica included); rings can run beyond ±180, so the point's copies are tried too.
+function ringContains(a, lon, lat) {
+  let inside = false;
+  for (const k of [-360, 0, 360]) {
+    const x = lon + k;
+    if (x < a.lo || x > a.hi || lat < a.south || lat > a.north) continue;
+    for (let i = 0, j = a.length - 2; i < a.length; j = i, i += 2) {
+      if ((a[i + 1] > lat) !== (a[j + 1] > lat) && x < (a[j] - a[i]) * (lat - a[i + 1]) / (a[j + 1] - a[i + 1]) + a[i]) inside = !inside;
+    }
+  }
+  return inside;
 }
 
 function drawBase() {
@@ -339,37 +535,77 @@ function drawBase() {
   g.fillStyle = st.ocean;
   g.fillRect(0, 0, W, H);
   if (!S.view) return false;
-  const loading = st.tiles ? drawTiles(g, st) : false;
+  const vb = visibleBox();
+  const loading = st.tiles ? drawTiles(g, st, vb) : false;
   const cg = coast.getContext("2d");
   cg.setTransform(DPR, 0, 0, DPR, 0, 0);
   cg.clearRect(0, 0, W, H);
   if (!basemap) return true;
-  const [lonL] = toWorld(0, 0), [lonR] = toWorld(W, 0);
-  const path = (g, arrs, close) => {
-    g.beginPath();
-    for (const k of [-360, 0, 360]) {
-      for (const a of arrs) {
-        if (a.hi + k < lonL || a.lo + k > lonR) continue;       // this copy is off screen
-        for (let i = 0; i < a.length; i += 2) {
-          const [x, y] = toScreen(a[i] + k, a[i + 1]);
-          i ? g.lineTo(x, y) : g.moveTo(x, y);
-        }
-        if (close) g.closePath();
-      }
-    }
-  };
+  const near = (a, k) => a.hi + k >= vb.w && a.lo + k <= vb.e && a.north >= vb.s && a.south <= vb.n;
   // Land is filled under the weather colours; coastlines and borders go on their own canvas
   // above them, so they stay visible where the colours are strong (e.g. over the Baltic).
-  path(g, basemap.land, true);
   if (st.land) {
+    // The view never reaches past the horizon (90° from the centre), so points beyond it are
+    // pulled in onto it, and edges between two such points run round it. A ring around the point
+    // opposite the centre comes out inside out, so it is filled the other way: with a square round
+    // the whole globe, which the even-odd rule turns into the ring's true inside.
+    const v = S.view, p = projection(v), R = Math.SQRT2;
+    const anti = [v.lon + 180, -v.lat];
+    const proj = (lon, lat) => {
+      let [x, y] = p.fwd(lon, lat);
+      const r = Math.hypot(x, y);
+      return r > R ? [x * R / r, y * R / r, true] : [x, y, false];
+    };
+    const to = (x, y, first) => { const px = W / 2 + x * v.s, py = H / 2 - y * v.s; first ? g.moveTo(px, py) : g.lineTo(px, py); };
+    g.beginPath();
+    for (const a of basemap.land) {
+      const inverted = ringContains(a, anti[0] > 180 ? anti[0] - 360 : anti[0], anti[1]);
+      if (!inverted && ![-360, 0, 360].some((k) => near(a, k))) continue;
+      let prev = null;
+      for (let i = 0; i <= a.length; i += 2) {
+        const lon = a[i % a.length], lat = a[(i + 1) % a.length];
+        // Long edges (Antarctica's, along 180° and the pole) are split so they follow the curves.
+        const steps = prev ? Math.ceil(Math.max(Math.abs(lon - prev[0]), Math.abs(lat - prev[1])) / 2) : 1;
+        for (let k = 1; k <= steps; k++) {
+          const q = prev ? [prev[0] + (lon - prev[0]) * k / steps, prev[1] + (lat - prev[1]) * k / steps] : [lon, lat];
+          const cur = proj(q[0], q[1]);
+          if (prev?.out && cur[2]) {
+            let a0 = Math.atan2(prev.y, prev.x), d = Math.atan2(cur[1], cur[0]) - a0;
+            d -= 2 * Math.PI * Math.round(d / (2 * Math.PI));
+            for (let m = 1, n = Math.ceil(Math.abs(d) / 0.1); m < n; m++) to(R * Math.cos(a0 + d * m / n), R * Math.sin(a0 + d * m / n));
+          }
+          to(cur[0], cur[1], !prev);
+          prev = { 0: q[0], 1: q[1], x: cur[0], y: cur[1], out: cur[2] };
+        }
+      }
+      g.closePath();
+      if (inverted) g.rect(W / 2 - 2 * v.s, H / 2 - 2 * v.s, 4 * v.s, 4 * v.s);
+    }
     g.fillStyle = st.land;
     g.fill("evenodd");
   }
-  path(cg, basemap.land, true);
+  // Lines stop where they go round to the far side of the globe; the edges of the Antarctic
+  // ring that run to the South Pole aren't coastline.
+  const lines = (arrs, close) => {
+    cg.beginPath();
+    for (const a of arrs) {
+      if (![-360, 0, 360].some((k) => near(a, k))) continue;
+      let pen = false;
+      const n = a.length / 2 + (close ? 1 : 0);
+      for (let m = 0; m < n; m++) {
+        const i = (m % (a.length / 2)) * 2;
+        const [x, y, c] = toScreen(a[i], a[i + 1]);
+        if (c < 0.05 || a[i + 1] <= -89.99) { pen = false; continue; }
+        pen ? cg.lineTo(x, y) : cg.moveTo(x, y);
+        pen = true;
+      }
+    }
+  };
+  lines(basemap.land, true);
   cg.lineWidth = 0.8;
   cg.strokeStyle = st.coast;
   cg.stroke();
-  path(cg, basemap.borders, false);
+  lines(basemap.borders, false);
   cg.lineWidth = 0.6;
   cg.strokeStyle = st.border;
   cg.stroke();
@@ -383,17 +619,49 @@ function drawBase() {
 const gl = field.getContext("webgl2", { premultipliedAlpha: true, antialias: false });
 let prog = null, lutTex = null, quad = null;
 
+function linkProgram(gl, vs, fs) {
+  const sh = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  return p;
+}
+
 function setupGL() {
   if (!gl) return;
+  // The quad covers the canvas; each pixel is taken back through the projection to longitude
+  // and latitude, then to its place in the scene's grid (regular in Mercator y).
   const vs = `#version 300 es
-    in vec2 p; uniform vec4 rect; out vec2 uv;
-    void main() { uv = p; vec2 c = rect.xy + p * rect.zw; gl_Position = vec4(c.x, -c.y, 0.0, 1.0); }`;
+    in vec2 p;
+    void main() { gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
   const fs = `#version 300 es
     precision highp float;
-    in vec2 uv; out vec4 o;
+    out vec4 o;
     uniform sampler2D A, B, LUT;
     uniform float mixT, lo, hi, rlo, rhi, sq, cat;
+    uniform vec2 size;     // canvas, device pixels
+    uniform float scale;   // device pixels per Earth radius
+    uniform vec3 centre;   // longitude (degrees), sin and cos of latitude
+    uniform vec4 box;      // west, width (degrees), Mercator y of north and south edges (degrees)
     void main() {
+      vec2 q = (gl_FragCoord.xy - 0.5 * size) / scale;
+      float r = length(q);
+      if (r > 1.999) discard;
+      float d = 2.0 * asin(r * 0.5), sc = sin(d), cc = cos(d);
+      float lat = r < 1e-7 ? asin(centre.y) : asin(clamp(cc * centre.y + q.y * sc * centre.z / r, -1.0, 1.0));
+      float dl = r < 1e-7 ? 0.0 : atan(q.x * sc, r * centre.z * cc - q.y * centre.y * sc);
+      float fx = mod(centre.x + degrees(dl) - box.x, 360.0) / box.y;
+      float my = degrees(log(tan(0.785398163 + 0.5 * clamp(lat, -1.48352986, 1.48352986))));
+      float fy = (box.z - my) / (box.z - box.w);
+      if (fx < 0.0 || fx > 1.0 || fy < 0.0 || fy > 1.0) discard;
+      vec2 uv = vec2(fx, fy);
       float a = texture(A, uv).r, b = texture(B, uv).r;
       if (cat > 0.5) {
         // Categories (e.g. precipitation type): 1-based index, nearest frame, never blended.
@@ -411,17 +679,7 @@ function setupGL() {
       vec4 c = texture(LUT, vec2(k * 255.0 / 256.0 + 0.5 / 256.0, 0.5));
       o = vec4(c.rgb * c.a, c.a);
     }`;
-  const sh = (type, src) => {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, src);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-    return s;
-  };
-  prog = gl.createProgram();
-  gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
-  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
-  gl.linkProgram(prog);
+  prog = linkProgram(gl, vs, fs);
   quad = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
@@ -527,10 +785,12 @@ function drawField() {
   if (!br) return;
   const b = m.box;
   const east = b.east <= b.west ? b.east + 360 : b.east;
-  const [x0, y0] = toScreen(b.west, mercY(b.north));
-  const [x1, y1] = toScreen(east, mercY(b.south));
+  const p = projection(S.view);
   gl.useProgram(prog);
-  gl.uniform4f(gl.getUniformLocation(prog, "rect"), x0 / W * 2 - 1, y0 / H * 2 - 1, (x1 - x0) / W * 2, (y1 - y0) / H * 2);
+  gl.uniform2f(gl.getUniformLocation(prog, "size"), field.width, field.height);
+  gl.uniform1f(gl.getUniformLocation(prog, "scale"), S.view.s * field.width / W);
+  gl.uniform3f(gl.getUniformLocation(prog, "centre"), p.lon, p.sp, p.cp);
+  gl.uniform4f(gl.getUniformLocation(prog, "box"), b.west, east - b.west, mercY(b.north), mercY(b.south));
   const tex = (unit, t, name) => {
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, t);
@@ -558,7 +818,7 @@ function gridToScreen(meta, gx, gy) {
   const b = meta.box;
   const east = b.east <= b.west ? b.east + 360 : b.east;
   const yN = mercY(b.north), yS = mercY(b.south);
-  return toScreen(b.west + (east - b.west) * gx / meta.nx, yN + (yS - yN) * gy / meta.ny);
+  return toScreen(b.west + (east - b.west) * gx / meta.nx, invMercY(yN + (yS - yN) * gy / meta.ny));
 }
 
 function contourMeta() {
@@ -669,12 +929,8 @@ function drawOverlay() {
   g.font = "600 12px -apple-system, system-ui, sans-serif";
   g.textAlign = "left";
   for (const f of sc.focus || []) {
-    let lon = f.lon;
-    const b = sceneBox();
-    while (lon < b.w - 180) lon += 360;
-    while (lon > b.e + 180) lon -= 360;
-    const [x, y] = toScreen(lon, mercY(f.lat));
-    if (x < -10 || y < -10 || x > W + 10 || y > H + 10) continue;
+    const [x, y, c] = toScreen(f.lon, f.lat);
+    if (c < 0 || x < -10 || y < -10 || x > W + 10 || y > H + 10) continue;
     g.beginPath();
     g.arc(x, y, 4, 0, 2 * Math.PI);
     g.fillStyle = "#ffffff";
@@ -736,8 +992,10 @@ function vectorMeta() {
 function windAt(vm, br, x, y) {
   // Screen point -> fraction of the vector grid, then bilinear u/v blended between two frames.
   const m = vm.meta, b = m.box, east = b.east <= b.west ? b.east + 360 : b.east;
-  const [lon, my] = toWorld(x, y);
-  const fx = (lon - b.west) / (east - b.west), fy = (mercY(b.north) - my) / (mercY(b.north) - mercY(b.south));
+  const q = toWorld(x, y);
+  if (!q) return null;
+  const fx = (((q[0] - b.west) % 360 + 360) % 360) / (east - b.west);
+  const fy = (mercY(b.north) - mercY(q[1])) / (mercY(b.north) - mercY(b.south));
   if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
   const nx = m.vectors.nx, ny = m.vectors.ny;
   const gx = Math.min(nx - 1.001, Math.max(0, fx * nx - 0.5)), gy = Math.min(ny - 1.001, Math.max(0, fy * ny - 0.5));
@@ -749,7 +1007,11 @@ function windAt(vm, br, x, y) {
     return m.vectors.lo + span * v / 254;
   };
   const A = S.uv[br.i], B = S.uv[br.j];
-  return [sample(A, 0) * (1 - br.t) + sample(B, 0) * br.t, sample(A, 1) * (1 - br.t) + sample(B, 1) * br.t];
+  const u = sample(A, 0) * (1 - br.t) + sample(B, 0) * br.t, v = sample(A, 1) * (1 - br.t) + sample(B, 1) * br.t;
+  // East and north on screen turn away from the centre of the view (and round the pole).
+  const [x0, y0] = toScreen(q[0], q[1]), [xe, ye] = toScreen(q[0] + 0.05, q[1]), [xn, yn] = toScreen(q[0], Math.min(89.99, q[1] + 0.05));
+  const le = Math.hypot(xe - x0, ye - y0) || 1, ln = Math.hypot(xn - x0, yn - y0) || 1;
+  return [u * (xe - x0) / le + v * (xn - x0) / ln, u * (ye - y0) / le + v * (yn - y0) / ln];
 }
 function stepParticles() {
   const g = particles.getContext("2d");
@@ -775,7 +1037,7 @@ function stepParticles() {
       continue;
     }
     const k = 2.2 / ref * Math.min(2.5, Math.sqrt(S.view.s / S.view.fit));
-    const nx = p.x + w[0] * k * 3, ny = p.y - w[1] * k * 3;
+    const nx = p.x + w[0] * k * 3, ny = p.y + w[1] * k * 3;     // w is in screen directions
     g.moveTo(p.x, p.y);
     g.lineTo(nx, ny);
     p.x = nx; p.y = ny;
@@ -811,7 +1073,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   const from = S.view;
   fit();
   if (opts.view) {
-    S.view = { ...S.view, cx: opts.view.lon, cy: mercY(opts.view.lat), s: S.view.fit * opts.view.z, touched: true };
+    S.view = { ...S.view, lon: opts.view.lon, lat: Math.max(-90, Math.min(90, opts.view.lat)), s: S.view.fit * opts.view.z, touched: true };
   }
   const to = S.view;
   S.view = from;
@@ -1012,8 +1274,7 @@ mapEl.addEventListener("pointermove", (e) => {
   }
   pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
   if (Math.hypot(e.offsetX - dragStart.x, e.offsetY - dragStart.y) > 4) moved = true;
-  S.view.cx -= (e.offsetX - prev[0]) / S.view.s;
-  S.view.cy += (e.offsetY - prev[1]) / S.view.s;
+  keepAt(toWorld(prev[0], prev[1]), e.offsetX, e.offsetY);
   viewChanged();
 });
 const up = (e) => {
@@ -1031,10 +1292,9 @@ mapEl.addEventListener("wheel", (e) => {
 
 function zoomAt(px, py, k) {
   if (!S.view) return;
-  const [lon, y] = toWorld(px, py);
-  S.view.s = Math.max(S.view.fit * 0.5, Math.min(S.view.fit * 10, S.view.s * k));
-  S.view.cx = lon - (px - W / 2) / S.view.s;
-  S.view.cy = y + (py - H / 2) / S.view.s;
+  const q = toWorld(px, py);
+  S.view = { ...S.view, s: Math.max(S.view.fit * 0.5, globeScale(), Math.min(S.view.fit * 10, S.view.s * k)) };
+  keepAt(q, px, py);                       // the point under the cursor stays there
   viewChanged();
 }
 $("#zoomIn").onclick = () => zoomAt(W / 2, H / 2, 1.5);
@@ -1085,12 +1345,14 @@ function readout(px, py) {
   const i = Math.round(S.pos);
   const f = S.fill[i];
   if (!m || !f) { el.hidden = true; return; }
-  const [lon, y] = toWorld(px, py);
+  const w = toWorld(px, py);
+  if (!w) { el.hidden = true; return; }
+  const [lon, lat] = w;
   const b = m.box, east = b.east <= b.west ? b.east + 360 : b.east;
   let L = lon;
   while (L < b.west) L += 360;
   while (L > east) L -= 360;
-  const fx = (L - b.west) / (east - b.west), fy = (mercY(b.north) - y) / (mercY(b.north) - mercY(b.south));
+  const fx = (L - b.west) / (east - b.west), fy = (mercY(b.north) - mercY(lat)) / (mercY(b.north) - mercY(b.south));
   if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) { el.hidden = true; return; }
   const q = f.data[Math.floor(fy * m.ny) * m.nx + Math.floor(fx * m.nx)];
   if (q === 255) { el.hidden = true; return; }
@@ -1102,7 +1364,6 @@ function readout(px, py) {
     if (m.scale === "sqrt") t *= t;
     text = Units.format(m.lo + (m.hi - m.lo) * t, m.units);
   }
-  const lat = invMercY(y);
   const ll = `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(((L + 540) % 360) - 180).toFixed(1)}°${((L + 540) % 360) - 180 >= 0 ? "E" : "W"}`;
   el.innerHTML = `<b>${esc(text)}</b> <span class="muted">${ll}</span>`;
   el.style.left = `${px}px`;
@@ -1467,7 +1728,7 @@ function shareLink() {
   if (fr?.length) p.set("t", fr[Math.max(0, Math.min(fr.length - 1, Math.round(S.pos)))].valid_time);
   p.set("map", mapStyle);
   if (S.view?.touched) {
-    p.set("v", [S.view.cx.toFixed(2), invMercY(S.view.cy).toFixed(2), (S.view.s / S.view.fit).toFixed(2)].join(","));
+    p.set("v", [S.view.lon.toFixed(2), S.view.lat.toFixed(2), (S.view.s / S.view.fit).toFixed(2)].join(","));
   }
   return `${location.origin}${location.pathname}#${p.toString()}`;
 }
@@ -1798,13 +2059,10 @@ async function makeVideo(format) {
     const layout = { title, scene, top: 16 + 20 + title.length * 25 + 14, bottom: 76 };
 
     // The scene fitted between the bands (or the viewer's own view, if they zoomed in).
-    const b = sceneBox(), y0 = mercY(b.s), y1 = mercY(b.n);
-    const avail = H - layout.top - layout.bottom;
-    const fitS = Math.min(W / (b.e - b.w), avail / (y1 - y0)) * 0.94;
+    const fitted = fitBox(sceneBox(), W, H - layout.top - layout.bottom);
     const mid = (layout.top - layout.bottom) / 2;
-    S.view = saved.view?.touched
-      ? { ...saved.view, s: fitS * (saved.view.s / saved.view.fit), fit: fitS, cy: saved.view.cy + mid / (fitS * (saved.view.s / saved.view.fit)) }
-      : { cx: (b.w + b.e) / 2, cy: (y0 + y1) / 2 + mid / fitS, s: fitS, fit: fitS };
+    const v = saved.view?.touched ? { ...saved.view, s: fitted.s * (saved.view.s / saved.view.fit), fit: fitted.s } : fitted;
+    S.view = offsetView(v, 0, -mid);
     for (let k = 0; k < 80 && drawBase(); k++) await new Promise((r) => setTimeout(r, 100));   // satellite tiles
 
     const out = document.createElement("canvas");
