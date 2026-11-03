@@ -380,18 +380,18 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
 const RELIEF = OFFLINE ? "https://weatherexplorer.neilgordon.me/relief/" : "relief/";
 const MAP_STYLES = {
   dark: { ocean: "#0d1923", land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
-          grid: ["rgba(170,190,205,0.4)", "rgba(200,215,225,0.85)", "rgba(0,0,0,0.7)"],
+          grid: ["rgba(170,190,205,0.6)", "rgba(200,215,225,0.85)", "rgba(0,0,0,0.7)"],
           line: "rgba(255,255,255,0.78)", streak: "rgba(255,255,255,0.75)" },
   light: { ocean: "#c4d3de", land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
-           grid: ["rgba(70,85,100,0.45)", "rgba(40,55,70,0.85)", "rgba(255,255,255,0.75)"],
+           grid: ["rgba(70,85,100,0.6)", "rgba(40,55,70,0.85)", "rgba(255,255,255,0.75)"],
            line: "rgba(20,30,40,0.78)", streak: "rgba(20,30,40,0.7)" },
   satellite: { ocean: "#08131f", land: null, coast: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.4)",
-               grid: ["rgba(255,255,255,0.45)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
+               grid: ["rgba(255,255,255,0.65)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
                line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
                tiles: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg",
                maxZoom: 8, credit: "Imagery: NASA Blue Marble (GIBS)" },
   relief: { ocean: "#0f2034", land: null, coast: "rgba(255,255,255,0.5)", border: "rgba(255,255,255,0.32)",
-            grid: ["rgba(255,255,255,0.4)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
+            grid: ["rgba(255,255,255,0.6)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
             line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
             tiles: RELIEF + "{z}/{x}/{y}.webp", maxZoom: 6, credit: "Relief: NOAA ETOPO 2022" },
 };
@@ -688,9 +688,13 @@ function drawGrid(g, st, vb) {
       if (clear(b)) { labels.push([text, x, y, "center", "middle", b]); return; }
     }
   };
+  // At wide steps the polar caps would be bare (30° steps stop at 60°), so as on polar charts
+  // they get parallels every 10° poleward of 60°, where the meridians end at 80°.
+  const lats = new Set();
+  for (let i = Math.ceil(vb.s / step); i * step <= vb.n; i++) lats.add(i * step);
+  if (step > 10) for (const lat of [-80, -70, 70, 80]) if (lat >= vb.s && lat <= vb.n) lats.add(lat);
   g.beginPath();
-  for (let i = Math.ceil(vb.s / step); i * step <= vb.n; i++) {
-    const lat = i * step;
+  for (const lat of lats) {
     if (Math.abs(lat) >= 90) continue;
     const pts = [];
     for (let lon = vb.w; lon <= vb.e + fine / 2; lon += fine) pts.push([lon, lat]);
@@ -701,9 +705,14 @@ function drawGrid(g, st, vb) {
     for (let lat = Math.max(vb.s, -top); lat <= Math.min(vb.n, top) + fine / 2; lat += fine) pts.push([lon, Math.min(lat, top)]);
     place(line(pts), ["bottom", "top"], fmtLon(lon));
   }
-  g.lineWidth = 0.7;
-  g.strokeStyle = st.grid[0];
   g.setLineDash([3, 4]);                   // dashed, so they don't read as isobars
+  g.lineWidth = 2.2;                       // a faint halo keeps them visible over pale colours
+  g.strokeStyle = st.grid[2];
+  g.globalAlpha = 0.3;
+  g.stroke();
+  g.globalAlpha = 1;
+  g.lineWidth = 0.9;
+  g.strokeStyle = st.grid[0];
   g.stroke();
   g.setLineDash([]);
   g.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -745,7 +754,8 @@ function linkProgram(gl, vs, fs) {
 function setupGL() {
   if (!gl) return;
   // The quad covers the canvas; each pixel is taken back through the projection to longitude
-  // and latitude, then to its place in the scene's grid (regular in Mercator y).
+  // and latitude, then to its place in the scene's grid (regular in Mercator y, or for a polar
+  // grid in the equal-area projection centred on the pole: see gridFrac).
   const vs = `#version 300 es
     in vec2 p;
     void main() { gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
@@ -758,6 +768,8 @@ function setupGL() {
     uniform float scale;   // device pixels per Earth radius
     uniform vec3 centre;   // longitude (degrees), sin and cos of latitude
     uniform vec4 box;      // west, width (degrees), Mercator y of north and south edges (degrees)
+    uniform float polar;   // 0 Mercator grid; 1 or -1 polar grid round the north or south pole
+    uniform vec4 ext;      // polar grid: x0, x1, y0, y1 (Earth radii)
     void main() {
       vec2 q = (gl_FragCoord.xy - 0.5 * size) / scale;
       float r = length(q);
@@ -765,9 +777,16 @@ function setupGL() {
       float d = 2.0 * asin(r * 0.5), sc = sin(d), cc = cos(d);
       float lat = r < 1e-7 ? asin(centre.y) : asin(clamp(cc * centre.y + q.y * sc * centre.z / r, -1.0, 1.0));
       float dl = r < 1e-7 ? 0.0 : atan(q.x * sc, r * centre.z * cc - q.y * centre.y * sc);
-      float fx = mod(centre.x + degrees(dl) - box.x, 360.0) / box.y;
-      float my = degrees(log(tan(0.785398163 + 0.5 * clamp(lat, -1.48352986, 1.48352986))));
-      float fy = (box.z - my) / (box.z - box.w);
+      float fx, fy;
+      if (polar != 0.0) {
+        float l = radians(centre.x) + dl, rho = 2.0 * sin(0.785398163 - 0.5 * polar * lat);
+        fx = (rho * sin(l) - ext.x) / (ext.y - ext.x);
+        fy = (ext.w + polar * rho * cos(l)) / (ext.w - ext.z);
+      } else {
+        fx = mod(centre.x + degrees(dl) - box.x, 360.0) / box.y;
+        float my = degrees(log(tan(0.785398163 + 0.5 * clamp(lat, -1.48352986, 1.48352986))));
+        fy = (box.z - my) / (box.z - box.w);
+      }
       if (fx < 0.0 || fx > 1.0 || fy < 0.0 || fy > 1.0) discard;
       vec2 uv = vec2(fx, fy);
       float a = texture(A, uv).r, b = texture(B, uv).r;
@@ -899,6 +918,9 @@ function drawField() {
   gl.uniform1f(gl.getUniformLocation(prog, "scale"), S.view.s * field.width / W);
   gl.uniform3f(gl.getUniformLocation(prog, "centre"), p.lon, p.sp, p.cp);
   gl.uniform4f(gl.getUniformLocation(prog, "box"), b.west, east - b.west, mercY(b.north), mercY(b.south));
+  const polar = m.projection === "polar";
+  gl.uniform1f(gl.getUniformLocation(prog, "polar"), polar ? m.pole : 0);
+  gl.uniform4fv(gl.getUniformLocation(prog, "ext"), polar ? m.extent : [0, 1, 0, 1]);
   const tex = (unit, t, name) => {
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, t);
@@ -922,11 +944,32 @@ function drawField() {
 // Overlay: isobars, highs and lows, focus places
 // ------------------------------------------------------------------------------------------
 
-function gridToScreen(meta, gx, gy) {
-  const b = meta.box;
-  const east = b.east <= b.west ? b.east + 360 : b.east;
+// A longitude and latitude as fractions across and down a scene's grid (top row first), and
+// back. Most grids are regular in Mercator y. Polar grids (scenes near a pole) are regular in the
+// equal-area projection centred on the pole: x = rho sin(lon), y = -pole rho cos(lon), where rho =
+// 2 sin((90° - pole lat) / 2), over meta.extent [x0, x1, y0, y1].
+function gridFrac(m, lon, lat) {
+  if (m.projection === "polar") {
+    const [x0, x1, y0, y1] = m.extent, rho = 2 * Math.sin((90 - m.pole * lat) * DEG / 2);
+    return [(rho * Math.sin(lon * DEG) - x0) / (x1 - x0), (y1 + m.pole * rho * Math.cos(lon * DEG)) / (y1 - y0)];
+  }
+  const b = m.box, east = b.east <= b.west ? b.east + 360 : b.east;
+  return [(((lon - b.west) % 360 + 360) % 360) / (east - b.west),
+          (mercY(b.north) - mercY(lat)) / (mercY(b.north) - mercY(b.south))];
+}
+function gridLonLat(m, fx, fy) {
+  if (m.projection === "polar") {
+    const [x0, x1, y0, y1] = m.extent;
+    const x = x0 + (x1 - x0) * fx, y = y1 - (y1 - y0) * fy, rho = Math.min(2, Math.hypot(x, y));
+    return [Math.atan2(x, -m.pole * y) / DEG, m.pole * (90 - 2 * Math.asin(rho / 2) / DEG)];
+  }
+  const b = m.box, east = b.east <= b.west ? b.east + 360 : b.east;
   const yN = mercY(b.north), yS = mercY(b.south);
-  return toScreen(b.west + (east - b.west) * gx / meta.nx, invMercY(yN + (yS - yN) * gy / meta.ny));
+  return [b.west + (east - b.west) * fx, invMercY(yN + (yS - yN) * fy)];
+}
+
+function gridToScreen(meta, gx, gy) {
+  return toScreen(...gridLonLat(meta, gx / meta.nx, gy / meta.ny));
 }
 
 function contourMeta() {
@@ -1099,11 +1142,9 @@ function vectorMeta() {
 }
 function windAt(vm, br, x, y) {
   // Screen point -> fraction of the vector grid, then bilinear u/v blended between two frames.
-  const m = vm.meta, b = m.box, east = b.east <= b.west ? b.east + 360 : b.east;
-  const q = toWorld(x, y);
+  const m = vm.meta, q = toWorld(x, y);
   if (!q) return null;
-  const fx = (((q[0] - b.west) % 360 + 360) % 360) / (east - b.west);
-  const fy = (mercY(b.north) - mercY(q[1])) / (mercY(b.north) - mercY(b.south));
+  const [fx, fy] = gridFrac(m, q[0], q[1]);
   if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
   const nx = m.vectors.nx, ny = m.vectors.ny;
   const gx = Math.min(nx - 1.001, Math.max(0, fx * nx - 0.5)), gy = Math.min(ny - 1.001, Math.max(0, fy * ny - 0.5));
@@ -1138,7 +1179,7 @@ function stepParticles(dt) {
   const want = Math.round(Math.min(2500, W * H / 450));
   while (parts.length < want) parts.push({ x: Math.random() * W, y: Math.random() * H, age: Math.random() * 80 | 0, life: 40 + Math.random() * 60 | 0 });
   parts.length = want;
-  const ref = { jet250: 70, wind850: 35 }[vm.meta.layer] || 22;     // m/s for full streak speed
+  const ref = { jet250: 70, wind850: 35, wind10hpa: 70 }[vm.meta.layer] || 22;     // m/s for full streak speed
   g.strokeStyle = style().streak;
   g.lineWidth = 1;
   g.beginPath();
@@ -1459,12 +1500,8 @@ function readout(px, py) {
   if (!m || !f) { el.hidden = true; return; }
   const w = toWorld(px, py);
   if (!w) { el.hidden = true; return; }
-  const [lon, lat] = w;
-  const b = m.box, east = b.east <= b.west ? b.east + 360 : b.east;
-  let L = lon;
-  while (L < b.west) L += 360;
-  while (L > east) L -= 360;
-  const fx = (L - b.west) / (east - b.west), fy = (mercY(b.north) - mercY(lat)) / (mercY(b.north) - mercY(b.south));
+  const [lon, lat] = w, L = lon;
+  const [fx, fy] = gridFrac(m, lon, lat);
   if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) { el.hidden = true; return; }
   const q = f.data[Math.floor(fy * m.ny) * m.nx + Math.floor(fx * m.nx)];
   if (q === 255) { el.hidden = true; return; }

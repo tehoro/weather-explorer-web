@@ -22,6 +22,8 @@ Each scene's gzipped JSON (uint16 values, base64) becomes a folder of lossless W
                               000.uv.webp         wind u/v (red/green), when the layer has vectors
                               000.c12.webp        12-bit values (red/green), when it is contoured
   Categorical layers (precipitation type) store 1-based indexes into meta "categories" instead.
+  Scenes near a pole come on a polar grid (meta "projection": "polar", with "pole" and "extent";
+  see the backend's fields.py), listed in the backend feed as scene "web_data" rather than "data".
 
 Scene files never change once built, so a package already on disk is kept and not fetched again.
 Exit status 0 = the site changed, 3 = nothing new (the caller can skip deploying).
@@ -151,14 +153,14 @@ def convert(src: dict, out: Path) -> dict:
             (out / f"{i:03d}.uv.webp").write_bytes(webp(np.dstack([u, v, np.zeros_like(u)])))
         frames.append({"valid_time": f["valid_time"], "run": f.get("run"), "step": f.get("step")})
     return {k: src.get(k) for k in ("layer", "title", "units", "model", "resolution", "run", "box", "nx", "ny",
-                                    "projection", "lo", "hi", "stops", "contour_interval", "vectors", "attribution")} | {
+                                    "projection", "pole", "extent", "lo", "hi", "stops", "contour_interval", "vectors", "attribution")} | {
         "scale": "categorical" if cats else "sqrt" if sqrt else "linear", "frames": frames,
         **({"categories": cats} if cats else {})}
 
 
 def package(scene: dict, key: str, root: Path) -> str | None:
     """Build (or reuse) the package for a scene; returns its path relative to the data folder."""
-    files = scene.get("data") or {}
+    files = scene.get("data") or scene.get("web_data") or {}     # web_data: a polar grid
     fill = files.get("fill")
     if not fill or not re.fullmatch(r"[0-9A-Za-z]+/[0-9A-Za-z_.\-]+-fill\.json\.gz", fill):
         return None
@@ -195,7 +197,7 @@ def scenes_of(item: dict, key: str, root: Path, used: set[str]) -> dict | None:
         rel = package(scene, key, root)
         if rel:
             used.add(rel)
-            out.append({k: v for k, v in scene.items() if k != "data"} | {"package": rel})
+            out.append({k: v for k, v in scene.items() if k not in ("data", "web_data")} | {"package": rel})
     if not out:
         return None
     # The item's permanent reference, used by shared links: its package tag and id.
