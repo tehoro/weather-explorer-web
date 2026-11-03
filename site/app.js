@@ -1579,11 +1579,20 @@ function renderDetails() {
   const it = S.entry.item;
   const fmt = (s) => s ? Units.formatTime(parseTime(s)) : "";
   const when = it.when ? [it.when.start && `from ${fmt(it.when.start)}`, it.when.peak && `peak ${fmt(it.when.peak)}`].filter(Boolean).join(" · ") : "";
-  const evidence = (it.evidence || []).map((e) => {
+  // Sources: official and news first, each labelled with its kind and website; model evidence after.
+  const KIND = { warning: "Warning", official: "Official", observation: "Observed", news: "News",
+                 field: "ECMWF model", ensemble: "ECMWF ensemble" };
+  const source = (e) => {
     const u = safeUrl(e.url);
     const text = esc(loc(e.text));
-    return `<li><span class="k">${esc(e.kind || "")}</span>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${text}</a>` : text}</li>`;
-  }).join("");
+    let site = "";
+    try { site = u ? new URL(u).hostname.replace(/^www\./, "") : ""; } catch (_) {}
+    const label = [KIND[e.kind] || e.kind, site].filter(Boolean).map(esc).join(" · ");
+    return `<li><span class="k">${label}</span>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${text}</a>` : text}</li>`;
+  };
+  const isModel = (e) => e.kind === "field" || e.kind === "ensemble";
+  const sources = (it.evidence || []).filter((e) => !isModel(e)).map(source).join("");
+  const model = (it.evidence || []).filter(isModel).map(source).join("");
   const archived = S.entry.archived
     ? `<p class="archived">This shared highlight is from an earlier set and may be out of date.${OFFLINE ? "" : ` <a href="#" id="latest">See the latest highlights</a>`}</p>` : "";
   const explainer = it.kind === "explainer"
@@ -1594,7 +1603,8 @@ function renderDetails() {
     ${it.hazards?.length ? `<div class="chips">${it.hazards.map((h) => `<span class="chip">${esc(h.replace(/-/g, " "))}</span>`).join("")}</div>` : ""}
     <h3>What's happening</h3><p>${esc(loc(it.summary))}</p>
     ${it.why_interesting ? `<h3>Why it's interesting</h3><p>${esc(loc(it.why_interesting))}</p>` : ""}
-    ${evidence ? `<h3>Sources</h3><ul class="evidence">${evidence}</ul>` : ""}
+    ${sources ? `<h3>Sources</h3><ul class="evidence">${sources}</ul>` : ""}
+    ${model ? `<h3>What the forecast model shows</h3><ul class="evidence">${model}</ul>` : ""}
     ${it.confidence ? `<h3>Confidence</h3><p>${esc(loc(it.confidence))}</p>` : ""}`;
   const latest = $("#latest");
   if (latest) latest.onclick = (e) => { e.preventDefault(); if (S.entries[0]) navigate(S.entries[0], 0); };
