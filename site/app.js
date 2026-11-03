@@ -377,7 +377,7 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
 // Map styles, as in the app. Satellite uses NASA's Blue Marble imagery from GIBS (public domain,
 // no key), in Web Mercator tiles that are warped into the map's projection on the GPU. Relief is this site's own tiles, built
 // from NOAA ETOPO 2022 by tools/make_relief.py; a saved copy fetches them from the live site.
-const RELIEF = OFFLINE ? "https://tehoro.github.io/weather-explorer-web/relief/" : "relief/";
+const RELIEF = OFFLINE ? "https://weatherexplorer.neilgordon.me/relief/" : "relief/";
 const MAP_STYLES = {
   dark: { ocean: "#0d1923", land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
           grid: ["rgba(170,190,205,0.4)", "rgba(200,215,225,0.85)", "rgba(0,0,0,0.7)"],
@@ -2128,7 +2128,7 @@ function drawVideoFrame(g, layout) {
   g.font = `500 12px ${font}`;
   g.fillText(tag, pad, H - layout.bottom + 48);
   g.font = `500 11px ${font}`;
-  g.fillText("Data: ECMWF Open Data, CC BY 4.0 · Weather Explorer · tehoro.github.io/weather-explorer-web", pad, H - 10);
+  g.fillText("Data: ECMWF Open Data, CC BY 4.0 · Weather Explorer · weatherexplorer.neilgordon.me", pad, H - 10);
 
   // Caption, above the bottom band.
   const t = timeAt(S.pos);

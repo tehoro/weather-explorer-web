@@ -1,7 +1,7 @@
 # Weather Explorer: web viewer
 
 A public, read-only web page that plays the current Weather Explorer highlights:
-**https://tehoro.github.io/weather-explorer-web/**
+**https://weatherexplorer.neilgordon.me/** (the original https://tehoro.github.io/weather-explorer-web/ redirects here)
 
 Weather Explorer is a prototype for exploring animated ECMWF weather forecasts. Twice a day an AI
 research agent picks about fifteen interesting weather situations around the world and describes
@@ -167,7 +167,7 @@ python3 -m http.server 8090 --directory site
 `sync.py` reads `APP_KEY` from the environment, or `../backend/data/.app_key` when run inside the
 project folder. Without the key you can't sync from the live backend, but everything the viewer
 loads is public: the published files are under
-https://tehoro.github.io/weather-explorer-web/data/ (`feed.json`, then the paths it lists), or run
+https://weatherexplorer.neilgordon.me/data/ (`feed.json`, then the paths it lists), or run
 your own backend with your own key.
 
 ## Operations
