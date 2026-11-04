@@ -1575,6 +1575,13 @@ function drawAll() {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const loc = Units.localize;
+// The country or region an item is about ("Bulgaria", "Arctic"), shown before its title unless the
+// title already names it, so a reader knows where Burgas or Telangana is.
+function country(it) {
+  const c = (it.where?.country || "").trim();
+  return c && !loc(it.title).toLowerCase().includes(c.toLowerCase()) ? c : "";
+}
+const headline = (it) => (country(it) ? `${country(it)}: ` : "") + loc(it.title);
 const safeUrl = (u) => /^https?:\/\//i.test(u || "") ? u : null;
 
 function navigate(entry, scene) {
@@ -1588,7 +1595,7 @@ function renderList() {
     const where = [e.item.where?.label, n > 1 ? `${n} scenes` : ""].filter(Boolean).join(" · ");
     const tag = e.item.kind === "explainer" ? `<span class="tag">Explainer</span>` : "";
     return `<button class="entry" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
-      ${tag}<span class="t">${esc(loc(e.item.title))}</span><span class="w">${esc(where)}</span></button>`;
+      ${tag}<span class="t">${country(e.item) ? `<span class="cty">${esc(country(e.item))}:</span> ` : ""}${esc(loc(e.item.title))}</span><span class="w">${esc(where)}</span></button>`;
   };
   const main = S.entries.filter((e) => !e.requested), req = S.entries.filter((e) => e.requested);
   const shared = S.shared && !S.entries.includes(S.shared) ? [S.shared] : [];
@@ -1676,7 +1683,7 @@ function renderDetails() {
   const explainer = it.kind === "explainer"
     ? `<p class="explainer"><b>Explainer:</b> a textbook example of how the atmosphere works, picked from the forecast for what it shows; no impacts are implied.</p>` : "";
   $("#details").innerHTML = `${archived}${explainer}
-    <h2>${esc(loc(it.title))}</h2>
+    <h2>${esc(headline(it))}</h2>
     <p class="where">${esc(it.where?.label || "")}${when ? `<br>${esc(when)}` : ""}</p>
     ${it.hazards?.length ? `<div class="chips">${it.hazards.map((h) => `<span class="chip">${esc(h.replace(/-/g, " "))}</span>`).join("")}</div>` : ""}
     <h3>What's happening</h3><p>${esc(loc(it.summary))}</p>
@@ -1949,7 +1956,7 @@ $("#share").onclick = async () => {
   track("share", "Share link", true);
   const url = shareLink();
   history.replaceState(null, "", url);
-  const title = loc(S.entry.item.title);
+  const title = headline(S.entry.item);
   if (navigator.share && matchMedia("(pointer: coarse)").matches) {
     try { await navigator.share({ title: `${title} — Weather Explorer`, url }); return; } catch (e) { if (e.name === "AbortError") return; }
   }
@@ -2253,7 +2260,7 @@ async function makeVideo(format) {
     for (const c of [base, field, coast, overlay, particles]) { c.width = fmt.w; c.height = fmt.h; }
     const g0 = document.createElement("canvas").getContext("2d");
     g0.font = "700 20px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    const title = wrapText(g0, loc(S.entry.item.title), W - 32, 2);
+    const title = wrapText(g0, headline(S.entry.item), W - 32, 2);
     const scene = loc(S.entry.item.scenes[S.sceneIndex].title || "");
     const layout = { title, scene, top: 16 + 20 + title.length * 25 + 14, bottom: 76 };
 
