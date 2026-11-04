@@ -54,7 +54,7 @@ UNCHANGED = 3
 FORMAT = 3             # package layout version; older packages are rebuilt
 KEEP_DAYS = 7          # how long a highlight stays available to shared links after it was last listed
 MISSING = 255          # u8 value for no data; real values use 0..254
-SQRT_LAYERS = {"precip"}   # wide-range fields kept on a square-root scale so light rain keeps detail
+SQRT_LAYERS = {"precip", "rain24"}   # wide-range fields kept on a square-root scale so light rain keeps detail
 # Feed fields the viewer shows. Requested events are listed by their researched item only: the
 # anonymous request text is not published.
 REQUEST_FIELDS = ("id", "requested_utc", "expires_utc")
