@@ -1075,8 +1075,10 @@ function drawOverlay() {
     g.textBaseline = "alphabetic";
   }
 
-  // Focus places.
   const sc = S.entry.item.scenes[S.sceneIndex];
+  drawParallels(g, sc);
+
+  // Focus places.
   g.font = "600 12px -apple-system, system-ui, sans-serif";
   g.textAlign = "left";
   for (const f of sc.focus || []) {
@@ -1094,6 +1096,40 @@ function drawOverlay() {
     g.strokeText(f.label, x + 8, y + 4);
     g.fillStyle = "#fff";
     g.fillText(f.label, x + 8, y + 4);
+  }
+}
+
+// Latitude circles a scene asks for (`parallels`, e.g. the 60°N circle the polar vortex wind is
+// averaged round): solid and labelled, unlike the dashed grid.
+function drawParallels(g, sc) {
+  for (const lat of sc.parallels || []) {
+    g.beginPath();
+    let pen = false, best = null;
+    for (let lon = -180; lon <= 180; lon += 0.5) {
+      const [x, y, c] = toScreen(lon, lat);
+      if (c < 0.05) { pen = false; continue; }
+      pen ? g.lineTo(x, y) : g.moveTo(x, y);
+      pen = true;
+      // Label where the circle is lowest on screen but still inside it.
+      if (x > 40 && x < W - 60 && y > 20 && y < H - 20 && (!best || y > best[1])) best = [x, y];
+    }
+    g.lineWidth = 4;
+    g.strokeStyle = "rgba(0,0,0,0.45)";
+    g.stroke();
+    g.lineWidth = 2;
+    g.strokeStyle = "rgba(255,236,150,0.95)";
+    g.stroke();
+    if (best) {
+      const text = fmtLat(lat);
+      g.font = "600 12px -apple-system, system-ui, sans-serif";
+      g.textAlign = "center";
+      g.lineWidth = 3;
+      g.strokeStyle = "rgba(0,0,0,0.75)";
+      g.strokeText(text, best[0], best[1] - 7);
+      g.fillStyle = "rgba(255,236,150,1)";
+      g.fillText(text, best[0], best[1] - 7);
+      g.textAlign = "left";
+    }
   }
 }
 
@@ -1328,10 +1364,15 @@ function updateTime() {
   // Caption: the latest one whose time has passed.
   const sc = S.entry.item.scenes[S.sceneIndex];
   const t = timeAt(S.pos);
-  const cap = (sc.captions || []).filter((c) => parseTime(c.at) <= t).pop();
+  const cap = captionAt(sc, t);
   const el = $("#caption");
   el.hidden = !cap;
   el.textContent = cap ? loc(cap.text) : "";
+}
+// The caption on screen at time t: the latest one whose time has passed, unless its `until` has.
+function captionAt(sc, t) {
+  const cap = (sc.captions || []).filter((c) => parseTime(c.at) <= t).pop();
+  return cap && !(cap.until && parseTime(cap.until) <= t) ? cap : null;
 }
 function timeAt(pos) {
   const fr = S.meta.fill.frames;
@@ -2168,8 +2209,7 @@ function drawVideoFrame(g, layout) {
   g.fillText("Data: ECMWF Open Data, CC BY 4.0 · Weather Explorer · weatherexplorer.neilgordon.me", pad, H - 10);
 
   // Caption, above the bottom band.
-  const t = timeAt(S.pos);
-  const cap = (sc.captions || []).filter((c) => parseTime(c.at) <= t).pop();
+  const cap = captionAt(sc, timeAt(S.pos));
   if (cap) {
     g.font = `500 15px ${font}`;
     const lines = wrapText(g, loc(cap.text), W - 80, 2);
