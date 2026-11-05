@@ -1577,11 +1577,21 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const loc = Units.localize;
 // The country or region an item is about ("Bulgaria", "Arctic"), shown before its title unless the
 // title already names it, so a reader knows where Burgas or Telangana is.
+// The country or region, so readers know where a place is. When the title names it ("…along
+// Ecuador's coast") it is picked out there; otherwise it goes first ("Australia: Extreme heat…").
 function country(it) {
   const c = (it.where?.country || "").trim();
   return c && !loc(it.title).toLowerCase().includes(c.toLowerCase()) ? c : "";
 }
 const headline = (it) => (country(it) ? `${country(it)}: ` : "") + loc(it.title);
+// The headline as HTML for the list, with the country in the accent colour.
+function headlineHtml(it) {
+  const title = loc(it.title), c = (it.where?.country || "").trim();
+  if (!c) return esc(title);
+  const i = title.toLowerCase().indexOf(c.toLowerCase());
+  if (i < 0) return `<span class="cty">${esc(c)}:</span> ${esc(title)}`;
+  return esc(title.slice(0, i)) + `<span class="cty">${esc(title.slice(i, i + c.length))}</span>` + esc(title.slice(i + c.length));
+}
 const safeUrl = (u) => /^https?:\/\//i.test(u || "") ? u : null;
 
 function navigate(entry, scene) {
@@ -1595,7 +1605,7 @@ function renderList() {
     const where = [e.item.where?.label, n > 1 ? `${n} scenes` : ""].filter(Boolean).join(" · ");
     const tag = e.item.kind === "explainer" ? `<span class="tag">Explainer</span>` : "";
     return `<button class="entry" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
-      ${tag}<span class="t">${country(e.item) ? `<span class="cty">${esc(country(e.item))}:</span> ` : ""}${esc(loc(e.item.title))}</span><span class="w">${esc(where)}</span></button>`;
+      ${tag}<span class="t">${headlineHtml(e.item)}</span><span class="w">${esc(where)}</span></button>`;
   };
   const main = S.entries.filter((e) => !e.requested), req = S.entries.filter((e) => e.requested);
   const shared = S.shared && !S.entries.includes(S.shared) ? [S.shared] : [];
