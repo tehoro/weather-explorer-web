@@ -1872,11 +1872,20 @@ function renderFresh() {
 // Feed and routing
 // ------------------------------------------------------------------------------------------
 
+// Temporary (5 Nov 2026): "Arctic vortex" is not standard; the sweep now writes "Arctic polar vortex".
+// Remove once feeds from before then have expired (a week).
+function fixWording(x) {
+  if (typeof x === "string") return x.replace(/\b(Arctic|Antarctic) vortex\b/gi, "$1 polar vortex");
+  if (Array.isArray(x)) return x.map(fixWording);
+  if (x && typeof x === "object") for (const k of Object.keys(x)) x[k] = fixWording(x[k]);
+  return x;
+}
+
 async function loadFeed() {
-  const feed = await fetch(dataUrl("feed.json"), { cache: "no-cache" }).then((r) => {
+  const feed = fixWording(await fetch(dataUrl("feed.json"), { cache: "no-cache" }).then((r) => {
     if (!r.ok) throw new Error(r.status);
     return r.json();
-  });
+  }));
   const changed = feed.synced_utc !== S.feed?.synced_utc;
   S.feed = feed;
   Units.setYear(parseTime(feed.generated_utc || "").getUTCFullYear());
@@ -1913,7 +1922,7 @@ async function route() {
     // A shared highlight that has since been replaced: kept for a week after it was last listed.
     if (!OFFLINE && /^[0-9A-Za-z]+\/[0-9A-Za-z_.\-]+$/.test(r.key)) {
       try {
-        const item = await fetch(dataUrl(`items/${r.key}.json`)).then((x) => { if (!x.ok) throw new Error(x.status); return x.json(); });
+        const item = fixWording(await fetch(dataUrl(`items/${r.key}.json`)).then((x) => { if (!x.ok) throw new Error(x.status); return x.json(); }));
         entry = S.shared = { key: r.key, item, archived: true };
       } catch { /* expired */ }
     }
