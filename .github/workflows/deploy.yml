@@ -31,7 +31,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     outputs:
-      changed: ${{ steps.sync.outputs.changed }}
+      changed: ${{ steps.sync.outputs.changed == 'true' || steps.past.outputs.changed == 'true' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -65,14 +65,20 @@ jobs:
           key: data-${{ github.run_id }}
 
       - name: Add past events
+        id: past
         # Past events (history.py, from ERA5) are kept in the repository, not the cache: they are
-        # permanent, and arrive by a push from the private history repository after review.
+        # permanent, and arrive by a push from the private history repository after review. GitHub
+        # keeps only the newest queued run, so a push can be dropped for a later scheduled run:
+        # deploy whenever the repository's past events differ from the live site's.
         run: |
           rm -rf site/data/history
           if [ -d history ]; then mkdir -p site/data && cp -r history site/data/history; fi
+          here=$( [ -f history/index.json ] && sha256sum < history/index.json | cut -c1-64 || true)
+          live=$(curl -fsS https://weatherexplorer.neilgordon.me/data/history/index.json 2>/dev/null | sha256sum | cut -c1-64)
+          if [ -n "$here" ] && [ "$here" != "$live" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
 
       - name: Stamp the release into file names
-        if: steps.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: steps.sync.outputs.changed == 'true' || steps.past.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           v="${GITHUB_SHA::8}"
           sed -i "s/?v=dev/?v=$v/g" site/index.html site/3d/index.html
@@ -80,7 +86,7 @@ jobs:
           grep -q "?v=$v" site/index.html && grep -q "?v=$v" site/3d/index.html && grep -q "VERSION = \"$v\"" site/app.js
 
       - name: Package the site
-        if: steps.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        if: steps.sync.outputs.changed == 'true' || steps.past.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
