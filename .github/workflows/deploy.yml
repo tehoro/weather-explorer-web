@@ -64,6 +64,13 @@ jobs:
           path: site/data
           key: data-${{ github.run_id }}
 
+      - name: Add past events
+        # Past events (history.py, from ERA5) are kept in the repository, not the cache: they are
+        # permanent, and arrive by a push from the private history repository after review.
+        run: |
+          rm -rf site/data/history
+          if [ -d history ]; then mkdir -p site/data && cp -r history site/data/history; fi
+
       - name: Stamp the release into file names
         if: steps.sync.outputs.changed == 'true' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
@@ -127,6 +134,13 @@ jobs:
         with:
           path: site/data
           key: data-${{ github.run_id }}-3d
+
+      - name: Add past events
+        # Past events (history.py, from ERA5) are kept in the repository, not the cache: they are
+        # permanent, and arrive by a push from the private history repository after review.
+        run: |
+          rm -rf site/data/history
+          if [ -d history ]; then mkdir -p site/data && cp -r history site/data/history; fi
 
       - name: Stamp the release into file names
         if: steps.build.outputs.changed == 'true'

@@ -1,12 +1,16 @@
 """Turn historical events built by the backend (its history.py, from ERA5) into viewer packages.
 
   uv run history.py <backend history folder>/<item id> [--out site/data]
+  uv run history.py <backend history folder>/<item id> --out .        (published: history/ in the repo)
 
 Each event becomes a permanent folder, unlike live highlights, which are kept only for a week:
 
-  data/history/index.json                  every past event, in date order, scene data paths rewritten
-  data/history/<item id>/<n>/meta.json     one package per scene, in the same layout as data/p/
-  data/history/<item id>/<n>/<role>/...
+  <out>/history/index.json                  every past event, in date order, scene data paths rewritten
+  <out>/history/<item id>/<n>/meta.json     one package per scene, in the same layout as data/p/
+  <out>/history/<item id>/<n>/<role>/...
+
+Published events live in the repository's history/ folder; the deploy workflow copies it to
+site/data/history. The private history repository pushes them there after review.
 
 The viewer lists past events only behind the unlisted link #past (or a shared link to one) while
 they are being tried out. sync.py never touches data/history.
