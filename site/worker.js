@@ -36,15 +36,38 @@ async function decode(src, channels) {
 
 // Real values for a blend of two contour frames (red = high byte, green = low byte; NaN where
 // missing). `top` is the missing value: 4095 for 12-bit frames, 65535 for older 16-bit ones.
-function values(a, b, q, meta, top) {
+// With `eye` (app.js eyeShift), points near a tracked low take each frame from where that frame
+// has the low, so the low moves between frames rather than fading (as the map's colours do).
+function values(a, b, q, meta, top, eye) {
   const n = meta.nx * meta.ny, out = new Float32Array(n);
   const scale = (meta.hi - meta.lo) / (top - 1);
   for (let i = 0; i < n; i++) {
-    const va = a[i * 2] * 256 + a[i * 2 + 1], vb = b[i * 2] * 256 + b[i * 2 + 1];
+    let va = a[i * 2] * 256 + a[i * 2 + 1], vb = b[i * 2] * 256 + b[i * 2 + 1];
+    if (eye) {
+      const fx = (i % meta.nx + 0.5) / meta.nx, fy = (Math.floor(i / meta.nx) + 0.5) / meta.ny;
+      const d = Math.hypot((fx - eye.x) / eye.rx, (fy - eye.y) / eye.ry);
+      if (d < 1) {
+        const s = d <= 0.5 ? 0 : (d - 0.5) / 0.5, w = 1 - s * s * (3 - 2 * s);   // as GLSL smoothstep(0.5, 1, d)
+        va = sampleAt(a, fx + eye.ax * w, fy + eye.ay * w, meta, top);
+        vb = sampleAt(b, fx + eye.bx * w, fy + eye.by * w, meta, top);
+        if (Number.isNaN(va) || Number.isNaN(vb)) { out[i] = NaN; continue; }
+        out[i] = meta.lo + scale * (va * (1 - q) + vb * q);
+        continue;
+      }
+    }
     if (va === top || vb === top) { out[i] = NaN; continue; }
     out[i] = meta.lo + scale * (va * (1 - q) + vb * q);
   }
   return out;
+}
+
+// A 12-bit frame's raw value at grid fraction (fx, fy), bilinear; NaN where missing.
+function sampleAt(arr, fx, fy, meta, top) {
+  const x = Math.max(0, Math.min(meta.nx - 1, fx * meta.nx - 0.5)), y = Math.max(0, Math.min(meta.ny - 1, fy * meta.ny - 0.5));
+  const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(meta.nx - 1, x0 + 1), y1 = Math.min(meta.ny - 1, y0 + 1);
+  const v = (ix, iy) => { const k = (iy * meta.nx + ix) * 2, r = arr[k] * 256 + arr[k + 1]; return r === top ? NaN : r; };
+  const tx = x - x0, ty = y - y0;
+  return (v(x0, y0) * (1 - tx) + v(x1, y0) * tx) * (1 - ty) + (v(x0, y1) * (1 - tx) + v(x1, y1) * tx) * ty;
 }
 
 // Marching squares. Values sit at cell centres, so grid point (i, j) is at (i + 0.5, j + 0.5).
@@ -129,7 +152,7 @@ self.onmessage = async ({ data: m }) => {
       self.postMessage({ id: m.id, data: d.slice() });
     } else if (m.type === "contours") {
       const [a, b] = await Promise.all([decode(m.srcA, 2), decode(m.srcB, 2)]);
-      const v = values(a, b, m.q, m.meta, m.top);
+      const v = values(a, b, m.q, m.meta, m.top, m.eye);
       const { segs, levels } = contours(v, m.meta.nx, m.meta.ny, m.meta.contour_interval);
       const ext = m.centres ? centres(v, m.meta.nx, m.meta.ny) : [];
       self.postMessage({ id: m.id, segs, levels, centres: ext }, [segs.buffer, levels.buffer]);

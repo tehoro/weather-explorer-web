@@ -167,6 +167,17 @@ button { font: inherit; color: inherit; }
   background: rgba(8, 14, 19, 0.92); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 8px;
   font-size: 13.5px; text-align: center; cursor: pointer;
 }
+/* Past events: numbered references, ERA5 against observed, source list */
+.details a.ref {
+  font-size: 10.5px; vertical-align: super; line-height: 0; margin-left: 2px; text-decoration: none;
+  color: var(--accent);
+}
+.details a.ref + a.ref::before { content: ","; color: var(--muted); margin-right: 1px; }
+.details table.vs { border-collapse: collapse; font-size: 13px; width: 100%; margin: 4px 0 8px; }
+.details table.vs th, .details table.vs td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.details table.vs tr:first-child th { color: var(--muted); font-weight: 600; }
+.details ol.sources { padding-left: 20px; font-size: 13px; }
+.details ol.sources li { margin-bottom: 4px; }
 .details .archived {
   background: var(--panel-2); border-left: 3px solid var(--warn); padding: 8px 10px; border-radius: 4px; font-size: 13.5px;
 }

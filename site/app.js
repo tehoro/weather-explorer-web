@@ -55,10 +55,15 @@ function frameSource(path) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return { path, bytes };
 }
-const SPEEDS = [0.5, 1, 2, 4];           // frames per second (frames are mostly 3 h apart)
+const SPEEDS = [0.5, 1, 2, 4];           // multiples of HOURS_PER_SEC
+const HOURS_PER_SEC = 3;                  // hours of weather a second at 1×, however far apart the frames are
 const SPEED_KEY = "weather-explorer-speed";
 const DEFAULT_SPEED = 2;                  // 6 forecast hours a second suits most scenes
 const FEED_REFRESH_MS = 10 * 60 * 1000;
+const ATTRIBUTION = "Data: © ECMWF, CC BY 4.0.";   // as in index.html, for feeds without their own
+const DISCLAIMER = document.getElementById("disclaimer").textContent;
+const PAST_DISCLAIMER = "Past events are written by an AI model from the official reports and papers cited, and reviewed "
+  + "before they are published. The maps show the ERA5 reanalysis, not a forecast.";
 const DEG = Math.PI / 180;
 
 // Scene grids and satellite tiles are regular in Web Mercator y; the map itself is not (below).
@@ -770,6 +775,8 @@ function setupGL() {
     uniform vec4 box;      // west, width (degrees), Mercator y of north and south edges (degrees)
     uniform float polar;   // 0 Mercator grid; 1 or -1 polar grid round the north or south pole
     uniform vec4 ext;      // polar grid: x0, x1, y0, y1 (Earth radii)
+    uniform vec4 eye;      // tracked low: centre (xy) and radius (zw) in grid fractions; z = 0 for none
+    uniform vec4 shift;    // where frames A (xy) and B (zw) have that low, relative to the centre
     void main() {
       vec2 q = (gl_FragCoord.xy - 0.5 * size) / scale;
       float r = length(q);
@@ -788,8 +795,13 @@ function setupGL() {
         fy = (box.z - my) / (box.z - box.w);
       }
       if (fx < 0.0 || fx > 1.0 || fy < 0.0 || fy > 1.0) discard;
-      vec2 uv = vec2(fx, fy);
-      float a = texture(A, uv).r, b = texture(B, uv).r;
+      vec2 uv = vec2(fx, fy), ua = uv, ub = uv;
+      if (eye.z > 0.0) {   // storm-relative: near the low, each frame is sampled moved with it
+        float w = 1.0 - smoothstep(0.5, 1.0, length((uv - eye.xy) / eye.zw));
+        ua += shift.xy * w;
+        ub += shift.zw * w;
+      }
+      float a = texture(A, ua).r, b = texture(B, ub).r;
       if (cat > 0.5) {
         // Categories (e.g. precipitation type): 1-based index, nearest frame, never blended.
         float idx = floor((mixT < 0.5 ? a : b) * 255.0 + 0.5);
@@ -889,6 +901,35 @@ function frameTexture(data, nx, ny, nearest = false) {
   return t;
 }
 
+// A scene's tracked low (scene.track, from the backend's tracks.py): its centre and pressure at
+// time t, interpolated between the track's points; null outside the track.
+function trackAt(sc, t) {
+  const pts = sc.track?.points;
+  if (!pts?.length) return null;
+  pts.ms ||= pts.map((p) => parseTime(p.t).getTime());
+  const ms = t.getTime(), k = pts.ms.findIndex((x, n) => n < pts.length - 1 && ms >= x && ms <= pts.ms[n + 1]);
+  if (k < 0) return null;
+  const a = pts[k], b = pts[k + 1], f = (ms - pts.ms[k]) / Math.max(1, pts.ms[k + 1] - pts.ms[k]);
+  return { lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (((b.lon - a.lon + 540) % 360) - 180) * f, msl: a.msl + (b.msl - a.msl) * f };
+}
+
+// Storm-relative blending, as in the 3D view: near a tracked low, frames i and j are each sampled
+// moved so that their low sits where the low is at blend t, so it moves between frames instead of
+// fading out in one place and in at the next. Grid fractions: the centre, the radius the shift
+// fades out over, and each frame's offset; null when there is nothing to move.
+const EYE_KM = 700;
+function eyeShift(m, sc, i, j, t) {
+  if (!sc?.track || m.projection === "polar" || i === j) return null;
+  const ti = parseTime(m.frames[i].valid_time), tj = parseTime(m.frames[j].valid_time);
+  const c = trackAt(sc, new Date(ti.getTime() + (tj - ti) * t)), a = trackAt(sc, ti), b = trackAt(sc, tj);
+  if (!c || !a || !b) return null;
+  const [cx, cy] = gridFrac(m, c.lon, c.lat), [ax, ay] = gridFrac(m, a.lon, a.lat), [bx, by] = gridFrac(m, b.lon, b.lat);
+  const east = m.box.east <= m.box.west ? m.box.east + 360 : m.box.east;
+  const rx = EYE_KM / (111.32 * Math.cos(c.lat * DEG)) / (east - m.box.west);
+  const ry = Math.abs(gridFrac(m, c.lon, c.lat + EYE_KM / 111.32)[1] - cy);
+  return { x: cx, y: cy, rx, ry, ax: ax - cx, ay: ay - cy, bx: bx - cx, by: by - cy };
+}
+
 // The two loaded frames either side of the position, and the blend between them.
 function bracket(list, pos) {
   const n = list.length;
@@ -933,6 +974,9 @@ function drawField() {
   u("mixT", br.t); u("lo", m.lo); u("hi", m.hi); u("rlo", S.ramp.lo); u("rhi", S.ramp.hi);
   u("sq", m.scale === "sqrt" ? 1 : 0);
   u("cat", m.categories ? 1 : 0);
+  const e = eyeShift(m, S.entry.item.scenes[S.sceneIndex], br.i, br.j, br.t);
+  gl.uniform4f(gl.getUniformLocation(prog, "eye"), e?.x || 0, e?.y || 0, e?.rx || 0, e?.ry || 1);
+  gl.uniform4f(gl.getUniformLocation(prog, "shift"), e?.ax || 0, e?.ay || 0, e?.bx || 0, e?.by || 0);
   const loc = gl.getAttribLocation(prog, "p");
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.enableVertexAttribArray(loc);
@@ -987,6 +1031,9 @@ function drawOverlay() {
   const cm = contourMeta();
   const c = S.contour;
   const placed = [];
+  const sc = S.entry.item.scenes[S.sceneIndex];
+  const eye = trackAt(sc, timeAt(S.pos));
+  const eyeXY = eye && toScreen(eye.lon, eye.lat);
   if (cm && c) {
     const segs = c.segs;
     g.beginPath();
@@ -1004,6 +1051,7 @@ function drawOverlay() {
     for (const e of c.centres) {
       const [x, y] = gridToScreen(cm.meta, e.x, e.y);
       if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
+      if (!e.high && eyeXY && Math.hypot(x - eyeXY[0], y - eyeXY[1]) < 60) continue;   // the tracked low has its own marker
       placed.push([x, y]);
       g.textAlign = "center";
       g.shadowColor = "rgba(0,0,0,0.85)";
@@ -1075,8 +1123,8 @@ function drawOverlay() {
     g.textBaseline = "alphabetic";
   }
 
-  const sc = S.entry.item.scenes[S.sceneIndex];
   drawParallels(g, sc);
+  drawTrack(g, sc, eye);
 
   // Focus places.
   g.font = "600 12px -apple-system, system-ui, sans-serif";
@@ -1097,6 +1145,64 @@ function drawOverlay() {
     g.fillStyle = "#fff";
     g.fillText(f.label, x + 8, y + 4);
   }
+}
+
+// The tracked low's path (scene.track): solid where it has been, faint ahead, a dot every 6 h
+// (larger at 00 UTC); and a marker gliding along it with the storm's name and central pressure.
+const TRACK = "rgba(255,214,102,1)", TRACK_AHEAD = "rgba(255,214,102,0.7)";
+function drawTrack(g, sc, eye) {
+  const pts = sc.track?.points;
+  if (!pts?.length) return;
+  const now = timeAt(S.pos).getTime();
+  pts.ms ||= pts.map((p) => parseTime(p.t).getTime());
+  const xy = pts.map((p) => toScreen(p.lon, p.lat));
+  // Past: the points so far, then the marker; ahead: from the marker on.
+  const split = pts.ms.findIndex((x) => x > now), at = eye && toScreen(eye.lon, eye.lat);
+  const parts = split < 0 ? [[xy, true]] : split === 0 || !at ? [[xy, false]]
+    : [[[...xy.slice(0, split), at], true], [[at, ...xy.slice(split)], false]];
+  for (const [seg, past] of parts) {
+    g.beginPath();
+    seg.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.setLineDash(past ? [] : [6, 6]);
+    g.lineWidth = 4.5;
+    g.strokeStyle = past ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.25)";
+    g.stroke();
+    g.lineWidth = 2;
+    g.strokeStyle = past ? TRACK : TRACK_AHEAD;   // yellow, to stand out from white isobars
+    g.stroke();
+  }
+  g.setLineDash([]);
+  pts.forEach((p, k) => {
+    const h = new Date(pts.ms[k]).getUTCHours();
+    if (h % 6) return;
+    const [x, y, c] = xy[k];
+    if (c < 0.05) return;
+    g.beginPath();
+    g.arc(x, y, h === 0 ? 3.5 : 2.2, 0, 2 * Math.PI);
+    g.fillStyle = pts.ms[k] <= now ? TRACK : TRACK_AHEAD;
+    g.fill();
+  });
+  if (!eye) return;
+  const [x, y, c] = toScreen(eye.lon, eye.lat);
+  if (c < 0.05) return;
+  g.beginPath();
+  g.arc(x, y, 11, 0, 2 * Math.PI);
+  g.fillStyle = "rgba(11,18,24,0.85)";
+  g.fill();
+  g.lineWidth = 2;
+  g.strokeStyle = "#ffffff";
+  g.stroke();
+  g.textAlign = "center";
+  g.fillStyle = "#ff615c";
+  g.font = "800 14px -apple-system, system-ui, sans-serif";
+  g.fillText("L", x, y + 5);
+  g.lineWidth = 3;
+  g.strokeStyle = "rgba(0,0,0,0.75)";
+  g.font = "600 12px -apple-system, system-ui, sans-serif";
+  const label = (text, ty) => { g.strokeText(text, x, ty); g.fillStyle = "#fff"; g.fillText(text, x, ty); };
+  if (sc.track.name) label(sc.track.name, y - 17);
+  g.font = "600 11px ui-monospace, SFMono-Regular, Menlo, monospace";
+  label(`${Math.round(eye.msl)} hPa`, y + 26);
 }
 
 // Latitude circles a scene asks for (`parallels`, e.g. the 60°N circle the polar vortex wind is
@@ -1140,7 +1246,7 @@ function updateContours() {
   const list = cm.role === "fill" ? S.fill : S.contourFrames;
   const br = bracket(list, S.pos);
   if (!br) return;
-  const q = Math.round(br.t * 4) / 4;
+  const q = Math.round(br.t * contourStep()) / contourStep();
   const key = `${S.token}:${br.i}:${br.j}:${q}`;
   if (S.contour?.key === key || contourWant?.key === key) return;
   contourWant = { key, br, q, cm, token: S.token };
@@ -1154,7 +1260,7 @@ async function runContours() {
   const src = (i) => frameSource(`${S.pkg}/${w.cm.role}/${String(i).padStart(3, "0")}.c12.webp`);
   try {
     const r = await ask({ type: "contours", srcA: src(w.br.i), srcB: src(w.br.j), q: w.q, centres: w.cm.meta.layer === "mslp",
-      top: 4095,
+      top: 4095, eye: eyeShift(w.cm.meta, S.entry.item.scenes[S.sceneIndex], w.br.i, w.br.j, w.q),
       meta: { nx: w.cm.meta.nx, ny: w.cm.meta.ny, lo: w.cm.meta.lo, hi: w.cm.meta.hi,
               contour_interval: w.cm.meta.contour_interval } });
     if (w.token === S.token) {
@@ -1247,6 +1353,11 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   const token = ++S.token;
   S.entry = entry;
   S.sceneIndex = sceneIndex;
+  // Times in the text ("06 UTC 16 Oct") are read in the event's year; past events credit ERA5.
+  const year = entry.past ? entry.item.when?.peak || entry.item.when?.start : S.feed?.generated_utc;
+  if (year) Units.setYear(parseTime(year).getUTCFullYear());
+  $("#attribution").textContent = entry.past ? S.pastAttribution || "" : S.feed?.attribution || ATTRIBUTION;
+  $("#disclaimer").textContent = entry.past ? PAST_DISCLAIMER : DISCLAIMER;
   $("#view3d").hidden = OFFLINE || !entry.item.view3d;
   const scene = entry.item.scenes[sceneIndex];
   S.pkg = scene.package;
@@ -1357,8 +1468,8 @@ function updateTime() {
   const run = f.run ? parseTime(f.run) : null;
   const lead = run ? Math.round((valid - run) / 3.6e6) : null;
   const runText = run ? `${String(run.getUTCHours()).padStart(2, "0")} UTC run` : "";
-  const tag = lead === null ? "" : lead <= 0 ? `analysis, ${runText}` : `T+${lead} h, ${runText}`;
-  $("#when").innerHTML = `${esc(Units.formatTime(valid))}<small>${tag}</small>`;
+  const tag = lead === null ? esc(S.meta.fill.model || "") : lead <= 0 ? `analysis, ${runText}` : `T+${lead} h, ${runText}`;
+  $("#when").innerHTML = `${esc(Units.formatTime(valid, { year: !!S.entry.past }))}<small>${tag}</small>`;
   scrub.value = String(S.pos);
 
   // Caption: the latest one whose time has passed.
@@ -1374,7 +1485,7 @@ function captionAt(sc, pos) {
   const t = timeAt(pos);
   const cap = (sc.captions || []).filter((c) => parseTime(c.at) <= t).pop();
   if (!cap || !cap.until || parseTime(cap.until) > t) return cap || null;
-  return pos - posAt(parseTime(cap.at)) < readTime(cap) * S.speed ? cap : null;
+  return (t - parseTime(cap.at)) / 3.6e6 < readTime(cap) * S.speed * HOURS_PER_SEC ? cap : null;
 }
 // Seconds to read a caption: about 15 characters a second, 3 to 8 s.
 function readTime(cap) {
@@ -1385,7 +1496,7 @@ function endHold() {
   const n = S.meta.fill.frames.length;
   const cap = captionAt(S.entry.item.scenes[S.sceneIndex], n - 1);
   if (!cap) return 1.5;
-  return Math.max(1.5, readTime(cap) - (n - 1 - posAt(parseTime(cap.at))) / S.speed);
+  return Math.max(1.5, readTime(cap) - (timeAt(n - 1) - parseTime(cap.at)) / (3.6e6 * HOURS_PER_SEC * S.speed));
 }
 // The frame position of time t (fractional between frames).
 function posAt(t) {
@@ -1396,6 +1507,10 @@ function posAt(t) {
   }
   return fr.length - 1;
 }
+// Playback goes by time, so hourly and 12-hourly frames pass at the same pace: seconds to play the
+// scene, and the position `secs` of playback after pos.
+const playSecs = () => (timeAt(S.meta.fill.frames.length - 1) - timeAt(0)) / (3.6e6 * HOURS_PER_SEC * S.speed);
+const posAfter = (pos, secs) => posAt(new Date(timeAt(pos).getTime() + secs * 3.6e6 * HOURS_PER_SEC * S.speed));
 function timeAt(pos) {
   const fr = S.meta.fill.frames;
   const i = Math.max(0, Math.min(fr.length - 1, Math.floor(pos)));
@@ -1431,7 +1546,10 @@ function frameChanged() {
   updateTime();
   drawField();
   updateContours();
+  if (S.entry.item.scenes[S.sceneIndex].track) drawOverlay();   // the low's marker glides between isobar updates
 }
+// Isobars are worked out for steps of a frame: quarters, or eighths round a tracked low.
+const contourStep = () => (S.entry.item.scenes[S.sceneIndex].track ? 8 : 4);
 
 let last = performance.now();
 function tick(now) {
@@ -1441,7 +1559,7 @@ function tick(now) {
   if (S.flight) stepFlight(now);
   if (S.playing && S.meta) {
     const n = S.meta.fill.frames.length;
-    const next = Math.min(n - 1, S.pos + dt * S.speed);
+    const next = Math.min(n - 1, posAfter(S.pos, dt));
     // Wait for frames that haven't arrived yet rather than skipping them.
     if (S.fill[Math.min(n - 1, Math.ceil(next))]) {
       S.pos = next;
@@ -1625,14 +1743,16 @@ function renderList() {
   const row = (e) => {
     const n = e.item.scenes.length;
     const where = [e.item.where?.label, n > 1 ? `${n} scenes` : ""].filter(Boolean).join(" · ");
-    const tag = e.item.kind === "explainer" ? `<span class="tag">Explainer</span>` : "";
+    const tag = e.past ? `<span class="tag">Past event</span>` : e.item.kind === "explainer" ? `<span class="tag">Explainer</span>` : "";
     return `<button class="entry" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
       ${tag}<span class="t">${headlineHtml(e.item)}</span><span class="w">${esc(where)}</span></button>`;
   };
-  const main = S.entries.filter((e) => !e.requested), req = S.entries.filter((e) => e.requested);
+  const main = S.entries.filter((e) => !e.requested && !e.past), req = S.entries.filter((e) => e.requested);
+  const past = S.entries.filter((e) => e.past);
   const shared = S.shared && !S.entries.includes(S.shared) ? [S.shared] : [];
   el.innerHTML = (shared.length ? `<h2>Shared with you</h2>${shared.map(row).join("")}` : "")
-    + `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : "");
+    + `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : "")
+    + (past.length ? `<h2>Past events</h2>${past.map(row).join("")}` : "");
   for (const b of el.querySelectorAll(".entry")) {
     b.onclick = () => {
       const e = [...shared, ...S.entries].find((x) => x.key === b.dataset.key);
@@ -1694,7 +1814,7 @@ new ResizeObserver(() => fitScenes()).observe(document.querySelector(".scenebar"
 
 function renderDetails() {
   const it = S.entry.item;
-  const fmt = (s) => s ? Units.formatTime(parseTime(s)) : "";
+  const fmt = (s) => s ? Units.formatTime(parseTime(s), { year: !!S.entry.past }) : "";
   const when = it.when ? [it.when.start && `from ${fmt(it.when.start)}`, it.when.peak && `peak ${fmt(it.when.peak)}`].filter(Boolean).join(" · ") : "";
   // Sources: official and news first, each labelled with its kind and website; model evidence after.
   const KIND = { warning: "Warning", official: "Official", observation: "Observed", news: "News",
@@ -1714,6 +1834,7 @@ function renderDetails() {
     ? `<p class="archived">This shared highlight is from an earlier set and may be out of date.${OFFLINE ? "" : ` <a href="#" id="latest">See the latest highlights</a>`}</p>` : "";
   const explainer = it.kind === "explainer"
     ? `<p class="explainer"><b>Explainer:</b> a textbook example of how the atmosphere works, picked from the forecast for what it shows; no impacts are implied.</p>` : "";
+  if (S.entry.past) return renderPastDetails(it, when);
   $("#details").innerHTML = `${archived}${explainer}
     <h2>${esc(headline(it))}</h2>
     <p class="where">${esc(it.where?.label || "")}${when ? `<br>${esc(when)}` : ""}</p>
@@ -1725,6 +1846,41 @@ function renderDetails() {
     ${it.confidence ? `<h3>Confidence</h3><p>${esc(loc(it.confidence))}</p>` : ""}`;
   const latest = $("#latest");
   if (latest) latest.onclick = (e) => { e.preventDefault(); if (S.entries[0]) navigate(S.entries[0], 0); };
+}
+
+// A past event (ERA5): what happened, with numbered references to its sources, kept apart from
+// what the reanalysis shows.
+function renderPastDetails(it, when) {
+  const srcs = it.sources || [];
+  const num = (id) => srcs.findIndex((x) => x.id === id) + 1;
+  const refs = (ids) => (ids || []).map(num).filter((n) => n > 0)
+    .map((n) => `<a class="ref" href="#src-${n}" data-n="${n}">${n}</a>`).join("");
+  const para = (x) => `<p>${esc(loc(x.text))}${refs(x.sources)}</p>`;
+  const vs = (it.era5_vs_observed || []).map((r) => `<tr><th>${esc(loc(r.quantity))}</th><td>${esc(loc(r.era5))}</td>
+    <td>${esc(loc(r.observed))}${refs(r.sources)}</td></tr>`).join("");
+  const list = srcs.map((x, i) => {
+    const u = safeUrl(x.url), a = safeUrl(x.archive_url);
+    const title = u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title);
+    return `<li id="src-${i + 1}">${title}. ${esc([x.publisher, x.year].filter(Boolean).join(", "))}.`
+      + `${a ? ` <a href="${esc(a)}" target="_blank" rel="noopener">Archived copy</a>.` : ""}</li>`;
+  }).join("");
+  $("#details").innerHTML = `<p class="explainer"><b>Past event:</b> the maps show ERA5, a reanalysis: a
+    reconstruction of the weather from the observations of the time, on a grid about 30 km apart. It
+    smooths the strongest winds and the deepest lows, so observed values are given alongside.</p>
+    <h2>${esc(headline(it))}</h2>
+    <p class="where">${esc(it.where?.label || "")}${when ? `<br>${esc(when)}` : ""}</p>
+    ${it.hazards?.length ? `<div class="chips">${it.hazards.map((h) => `<span class="chip">${esc(h.replace(/-/g, " "))}</span>`).join("")}</div>` : ""}
+    <h3>What happened</h3><p>${esc(loc(it.summary))}</p>
+    ${(it.impacts || []).length ? `<h3>Impacts</h3>${it.impacts.map(para).join("")}` : ""}
+    ${(it.history || []).length ? `<h3>The forecast at the time</h3>${it.history.map(para).join("")}` : ""}
+    ${it.why_interesting ? `<h3>Why it's interesting</h3>${Array.isArray(it.why_interesting)
+      ? it.why_interesting.map(para).join("") : `<p>${esc(loc(it.why_interesting))}</p>`}` : ""}
+    ${it.reanalysis ? `<h3>What the reanalysis shows</h3><p>${esc(loc(it.reanalysis))}</p>` : ""}
+    ${vs ? `<table class="vs"><tr><th></th><th>ERA5</th><th>Observed</th></tr>${vs}</table>` : ""}
+    ${list ? `<h3>Sources</h3><ol class="sources">${list}</ol>` : ""}`;
+  for (const a of $("#details").querySelectorAll("a.ref")) {
+    a.onclick = (e) => { e.preventDefault(); $(`#src-${a.dataset.n}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
+  }
 }
 
 function notice(text) {
@@ -1914,6 +2070,7 @@ async function loadFeed() {
   S.entries = [
     ...feed.items.map((item) => ({ key: item.ref || item.id, item })),
     ...(feed.requested || []).map((r) => ({ key: r.item.ref || r.item.id, item: r.item, requested: true })),
+    ...(S.past || []),
   ];
   renderFresh();
   return changed;
@@ -1936,8 +2093,22 @@ function parseHash() {
   };
 }
 
+// Past events (ERA5, built by history.py) are listed only behind the unlisted link #past, or when a
+// shared link opens one, while they are being tried out.
+const wantsPast = () => /^#(past\b|.*\bh=history(\/|%2F))/.test(location.hash);
+async function loadPast() {
+  if (S.past || OFFLINE) return;
+  const index = await fetch(dataUrl("history/index.json"), { cache: "no-cache" })
+    .then((r) => r.ok ? r.json() : { items: [] }).catch(() => ({ items: [] }));
+  S.past = index.items.map((item) => ({ key: item.ref || `history/${item.id}`, item, past: true }));
+  S.pastAttribution = index.attribution;
+  S.entries.push(...S.past);
+}
+
 async function route() {
+  if (wantsPast()) await loadPast();
   const r = parseHash();
+  if (r.key === "past") r.key = S.past?.[0]?.key;
   let entry = r.key ? S.entries.find((e) => e.key === r.key || e.item.id === r.key) : null;
   if (!entry && S.shared?.key === r.key) entry = S.shared;
   if (r.key && !entry) {
@@ -2024,7 +2195,7 @@ function setupSave() {
     e.stopPropagation();
     if (panel.hidden) {
       // Saved files hold every frame as text, about a third bigger than the downloads.
-      const one = itemBytes(S.entry.item), all = S.entries.reduce((n, x) => n + itemBytes(x.item), 0);
+      const one = itemBytes(S.entry.item), all = S.entries.filter((x) => !x.past).reduce((n, x) => n + itemBytes(x.item), 0);
       $("#saveOne").lastElementChild.textContent = one ? `about ${MB(one * 1.2)}` : "";
       $("#saveAll").lastElementChild.textContent = all ? `about ${MB(all * 1.2)}` : "";
       $("#saveAll").hidden = S.entry.archived;
@@ -2034,7 +2205,7 @@ function setupSave() {
   };
   document.addEventListener("click", (e) => { if (!panel.hidden && !e.target.closest(".save")) open(false); });
   $("#saveOne").onclick = () => { track("save-one", "Save: this highlight", true); saveCopy([S.entry]); };
-  $("#saveAll").onclick = () => { track("save-all", "Save: all highlights", true); saveCopy(S.entries); };
+  $("#saveAll").onclick = () => { track("save-all", "Save: all highlights", true); saveCopy(S.entries.filter((x) => !x.past)); };
 }
 
 function toBase64(buf) {
@@ -2147,7 +2318,7 @@ function setupVideo() {
     e.stopPropagation();
     if (panel.hidden) {
       const fr = S.meta?.fill.frames.length || 0;
-      const secs = fr ? Math.round((fr - 1) / S.speed + 1.5) : 0;
+      const secs = fr ? Math.round(playSecs() + 1.5) : 0;
       $("#videoNote").textContent = fr ? `This scene at ${S.speed < 1 ? "½" : S.speed}× speed: about ${secs} seconds.` : "";
       $("#videoStatus").textContent = "";
     }
@@ -2254,7 +2425,7 @@ function drawVideoFrame(g, layout) {
   g.font = `500 12px ${font}`;
   g.fillText(tag, pad, H - layout.bottom + 48);
   g.font = `500 11px ${font}`;
-  g.fillText("Data: ECMWF Open Data, CC BY 4.0 · Weather Explorer · weatherexplorer.neilgordon.me", pad, H - 10);
+  g.fillText(`${S.entry.past ? "Data: ERA5, Copernicus Climate Change Service" : "Data: ECMWF Open Data, CC BY 4.0"} · Weather Explorer · weatherexplorer.neilgordon.me`, pad, H - 10);
 
   // Caption, above the bottom band.
   const cap = captionAt(sc, S.pos);
@@ -2338,10 +2509,11 @@ async function makeVideo(format) {
       const list = cm.role === "fill" ? S.fill : S.contourFrames;
       const br = bracket(list, pos);
       if (!br) return null;
-      const q = Math.round(br.t * 4) / 4, key = `${br.i}:${br.j}:${q}`;
+      const q = Math.round(br.t * contourStep()) / contourStep(), key = `${br.i}:${br.j}:${q}`;
       if (!contours.has(key)) {
         const src = (i) => frameSource(`${S.pkg}/${cm.role}/${String(i).padStart(3, "0")}.c12.webp`);
         const r = await ask({ type: "contours", srcA: src(br.i), srcB: src(br.j), q, centres: cm.meta.layer === "mslp", top: 4095,
+          eye: eyeShift(cm.meta, S.entry.item.scenes[S.sceneIndex], br.i, br.j, q),
           meta: { nx: cm.meta.nx, ny: cm.meta.ny, lo: cm.meta.lo, hi: cm.meta.hi, contour_interval: cm.meta.contour_interval } });
         contours.set(key, { key, segs: r.segs, levels: r.levels, centres: r.centres });
       }
@@ -2349,14 +2521,14 @@ async function makeVideo(format) {
     };
 
     const hold = Math.round(endHold() * VIDEO_FPS);
-    const total = Math.round((n - 1) / S.speed * VIDEO_FPS) + 1 + hold;
+    const total = Math.round(playSecs() * VIDEO_FPS) + 1 + hold;
     S.tracked = [];
     parts = [];
     S.pos = 0;
     for (let k = 0; k < 40; k++) stepParticles(1 / VIDEO_FPS);  // let the wind streaks build up first
     for (let f = 0; f < total; f++) {
       if (failure) throw failure;
-      S.pos = Math.min(n - 1, f * S.speed / VIDEO_FPS);
+      S.pos = Math.min(n - 1, posAfter(0, f / VIDEO_FPS));
       S.contour = await contourAt(S.pos);
       drawField();
       drawOverlay();
