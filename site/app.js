@@ -1363,16 +1363,38 @@ function updateTime() {
 
   // Caption: the latest one whose time has passed.
   const sc = S.entry.item.scenes[S.sceneIndex];
-  const t = timeAt(S.pos);
-  const cap = captionAt(sc, t);
+  const cap = captionAt(sc, S.pos);
   const el = $("#caption");
   el.hidden = !cap;
   el.textContent = cap ? loc(cap.text) : "";
 }
-// The caption on screen at time t: the latest one whose time has passed, unless its `until` has.
-function captionAt(sc, t) {
+// The caption on screen at frame position pos: the latest one whose time has passed, unless its
+// `until` has. Either way it stays up long enough to read at the current speed.
+function captionAt(sc, pos) {
+  const t = timeAt(pos);
   const cap = (sc.captions || []).filter((c) => parseTime(c.at) <= t).pop();
-  return cap && !(cap.until && parseTime(cap.until) <= t) ? cap : null;
+  if (!cap || !cap.until || parseTime(cap.until) > t) return cap || null;
+  return pos - posAt(parseTime(cap.at)) < readTime(cap) * S.speed ? cap : null;
+}
+// Seconds to read a caption: about 15 characters a second, 3 to 8 s.
+function readTime(cap) {
+  return Math.max(3, Math.min(8, loc(cap.text).length / 15));
+}
+// Seconds to hold the last frame: 1.5, or longer so a caption that appeared near the end can be read.
+function endHold() {
+  const n = S.meta.fill.frames.length;
+  const cap = captionAt(S.entry.item.scenes[S.sceneIndex], n - 1);
+  if (!cap) return 1.5;
+  return Math.max(1.5, readTime(cap) - (n - 1 - posAt(parseTime(cap.at))) / S.speed);
+}
+// The frame position of time t (fractional between frames).
+function posAt(t) {
+  const fr = S.meta.fill.frames, ms = t.getTime();
+  for (let i = 0; i < fr.length - 1; i++) {
+    const a = parseTime(fr[i].valid_time).getTime(), b = parseTime(fr[i + 1].valid_time).getTime();
+    if (ms < b) return i + Math.max(0, (ms - a) / (b - a));
+  }
+  return fr.length - 1;
 }
 function timeAt(pos) {
   const fr = S.meta.fill.frames;
@@ -1431,7 +1453,7 @@ function tick(now) {
     // Hold the last frame for a moment, then loop.
     if (S.pos >= n - 1) {
       S.held = (S.held || 0) + dt;
-      if (S.held > 1.5) { S.held = 0; S.pos = 0; frameChanged(); }
+      if (S.held > endHold()) { S.held = 0; S.pos = 0; frameChanged(); }
     }
   }
   stepParticles(dt);
@@ -2235,7 +2257,7 @@ function drawVideoFrame(g, layout) {
   g.fillText("Data: ECMWF Open Data, CC BY 4.0 · Weather Explorer · weatherexplorer.neilgordon.me", pad, H - 10);
 
   // Caption, above the bottom band.
-  const cap = captionAt(sc, timeAt(S.pos));
+  const cap = captionAt(sc, S.pos);
   if (cap) {
     g.font = `500 15px ${font}`;
     const lines = wrapText(g, loc(cap.text), W - 80, 2);
@@ -2326,7 +2348,7 @@ async function makeVideo(format) {
       return contours.get(key);
     };
 
-    const hold = Math.round(1.5 * VIDEO_FPS);
+    const hold = Math.round(endHold() * VIDEO_FPS);
     const total = Math.round((n - 1) / S.speed * VIDEO_FPS) + 1 + hold;
     S.tracked = [];
     parts = [];
