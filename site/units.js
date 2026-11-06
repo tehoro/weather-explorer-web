@@ -100,7 +100,7 @@ function format(v, u, withUnit = true) {
 
 /** Short summary for the units button, e.g. "°C · km/h · mm · UTC". */
 function summary() {
-  return [unit("°C"), unit("m/s"), unit("mm"), zoneName(new Date())].join(" · ");
+  return [unit("°C"), unit("m/s"), unit("mm"), zoneName(event?.date || new Date())].join(" · ");
 }
 
 // ---- Measurements inside text ("60 m/s", "60–80 mph", "250 mm", "35 °C") -----------------
@@ -168,8 +168,21 @@ function localize(text) {
 }
 
 // ---- Times: the browser's own time zone (the default) or UTC ------------------------------
+// While a past event is shown, the choice is instead the event's own time zone (the default) or
+// UTC, kept separately ("pasttime"): the viewer's own clock means little for London in 1987.
 
 const local = () => choice("time") !== "utc";
+let event = null;          // {zone, date} while a past event is shown
+/** A past event's IANA time zone and a moment in it, or null to go back to the viewer's own. */
+function setEventZone(zone, date) {
+  try { event = zone ? (new Intl.DateTimeFormat("en", { timeZone: zone }), { zone, date }) : null; } catch { event = { zone: "UTC", date }; }
+}
+/** The time zone times are shown in (IANA), or null for UTC. */
+function shownZone() {
+  if (event) return choice("pasttime") === "utc" ? null : event.zone;
+  return local() ? ZONE : null;
+}
+const eventZone = () => event?.zone ?? null;
 
 // Official abbreviations where the browser's English data lacks them; otherwise "UTC+8" etc.
 const ABBR = {
@@ -182,12 +195,13 @@ const ENGLISH = ["en-GB", "en-US", "en-NZ", "en-AU", "en-CA", "en-IE", "en-IN", 
 const abbrCache = new Map();
 
 /** The time zone's name at a moment, e.g. "UTC", "NZDT", "CEST", "EDT" or "UTC+8". */
-function zoneName(date, inLocal = local()) {
-  if (!inLocal) return "UTC";
-  const parts = (loc) => new Intl.DateTimeFormat(loc, { timeZone: ZONE, timeZoneName: "short" })
+function zoneName(date, zone = shownZone()) {
+  if (!zone) return "UTC";
+  const parts = (loc) => new Intl.DateTimeFormat(loc, { timeZone: zone, timeZoneName: "short" })
     .formatToParts(date).find((p) => p.type === "timeZoneName")?.value || "";
   const offset = parts("en-GB").replace(/^GMT/, "UTC");          // "UTC+13", or "UTC" for no offset
-  if (abbrCache.has(offset)) return abbrCache.get(offset);
+  const key = `${zone} ${offset}`;
+  if (abbrCache.has(key)) return abbrCache.get(key);
   let name = null;
   for (const loc of [...(navigator.languages || []), ...ENGLISH]) {
     try {
@@ -195,16 +209,16 @@ function zoneName(date, inLocal = local()) {
       if (n && !/^(GMT|UTC)[+-−]/.test(n) && /^[A-Z]{2,5}$/.test(n)) { name = n; break; }
     } catch { /* not a usable locale */ }
   }
-  if (!name && ABBR[ZONE]) name = ABBR[ZONE];
+  if (!name && ABBR[zone]) name = ABBR[zone];
   name ||= offset === "UTC" ? "GMT" : offset;
-  abbrCache.set(offset, name);
+  abbrCache.set(key, name);
   return name;
 }
 
 /** A moment for display, e.g. "Mon 26 Oct, 12:00 UTC" or "Tue 27 Oct, 01:00 NZDT"; `year` adds the
  *  year (videos, which outlive the week they show). */
 function formatTime(date, { weekday = true, day = true, year = false } = {}) {
-  const opts = { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: local() ? ZONE : "UTC" };
+  const opts = { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: shownZone() || "UTC" };
   if (weekday) opts.weekday = "short";
   if (day) { opts.day = "numeric"; opts.month = "short"; }
   if (year) opts.year = "numeric";
@@ -220,14 +234,15 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const TEXT_TIME = /\b(\d{1,2})(?::(\d{2}))?(?:\s?[-–]\s?(\d{1,2})(?::(\d{2}))?)?\s?UTC,?\s(\d{1,2})\s(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/g;
 
 function localizeTimes(text) {
-  if (!local() || !text) return text;
+  const zone = shownZone();
+  if (!zone || !text) return text;
   return text.replace(TEXT_TIME, (m, h1, m1, h2, m2, d, mon, at, all) => {
     if (/(HRES|ENS|AIFS|IFS|run)\s*\(?\s*$/i.test(all.slice(Math.max(0, at - 12), at))) return m;
     if (/^\s*run\b/i.test(all.slice(at + m.length))) return m;     // "00 UTC 22 Oct run"
     const when = (h, mi) => new Date(Date.UTC(year, MONTHS.indexOf(mon), +d, +h, +(mi || 0)));
     const a = when(h1, m1);
-    const hm = (t) => new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: ZONE }).format(t);
-    const dm = (t) => new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", timeZone: ZONE }).format(t);
+    const hm = (t) => new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: zone }).format(t);
+    const dm = (t) => new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", timeZone: zone }).format(t);
     if (h2 === undefined) return `${hm(a)} ${zoneName(a)} ${dm(a)}`;
     let b = when(h2, m2);
     if (b < a) b = new Date(b.getTime() + 864e5);                 // "21-03 UTC" runs past midnight
@@ -237,5 +252,5 @@ function localizeTimes(text) {
 }
 
 return { DEVICE, CHOICES, choice, setChoice, unit, convert, format, summary, localize,
-         zoneName, formatTime, setYear };
+         zoneName, formatTime, setYear, setEventZone, eventZone, ZONE };
 })();

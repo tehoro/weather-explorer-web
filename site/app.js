@@ -1356,6 +1356,9 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   // Times in the text ("06 UTC 16 Oct") are read in the event's year; past events credit ERA5.
   const year = entry.past ? entry.item.when?.peak || entry.item.when?.start : S.feed?.generated_utc;
   if (year) Units.setYear(parseTime(year).getUTCFullYear());
+  // A past event's times are in its own time zone (or UTC), not the viewer's.
+  Units.setEventZone(entry.past ? entry.item.where?.tz || "UTC" : null, entry.past && year ? parseTime(year) : null);
+  renderTimeZones();
   $("#attribution").textContent = entry.past ? S.pastAttribution || "" : S.feed?.attribution || ATTRIBUTION;
   $("#disclaimer").textContent = entry.past ? PAST_DISCLAIMER : DISCLAIMER;
   $("#view3d").hidden = OFFLINE || !entry.item.view3d;
@@ -1981,14 +1984,13 @@ function setupUnits() {
       unitsChanged();
     };
   }
-  const tz = $("#timeZone");
-  tz.innerHTML = `<option value="local">${esc(Units.zoneName(new Date(), true))}</option><option value="utc">UTC</option>`;
-  tz.value = Units.choice("time") === "utc" ? "utc" : "local";
-  tz.onchange = () => {
-    Units.setChoice("time", tz.value);
+  $("#timeZone").onchange = (e) => {
+    const past = !!Units.eventZone();
+    Units.setChoice(past ? "pasttime" : "time", e.target.value);
     btn.innerHTML = GEAR + esc(Units.summary());
     unitsChanged();
   };
+  renderTimeZones();
   btn.innerHTML = GEAR + esc(Units.summary());
   btn.onclick = (e) => {
     e.stopPropagation();
@@ -1999,6 +2001,20 @@ function setupUnits() {
     if (!panel.hidden && !e.target.closest(".units")) { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); }
   });
 }
+// The time zone menu: the viewer's own zone or UTC; for a past event, the event's zone or UTC.
+function renderTimeZones() {
+  const tz = $("#timeZone"), ez = Units.eventZone();
+  if (ez) {
+    const name = Units.zoneName(parseTime(S.entry.item.when?.peak || S.entry.item.when?.start), ez);
+    tz.innerHTML = `<option value="event">Local to the event (${esc(name)})</option><option value="utc">UTC</option>`;
+    tz.value = Units.choice("pasttime") === "utc" ? "utc" : "event";
+  } else {
+    tz.innerHTML = `<option value="local">${esc(Units.zoneName(new Date(), Units.ZONE))}</option><option value="utc">UTC</option>`;
+    tz.value = Units.choice("time") === "utc" ? "utc" : "local";
+  }
+  $("#unitsBtn").innerHTML = GEAR + esc(Units.summary());
+}
+
 // Map style: the layers button on the map opens dark / light / satellite / relief.
 function setupLayers() {
   const btn = $("#layersBtn"), panel = $("#layersPanel");
