@@ -1851,8 +1851,8 @@ function renderDetails() {
   if (latest) latest.onclick = (e) => { e.preventDefault(); if (S.entries[0]) navigate(S.entries[0], 0); };
 }
 
-// A past event (ERA5): what happened, with numbered references to its sources, kept apart from
-// what the reanalysis shows.
+// A past event (ERA5): what happened and the weather first, then what the reanalysis shows, the
+// impacts in brief and the forecast at the time, with numbered references to its sources.
 function renderPastDetails(it, when) {
   const srcs = it.sources || [];
   const num = (id) => srcs.findIndex((x) => x.id === id) + 1;
@@ -1874,12 +1874,12 @@ function renderPastDetails(it, when) {
     <p class="where">${esc(it.where?.label || "")}${when ? `<br>${esc(when)}` : ""}</p>
     ${it.hazards?.length ? `<div class="chips">${it.hazards.map((h) => `<span class="chip">${esc(h.replace(/-/g, " "))}</span>`).join("")}</div>` : ""}
     <h3>What happened</h3><p>${esc(loc(it.summary))}</p>
-    ${(it.impacts || []).length ? `<h3>Impacts</h3>${it.impacts.map(para).join("")}` : ""}
-    ${(it.history || []).length ? `<h3>The forecast at the time</h3>${it.history.map(para).join("")}` : ""}
-    ${it.why_interesting ? `<h3>Why it's interesting</h3>${Array.isArray(it.why_interesting)
+    ${it.why_interesting ? `<h3>The weather</h3>${Array.isArray(it.why_interesting)
       ? it.why_interesting.map(para).join("") : `<p>${esc(loc(it.why_interesting))}</p>`}` : ""}
     ${it.reanalysis ? `<h3>What the reanalysis shows</h3><p>${esc(loc(it.reanalysis))}</p>` : ""}
     ${vs ? `<table class="vs"><tr><th></th><th>ERA5</th><th>Observed</th></tr>${vs}</table>` : ""}
+    ${(it.impacts || []).length ? `<h3>Impacts</h3>${it.impacts.map(para).join("")}` : ""}
+    ${(it.history || []).length ? `<h3>The forecast at the time</h3>${it.history.map(para).join("")}` : ""}
     ${list ? `<h3>Sources</h3><ol class="sources">${list}</ol>` : ""}`;
   for (const a of $("#details").querySelectorAll("a.ref")) {
     a.onclick = (e) => { e.preventDefault(); $(`#src-${a.dataset.n}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
