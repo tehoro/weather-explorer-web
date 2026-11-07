@@ -197,17 +197,28 @@ const abbrCache = new Map();
 /** The time zone's name at a moment, e.g. "UTC", "NZDT", "CEST", "EDT" or "UTC+8". */
 function zoneName(date, zone = shownZone()) {
   if (!zone) return "UTC";
-  const parts = (loc) => new Intl.DateTimeFormat(loc, { timeZone: zone, timeZoneName: "short" })
-    .formatToParts(date).find((p) => p.type === "timeZoneName")?.value || "";
+  const parts = (loc, d = date) => new Intl.DateTimeFormat(loc, { timeZone: zone, timeZoneName: "short" })
+    .formatToParts(d).find((p) => p.type === "timeZoneName")?.value || "";
   const offset = parts("en-GB").replace(/^GMT/, "UTC");          // "UTC+13", or "UTC" for no offset
   const key = `${zone} ${offset}`;
   if (abbrCache.has(key)) return abbrCache.get(key);
-  let name = null;
-  for (const loc of [...(navigator.languages || []), ...ENGLISH]) {
-    try {
-      const n = parts(loc);
-      if (n && !/^(GMT|UTC)[+-−]/.test(n) && /^[A-Z]{2,5}$/.test(n)) { name = n; break; }
-    } catch { /* not a usable locale */ }
+  const named = (d) => {
+    for (const loc of [...(navigator.languages || []), ...ENGLISH]) {
+      try {
+        const n = parts(loc, d);
+        if (n && !/^(GMT|UTC)[+-−]/.test(n) && /^[A-Z]{2,5}$/.test(n)) return n;
+      } catch { /* not a usable locale */ }
+    }
+    return null;
+  };
+  let name = named(date);
+  // Browsers often have no name for a zone in past decades (Wellington in 1968 is "GMT+12"): use
+  // this year's name for the same offset there (NZST), from mid-January or mid-July.
+  if (!name) {
+    const y = new Date().getUTCFullYear();
+    const now = [new Date(Date.UTC(y, 0, 15)), new Date(Date.UTC(y, 6, 15))]
+      .find((d) => parts("en-GB", d).replace(/^GMT/, "UTC") === offset);
+    if (now) name = named(now);
   }
   if (!name && ABBR[zone]) name = ABBR[zone];
   name ||= offset === "UTC" ? "GMT" : offset;
