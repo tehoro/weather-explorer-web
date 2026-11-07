@@ -41,7 +41,6 @@
     font-size: 12px; text-shadow: 0 1px 3px #000, 0 0 8px #000; }
   .label.place::after { content: ""; display: block; width: 1px; height: 18px; margin: 2px auto 0; background: rgba(255,255,255,0.6); }
   .label.eye { font-weight: 650; color: #ffd27a; }
-  .label.level { transform: translate(0, -120%); font-size: 11.5px; font-weight: 600; }
   #loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); text-align: center; }
   #loading button { display: block; margin: 12px auto 0; }
   #title .bar { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -105,7 +104,7 @@
     <p><b>Clouds</b> are drawn where relative humidity is high (above the threshold you set). They're a stand-in for
     cloud, not the model's cloud itself, and Open Data has only 12 pressure levels between 1000 and 100 hPa.</p>
     <p><b>Warm core</b> shows air warmer than the average across the box at the same height, the signature of a tropical cyclone.</p>
-    <p><b>Inflow</b> (teal) traces 925 hPa winds spiralling in near the sea; <b>outflow</b> (amber) traces 200 hPa winds fanning out at the top. Each streak is a puff of air: the bright head is where it is now, the tail where it has been, and brighter means faster. A faint frame round the box marks each level.
+    <p><b>Inflow</b> (teal) traces 925 hPa winds spiralling in near the sea; <b>outflow</b> (amber) traces 200 hPa winds fanning out at the top. Each streak is a puff of air: the bright head is where it is now, the tail where it has been, and brighter means faster. A faint frame round the box marks each level, and the layer list gives its height.
     The sea is coloured by 10 m wind speed, with isobars every 4 hPa.</p>
     <p>Heights are exaggerated (the slider says by how much): the real atmosphere here is about 16 km deep and the box about 3000 km wide.</p>
   </details>
@@ -114,8 +113,8 @@
   <h2>Layers</h2>
   <label><input type="checkbox" id="L-cloud" checked><span class="sw" style="background:#e9eef5"></span>Clouds</label>
   <label><input type="checkbox" id="L-warm"><span class="sw" style="background:#ff8a3d"></span>Warm core</label>
-  <label><input type="checkbox" id="L-in" checked><span class="sw" style="background:#4fe3d0"></span>Inflow (925 hPa)</label>
-  <label><input type="checkbox" id="L-out" checked><span class="sw" style="background:#ffb547"></span>Outflow (200 hPa)</label>
+  <label><input type="checkbox" id="L-in" checked><span class="sw" style="background:#4fe3d0"></span>Inflow (925 hPa, about 0.8 km)</label>
+  <label><input type="checkbox" id="L-out" checked><span class="sw" style="background:#ffb547"></span>Outflow (200 hPa, about 12 km)</label>
   <label><input type="checkbox" id="L-rain" checked><span class="sw" style="background:#8fb8ff"></span>Rain</label>
   <label><input type="checkbox" id="L-iso" checked><span class="sw" style="background:#cfd8e3"></span>Isobars</label>
   <label><input type="checkbox" id="L-follow"><span class="sw" style="background:#ffd27a"></span>Follow the eye</label>

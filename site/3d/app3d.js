@@ -513,19 +513,15 @@ function addLabel(text, cls, getPos, show) {
   return el;
 }
 for (const p of meta.places || []) addLabel(p.label, "place", () => new THREE.Vector3(toX(p.lon), 0, toZ(p.lat)));
-const eyeLabel = addLabel("", "eye", () => { const e = eyeNow(); return new THREE.Vector3(toX(e.lon), toY(TOP) + 0.3, toZ(e.lat)); });
-// A faint frame round the box at each flow's height, labelled, so it's clear where each one sits.
-const levelFrames = [[inflow, 0x4fe3d0, "Inflow · 925 hPa, about 0.8 km up"], [outflow, 0xffb547, "Outflow · 200 hPa, about 12 km up"]].map(([flow, color, text]) => {
+// The central pressure sits on the sea at the eye, where it is measured.
+const eyeLabel = addLabel("", "eye", () => { const e = eyeNow(); return new THREE.Vector3(toX(e.lon), 0.05, toZ(e.lat)); });
+// A faint frame round the box at each flow's height; the layer panel says which height is which
+// (labels on the frames looked as if they floated in mid-air).
+const levelFrames = [[inflow, 0x4fe3d0], [outflow, 0xffb547]].map(([flow, color]) => {
   const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(
     [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3((a * BW) / 2, 0, (b * BD) / 2))),
     new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55 }));
   scene.add(ring);
-  const farCorner = () => {   // the back corner, which is nearly always in view
-    const c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => new THREE.Vector3((a * BW) / 2, toY(flow.km), (b * BD) / 2));
-    return c.reduce((m, v) => (v.distanceTo(camera.position) > m.distanceTo(camera.position) ? v : m));
-  };
-  const el = addLabel(text, "level", farCorner, () => flow.obj.visible);
-  el.style.color = `#${color.toString(16).padStart(6, "0")}`;
   return { flow, ring };
 });
 // N/E/S/W on the box edges, and a compass dial that turns as you orbit (click it to put north up).
