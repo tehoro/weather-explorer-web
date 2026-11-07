@@ -1370,6 +1370,8 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   S.pkg = scene.package;
   S.meta = null;
   S.fill = []; S.uv = []; S.contourFrames = []; S.contour = null; S.tracked = []; parts = [];
+  S.failed = new Set();   // frames that would not load after retries: playback skips them
+  $("#readout").hidden = true;   // a reading belongs to the scene it was taken in
   S.pos = 0;
   worker.postMessage({ type: "reset" });
   renderList();
@@ -1410,13 +1412,19 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   const vm = vectorMeta();
   const cm = contourMeta();
   const jobs = [];
+  // A frame that fails (a dropped connection) is tried again twice, after a pause.
+  const fetchFrame = async (msg) => {
+    for (let k = 0; ; k++) {
+      try { return await ask(msg); } catch (e) { if (k >= 2) throw e; await new Promise((r) => setTimeout(r, 800 * (k + 1))); }
+    }
+  };
   for (let i = 0; i < n; i++) {
     jobs.push(async () => {
-      const r = await ask({ type: "frame", src: frameSrc("fill", i), channels: 1 });
+      const r = await fetchFrame({ type: "frame", src: frameSrc("fill", i), channels: 1 });
       if (token !== S.token) return;
       S.fill[i] = { data: r.data, tex: frameTexture(r.data, meta.fill.nx, meta.fill.ny, !!meta.fill.categories) };
       if (vm) {
-        const u = await ask({ type: "frame", src: frameSrc(vm.role, i, true), channels: 2 });
+        const u = await fetchFrame({ type: "frame", src: frameSrc(vm.role, i, true), channels: 2 });
         if (token !== S.token) return;
         S.uv[i] = u.data;
       }
@@ -1429,8 +1437,8 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   let next = 1;
   const run = async () => {
     while (next < order.length && token === S.token) {
-      const job = jobs[order[next++]];
-      try { await job(); } catch (e) { console.warn(e); }
+      const i = order[next++];
+      try { await jobs[i](); } catch (e) { S.failed.add(i); console.warn(e); }
     }
   };
   await jobs[first]().catch((e) => { status("This scene could not be loaded."); console.warn(e); });
@@ -1568,7 +1576,8 @@ function tick(now) {
     const n = S.meta.fill.frames.length;
     const next = Math.min(n - 1, posAfter(S.pos, dt));
     // Wait for frames that haven't arrived yet rather than skipping them.
-    if (S.fill[Math.min(n - 1, Math.ceil(next))]) {
+    const want = Math.min(n - 1, Math.ceil(next));
+    if (S.fill[want] || S.failed?.has(want)) {   // a frame that could not be loaded is skipped
       S.pos = next;
       frameChanged();
       status(null);

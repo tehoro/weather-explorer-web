@@ -13,7 +13,8 @@ async function decode(src, channels) {
   if (frames.has(key)) return frames.get(key);
   let blob;
   if (typeof src === "string") {
-    const r = await fetch(src);
+    // A request that hangs is given up after 20 s, so the page can try it again.
+    const r = await fetch(src, { signal: AbortSignal.timeout(20000) });
     if (!r.ok) throw new Error(`${r.status} ${src}`);
     blob = await r.blob();
   } else {
