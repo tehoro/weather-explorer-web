@@ -901,10 +901,11 @@ function frameTexture(data, nx, ny, nearest = false) {
   return t;
 }
 
-// A scene's tracked low (scene.track, from the backend's tracks.py): its centre and pressure at
-// time t, interpolated between the track's points; null outside the track.
-function trackAt(sc, t) {
-  const pts = sc.track?.points;
+// A scene's tracked lows (scene.tracks, or the one scene.track, from the backend's tracks.py),
+// and one track's centre and pressure at time t, interpolated between its points; null outside it.
+const tracksOf = (sc) => sc?.tracks || (sc?.track ? [sc.track] : []);
+function trackAt(tr, t) {
+  const pts = tr?.points;
   if (!pts?.length) return null;
   pts.ms ||= pts.map((p) => parseTime(p.t).getTime());
   const ms = t.getTime(), k = pts.ms.findIndex((x, n) => n < pts.length - 1 && ms >= x && ms <= pts.ms[n + 1]);
@@ -918,11 +919,14 @@ function trackAt(sc, t) {
 // fading out in one place and in at the next. Grid fractions: the centre, the radius the shift
 // fades out over, and each frame's offset; null when there is nothing to move.
 const EYE_KM = 700;
+// With two storms in a scene, the one moved is the deeper of those present at the moment.
 function eyeShift(m, sc, i, j, t) {
-  if (!sc?.track || m.projection === "polar" || i === j) return null;
+  if (!tracksOf(sc).length || m.projection === "polar" || i === j) return null;
   const ti = parseTime(m.frames[i].valid_time), tj = parseTime(m.frames[j].valid_time);
-  const c = trackAt(sc, new Date(ti.getTime() + (tj - ti) * t)), a = trackAt(sc, ti), b = trackAt(sc, tj);
-  if (!c || !a || !b) return null;
+  const now = new Date(ti.getTime() + (tj - ti) * t);
+  const [c, a, b] = tracksOf(sc).map((tr) => [trackAt(tr, now), trackAt(tr, ti), trackAt(tr, tj)])
+    .filter(([c, a, b]) => c && a && b).sort((x, y) => x[0].msl - y[0].msl)[0] || [];
+  if (!c) return null;
   const [cx, cy] = gridFrac(m, c.lon, c.lat), [ax, ay] = gridFrac(m, a.lon, a.lat), [bx, by] = gridFrac(m, b.lon, b.lat);
   const east = m.box.east <= m.box.west ? m.box.east + 360 : m.box.east;
   const rx = EYE_KM / (111.32 * Math.cos(c.lat * DEG)) / (east - m.box.west);
@@ -1032,8 +1036,8 @@ function drawOverlay() {
   const c = S.contour;
   const placed = [];
   const sc = S.entry.item.scenes[S.sceneIndex];
-  const eye = trackAt(sc, timeAt(S.pos));
-  const eyeXY = eye && toScreen(eye.lon, eye.lat);
+  const eyes = tracksOf(sc).map((tr) => ({ tr, eye: trackAt(tr, timeAt(S.pos)) }));
+  const eyeXYs = eyes.filter((e) => e.eye).map((e) => toScreen(e.eye.lon, e.eye.lat));
   if (cm && c) {
     const segs = c.segs;
     g.beginPath();
@@ -1051,7 +1055,7 @@ function drawOverlay() {
     for (const e of c.centres) {
       const [x, y] = gridToScreen(cm.meta, e.x, e.y);
       if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
-      if (!e.high && eyeXY && Math.hypot(x - eyeXY[0], y - eyeXY[1]) < 60) continue;   // the tracked low has its own marker
+      if (!e.high && eyeXYs.some(([ex, ey]) => Math.hypot(x - ex, y - ey) < 60)) continue;   // a tracked low has its own marker
       placed.push([x, y]);
       g.textAlign = "center";
       g.shadowColor = "rgba(0,0,0,0.85)";
@@ -1124,7 +1128,7 @@ function drawOverlay() {
   }
 
   drawParallels(g, sc);
-  drawTrack(g, sc, eye);
+  for (const { tr, eye } of eyes) drawTrack(g, tr, eye);
 
   // Focus places.
   g.font = "600 12px -apple-system, system-ui, sans-serif";
@@ -1150,8 +1154,8 @@ function drawOverlay() {
 // The tracked low's path (scene.track): solid where it has been, faint ahead, a dot every 6 h
 // (larger at 00 UTC); and a marker gliding along it with the storm's name and central pressure.
 const TRACK = "rgba(255,214,102,1)", TRACK_AHEAD = "rgba(255,214,102,0.7)";
-function drawTrack(g, sc, eye) {
-  const pts = sc.track?.points;
+function drawTrack(g, tr, eye) {
+  const pts = tr?.points;
   if (!pts?.length) return;
   const now = timeAt(S.pos).getTime();
   pts.ms ||= pts.map((p) => parseTime(p.t).getTime());
@@ -1200,7 +1204,7 @@ function drawTrack(g, sc, eye) {
   g.strokeStyle = "rgba(0,0,0,0.75)";
   g.font = "600 12px -apple-system, system-ui, sans-serif";
   const label = (text, ty) => { g.strokeText(text, x, ty); g.fillStyle = "#fff"; g.fillText(text, x, ty); };
-  if (sc.track.name) label(sc.track.name, y - 17);
+  if (tr.name) label(tr.name, y - 17);
   g.font = "600 11px ui-monospace, SFMono-Regular, Menlo, monospace";
   label(`${Math.round(eye.msl)} hPa`, y + 26);
 }
@@ -1549,10 +1553,10 @@ function frameChanged() {
   updateTime();
   drawField();
   updateContours();
-  if (S.entry.item.scenes[S.sceneIndex].track) drawOverlay();   // the low's marker glides between isobar updates
+  if (tracksOf(S.entry.item.scenes[S.sceneIndex]).length) drawOverlay();   // the lows' markers glide between isobar updates
 }
 // Isobars are worked out for steps of a frame: quarters, or eighths round a tracked low.
-const contourStep = () => (S.entry.item.scenes[S.sceneIndex].track ? 8 : 4);
+const contourStep = () => (tracksOf(S.entry.item.scenes[S.sceneIndex]).length ? 8 : 4);
 
 let last = performance.now();
 function tick(now) {
