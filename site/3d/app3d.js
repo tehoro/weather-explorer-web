@@ -19,7 +19,7 @@ const back = () => location.assign(`../${params.get("back") ? `#${params.get("ba
 $("back").onclick = back;
 let meta, buf;
 try {
-  if (!/^3d\/[\w.-]+$/.test(folder)) throw new Error("no 3D view named");
+  if (!/^(history\/)?3d\/[\w.-]+$/.test(folder)) throw new Error("no 3D view named");   // history/3d: past events (ERA5)
   const base = `../data/${folder}`;
   meta = await (await fetch(`${base}/meta.json`)).json();
   const r = await fetch(`${base}/bundle.bin.gz`);
@@ -563,10 +563,13 @@ function placeLabels() {
 // ------------------------------------------------------------------------------------------
 // UI
 // ------------------------------------------------------------------------------------------
-const run = new Date(meta.run.replace("Z", ":00Z"));
+// A forecast bundle names its run; a past event's (ERA5, from history.py) has none.
+const run = meta.run ? new Date(meta.run.replace("Z", ":00Z")) : null;
 const fmt = (d, opts) => d.toLocaleString("en-GB", { timeZone: "UTC", ...opts });
 $("h1").textContent = meta.title;
-$("sub").textContent = `${meta.label} · IFS HRES run ${fmt(run, { hour: "2-digit", minute: "2-digit" })} UTC ${fmt(run, { day: "numeric", month: "short" })}`;
+$("sub").textContent = run
+  ? `${meta.label} · IFS HRES run ${fmt(run, { hour: "2-digit", minute: "2-digit" })} UTC ${fmt(run, { day: "numeric", month: "short" })}`
+  : `${meta.label} · ${meta.source || "ERA5 reanalysis"}, smoother and weaker than the real storm`;
 $("credit").textContent = `${meta.attribution} Clouds inferred from humidity; heights exaggerated.`;
 document.title = `${meta.title} · 3D`;
 
@@ -604,9 +607,9 @@ addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
 });
 
-const timeText = (t, year = false) =>
+const timeText = (t, year = !run) =>
   `${fmt(t, { weekday: "short", day: "numeric", month: "short", ...(year && { year: "numeric" }) })}, ${fmt(t, { hour: "2-digit", minute: "2-digit" })} UTC`;
-const leadText = (t) => `+${Math.round((t - run) / 3.6e6)} h · lowest ${eyeNow().hpa.toFixed(0)} hPa`;
+const leadText = (t) => `${run ? `+${Math.round((t - run) / 3.6e6)} h · ` : ""}lowest ${eyeNow().hpa.toFixed(0)} hPa`;
 const timeNow = () => new Date(times[fa].getTime() + ff * (times[fa + 1] - times[fa]));
 
 function updateTime() {
@@ -831,7 +834,7 @@ if ("VideoEncoder" in window) {
   $("video").onclick = (e) => {
     e.stopPropagation();
     if (panel.hidden) {
-      $("videoNote").textContent = `The whole forecast (${Math.round(((NF - 1) * 3) / HOURS_PER_SEC + 1.5)} s) from this viewpoint, with the layers and settings you've chosen.`;
+      $("videoNote").textContent = `The whole ${run ? "forecast" : "event"} (${Math.round(((NF - 1) * 3) / HOURS_PER_SEC + 1.5)} s) from this viewpoint, with the layers and settings you've chosen.`;
       $("videoStatus").textContent = "";
     }
     panel.hidden = !panel.hidden;

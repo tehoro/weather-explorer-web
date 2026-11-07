@@ -201,10 +201,16 @@ def steps_for(item: dict, run: datetime) -> list[int]:
     return list(range(s0, s1 + 1, 3))
 
 
-def build_one(item: dict, run: datetime, out: Path) -> None:
+def box_for(item: dict) -> tuple[list[float], float, dict]:
+    """The item's 3D box (its first scene's), the grid spacing and the grid's lons and lats."""
     west, south, east, north = (item.get("scenes") or [{}])[0].get("bbox") or item["where"]["bbox"]
     res = 0.25 if (east - west) <= 40 and (north - south) <= 30 else 0.5
-    box = {"lons": np.arange(west, east + 1e-6, res), "lats": np.arange(south, north + 1e-6, res)}
+    return [west, south, east, north], res, {"lons": np.arange(west, east + 1e-6, res),
+                                             "lats": np.arange(south, north + 1e-6, res)}
+
+
+def build_one(item: dict, run: datetime, out: Path) -> None:
+    (west, south, east, north), res, box = box_for(item)
     steps = steps_for(item, run)
     print(f"[3d] {item['id']}: box {[west, south, east, north]} at {res} deg, run {run:%d %HZ}, "
           f"steps {steps[0]}-{steps[-1]} h", flush=True)
@@ -216,6 +222,31 @@ def build_one(item: dict, run: datetime, out: Path) -> None:
     with ThreadPoolExecutor(8) as ex:
         got = dict(zip(jobs, ex.map(lambda j: field(run, j[0], j[1], j[2], box), jobs)))
 
+    # Rain rate (mm/h) over each interval from the accumulation since the run started; the first
+    # frame has none, so it reuses the next interval's.
+    rates, prev = {}, None
+    for s in steps:
+        tp = got[(s, "tp", None)] * 1000
+        rates[s] = np.zeros_like(tp) if prev is None or s == 0 else np.maximum(tp - prev[1], 0) / (s - prev[0])
+        prev = (s, tp)
+    if len(steps) > 1:
+        rates[steps[0]] = rates[steps[1]]
+    frames = {k: {"r": [got[(s, "r", l)] for l in LEVELS], "t": [got[(s, "t", l)] for l in LEVELS],
+                  "uv": [got[(s, c, l)] for l in WIND_LEVELS for c in ("u", "v")],
+                  "uv10": [got[(s, "10u", None)], got[(s, "10v", None)]],
+                  "msl": got[(s, "msl", None)] / 100, "rain": rates[s]} for k, s in enumerate(steps)}
+    write_bundle(item, out, [west, south, east, north], res, box, [run + s * H for s in steps], frames,
+                 got[(0, "lsm", None)], {"run": iso(run), "source": "IFS HRES Open Data",
+                                         "attribution": f"Data: © {run:%Y} ECMWF, CC BY 4.0 (IFS HRES Open Data). Regridded."})
+
+
+def write_bundle(item: dict, out: Path, bbox: list[float], res: float, box: dict, times: list[datetime],
+                 frames: dict, lsm: np.ndarray, extra: dict) -> None:
+    """Pack one 3D bundle. frames[k] holds, on the box grid, relative humidity "r" (%) and
+    temperature "t" (K) at LEVELS, wind "uv" (u, v at each of WIND_LEVELS), "uv10", "msl" (hPa) and
+    "rain" (mm/h). Any data source can fill it: Open Data here, ERA5 for past events (the backend's
+    history.py)."""
+    west, south, east, north = bbox
     heights = [std_height_km(p) for p in LEVELS]
     zs = (np.arange(NZ) + 0.5) * TOP_KM / NZ
 
@@ -228,23 +259,16 @@ def build_one(item: dict, run: datetime, out: Path) -> None:
         return out
 
     rh, warm, wind, wind10, msl, rain = [], [], [], [], [], []
-    prev_tp, prev_s = None, None
-    for s in steps:
-        rz = to_heights(np.stack([got[(s, "r", l)] for l in LEVELS]))
-        tz = to_heights(np.stack([got[(s, "t", l)] for l in LEVELS]))
+    for k in range(len(times)):
+        f = frames[k]
+        rz, tz = to_heights(np.stack(f["r"])), to_heights(np.stack(f["t"]))
         rh.append(np.clip(rz * 2, 0, 255).astype(np.uint8))
         warm.append(np.clip((tz - tz.mean(axis=(1, 2), keepdims=True) + 5) / 20 * 255, 0, 255).astype(np.uint8))
-        uv = [got[(s, c, l)] for l in WIND_LEVELS for c in ("u", "v")]
-        wind.append(np.clip(np.round(np.stack(uv)), -127, 127).astype(np.int8))
-        wind10.append(np.clip(np.round(np.stack([got[(s, "10u", None)], got[(s, "10v", None)]])), -127, 127).astype(np.int8))
-        msl.append(np.clip((got[(s, "msl", None)] / 100 - 900) * 2, 0, 255).astype(np.uint8))
-        tp = got[(s, "tp", None)] * 1000   # mm since the run started
-        rate = np.zeros_like(tp) if prev_tp is None or s == 0 else np.maximum(tp - prev_tp, 0) / (s - prev_s)
-        prev_tp, prev_s = tp, s
-        rain.append(np.clip(np.sqrt(rate / 100) * 255, 0, 255).astype(np.uint8))
-    if len(rain) > 1:
-        rain[0] = rain[1]   # no rate for the first frame: reuse the next interval's
-    lsm = (got[(0, "lsm", None)] * 255).astype(np.uint8)
+        wind.append(np.clip(np.round(np.stack(f["uv"])), -127, 127).astype(np.int8))
+        wind10.append(np.clip(np.round(np.stack(f["uv10"])), -127, 127).astype(np.int8))
+        msl.append(np.clip((f["msl"] - 900) * 2, 0, 255).astype(np.uint8))
+        rain.append(np.clip(np.sqrt(f["rain"] / 100) * 255, 0, 255).astype(np.uint8))
+    lsm = (lsm * 255).astype(np.uint8)
 
     arrays = {"rh": np.stack(rh), "warm": np.stack(warm), "wind": np.stack(wind),
               "wind10": np.stack(wind10), "msl": np.stack(msl), "rain": np.stack(rain), "lsm": lsm}
@@ -263,11 +287,10 @@ def build_one(item: dict, run: datetime, out: Path) -> None:
     meta = {
         "format": FORMAT, "id": item["id"], "title": item["title"], "label": item["where"].get("label", ""),
         "bbox": [west, south, east, north], "res": res, "nx": len(box["lons"]), "ny": len(box["lats"]),
-        "nz": NZ, "top_km": TOP_KM, "run": iso(run), "times": [iso(run + s * H) for s in steps],
+        "nz": NZ, "top_km": TOP_KM, "times": [iso(t) for t in times],
         "wind_levels": WIND_LEVELS, "arrays": index, "bytes": (tmp / "bundle.bin.gz").stat().st_size,
         "coast": coastlines(west, south, east, north), "places": list(places.values()),
-        "attribution": f"Data: © {run:%Y} ECMWF, CC BY 4.0 (IFS HRES Open Data). Regridded.",
-    }
+    } | extra
     (tmp / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")))
     shutil.rmtree(out, ignore_errors=True)
     tmp.rename(out)
