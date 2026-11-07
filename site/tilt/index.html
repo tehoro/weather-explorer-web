@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Explorer · Terrain view (prototype)</title>
+<style>
+  :root { color-scheme: dark; --panel: #0b1b2cdd; --line: #91c8db30; --muted: #9db9c7; --accent: #76e8c7; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; overflow: hidden; background: #07131f; color: #e7f3f6; font: 14px system-ui, -apple-system, sans-serif; }
+  #scene { position: absolute; inset: 0; }
+  .glass { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(14px); }
+  header { position: absolute; left: 16px; top: 16px; padding: 12px 16px; max-width: 380px; z-index: 3; }
+  header h1 { font-size: 19px; margin: 4px 0; }
+  .eyebrow { font-size: 10px; letter-spacing: 2px; color: var(--accent); font-weight: 700; }
+  .sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  a, button { color: #a0cbd9; }
+  select { font: inherit; color: #e8f6fb; border: 1px solid #a1c7d338; background: #152f40; border-radius: 8px; padding: 6px 8px; }
+  button { font: inherit; color: #e8f6fb; border: 1px solid #a1c7d338; background: #152f40; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  #panel { position: absolute; right: 16px; top: 16px; width: 230px; padding: 12px 14px; z-index: 3; }
+  label { display: block; color: #b4cbd5; font-size: 12px; margin: 10px 0 5px; }
+  input[type=range] { accent-color: #6ce4c2; width: 100%; }
+  .check { display: flex; gap: 8px; align-items: center; }
+  .bar { height: 8px; border-radius: 4px; }
+  .ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .bands { display: flex; gap: 3px; margin-top: 5px; text-align: center; font-size: 10px; color: #07131f; }
+  .bands span { flex: 1; border-radius: 3px; padding: 4px 0; }
+  #timeline { position: absolute; left: 16px; right: 16px; bottom: 16px; max-width: 900px; margin: auto; padding: 10px 14px; z-index: 3; }
+  #timeline .row { display: flex; align-items: center; gap: 12px; }
+  #time { font-weight: 600; font-size: 16px; }
+  #slider { width: 100%; margin-top: 8px; }
+  #labels { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+  #labels span { position: absolute; font-size: 12px; color: #fff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; transform: translate(-50%, -140%); }
+  #labels span::after { content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 12px; background: #fffb; }
+  #caveat { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); max-width: min(560px, calc(100vw - 660px)); padding: 9px 13px; z-index: 3;
+    background: #45341de6; border: 1px solid #ffbe64; border-radius: 10px; color: #ffe3b8; font-size: 12.5px; line-height: 1.45; }
+  @media (max-width: 1100px) { #caveat { top: auto; bottom: 96px; max-width: calc(100vw - 32px); } }
+  #credit { position: absolute; left: 16px; bottom: 92px; font-size: 11px; color: var(--muted); max-width: 60vw; z-index: 3; }
+  #loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); z-index: 4; }
+  @media (max-width: 700px) { header { max-width: 200px; } header .sub { display: none; } #panel { width: 170px; } #credit { display: none; } }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div id="labels"></div>
+<header class="glass">
+  <div class="eyebrow">WEATHER EXPLORER · TERRAIN VIEW · PROTOTYPE</div>
+  <h1 id="title"></h1>
+  <div class="sub" id="sub"></div>
+  <div class="sub" style="margin-top:6px">Drag to orbit · scroll to zoom · right-drag to pan</div>
+</header>
+<aside id="panel" class="glass">
+  <label for="ex" style="margin-top:0">Terrain height <b id="exLabel">4×</b></label>
+  <input id="ex" type="range" min="1" max="10" step="0.5" value="4">
+  <label for="ground">On the ground</label>
+  <select id="ground" style="width:100%">
+    <option value="rain">Rain</option><option value="gust">Gusts</option><option value="t2m">Temperature</option><option value="none">Terrain only</option>
+  </select>
+  <label class="check" id="adjustRow" hidden><input id="adjust" type="checkbox" checked> Adjust to terrain height</label>
+  <div class="sub" id="adjustNote" hidden>Moves ERA5's temperature from its smoothed terrain to the detailed terrain at a standard 6.5 °C per km. Inversions and cold pools are not represented.</div>
+  <label for="speed">Playback <b id="speedLabel">1 h/s</b></label>
+  <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1">
+  <div class="sub" style="margin-top:12px" id="keyTitle"></div>
+  <div class="bar" id="keyBar"></div>
+  <div class="ticks" id="keyTicks"></div>
+  <div class="sub" style="margin-top:10px">Wind trails (km/h) · thicker = faster</div>
+  <div class="bands"><span style="background:#fff3b0">&lt;30</span><span style="background:#ffd12f">30–59</span><span style="background:#ff851b">60–89</span><span style="background:#ff334f">90–119</span><span style="background:#e64dff">120+</span></div>
+</aside>
+<div id="caveat" hidden><b>Temperatures adjusted in this terrain view only</b>: an estimate, not model output. ERA5's 2 m temperature (on its own 25 km terrain) has been moved to each point's height at a standard 6.5 °C per km, so inversions, cold pools and local föhn detail are not represented. The maps elsewhere show the model's temperatures unchanged; untick "Adjust to terrain height" to see them here.</div>
+<div id="credit"></div>
+<div id="timeline" class="glass">
+  <div class="row"><button id="play">❚❚</button><div id="time"></div><span class="sub" id="source" style="margin-left:auto"></span></div>
+  <input id="slider" type="range" min="0" max="1000" value="0">
+</div>
+<div id="loading">Loading terrain and wind…</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="tilt.js?v=dev"></script>
+</body>
+</html>
