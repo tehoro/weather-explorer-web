@@ -1927,6 +1927,12 @@ function categoryGroups(categories) {
   return groups;
 }
 
+// Rain layers say what model rain is: an average over a grid square, so hills, coasts and
+// thunderstorms can give far more in places, and less elsewhere.
+const RAIN_LAYERS = new Set(["precip", "rain24", "raintotal"]);
+const rainNote = (m) => RAIN_LAYERS.has(m.layer)
+  ? `<div class="note">Model rain, averaged over the grid: local amounts can be far higher or lower</div>` : "";
+
 function renderLegend() {
   const m = S.meta.fill;
   const lo = S.ramp.lo, hi = S.ramp.hi;
@@ -1939,7 +1945,7 @@ function renderLegend() {
       <div class="note">Shades: light, moderate, heavy</div>
       ${vectorMeta() ? `<div class="note">Streaks: ${esc(vectorMeta().meta.title.toLowerCase())}</div>` : ""}
       ${cm ? `<div class="note">Lines: ${esc(cm.meta.title.toLowerCase())} every ${cm.meta.contour_interval} ${esc(cm.meta.units)}</div>` : ""}
-      <div class="note">${esc(m.model)}</div>
+      <div class="note">${esc(m.model)}</div>${rainNote(m)}
       ${style().credit ? `<div class="note credit">${esc(style().credit)}</div>` : ""}`;
     return;
   }
@@ -1950,7 +1956,7 @@ function renderLegend() {
     <div class="scale">${scale}</div>
     ${cm ? `<div class="note">Lines: ${esc(cm.meta.title.toLowerCase())} every ${cm.meta.contour_interval} ${esc(cm.meta.units)}</div>` : ""}
     ${vectorMeta() ? `<div class="note">Streaks: ${esc(vectorMeta().meta.title.toLowerCase())}</div>` : ""}
-    <div class="note">${esc(m.model)}</div>
+    <div class="note">${esc(m.model)}</div>${rainNote(m)}
     ${style().credit ? `<div class="note credit">${esc(style().credit)}</div>` : ""}`;
   const c = el.querySelector("canvas"), g = c.getContext("2d");
   for (let x = 0; x < 200; x++) {
