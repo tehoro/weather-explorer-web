@@ -2450,8 +2450,14 @@ function drawVideoFrame(g, layout) {
   g.fillStyle = "#8fa1ae";
   g.font = `500 12px ${font}`;
   g.fillText(tag, pad, H - layout.bottom + 48);
-  g.font = `500 11px ${font}`;
-  g.fillText(`${S.entry.past ? "Data: ERA5, Copernicus Climate Change Service" : "Data: ECMWF Open Data, CC BY 4.0"} · Weather Explorer · weatherexplorer.neilgordon.me`, pad, H - 10);
+  // The credit, always with the site's address: on a narrow (square or portrait) video the name
+  // goes first, then the text shrinks a little, rather than the address being cut off.
+  const data = S.entry.past ? "Data: ERA5, Copernicus Climate Change Service" : "Data: ECMWF Open Data, CC BY 4.0";
+  let credit = `${data} · Weather Explorer · weatherexplorer.neilgordon.me`, size = 11;
+  g.font = `500 ${size}px ${font}`;
+  if (g.measureText(credit).width > W - 2 * pad) credit = `${data} · weatherexplorer.neilgordon.me`;
+  while (g.measureText(credit).width > W - 2 * pad && size > 8) g.font = `500 ${(size -= 0.5)}px ${font}`;
+  g.fillText(credit, pad, H - 10);
 
   // Caption, above the bottom band.
   const cap = captionAt(sc, S.pos);
