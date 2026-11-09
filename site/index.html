@@ -16,7 +16,7 @@
 <header class="top">
   <div class="brand">
     <h1>Weather Explorer</h1>
-    <p>Interesting weather around the world, animated from ECMWF Open Data</p>
+    <p id="tagline">Interesting weather around the world, animated from ECMWF Open Data</p>
   </div>
   <div class="tools">
     <span class="fresh" id="fresh"></span>
@@ -41,6 +41,7 @@
 
   <section class="stage" aria-label="Map">
     <div class="scenebar">
+      <button id="pastBack" class="act back" hidden title="Back to the globe of past events">← All past events</button>
       <span class="scene-label" id="sceneLabel">Scene</span>
       <div class="tabs" id="scenes" role="tablist" aria-label="Scenes"></div>
       <div class="scene-pick" id="scenePick" hidden>
@@ -149,6 +150,17 @@
       <li>Items tagged <b>Explainer</b> aren't news: they are textbook examples of how the atmosphere works (a Greenland tip jet,
         a bora, a burst of tropical thunderstorms…) picked because the forecast shows them clearly right now.</li>
     </ul>
+
+    <h3>Past events</h3>
+    <p>The <b>Past events</b> tab lists famous storms of the past, newest first (click <b>Newest first</b> to turn the
+      order round). It opens a globe with a marker for each one and the tracks of their main lows: spin it and click
+      a marker, or pick an event from the list. <b>← All past events</b> above the map takes you back to the globe.</p>
+    <p>Past events are replayed hour by hour from
+      <a href="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels" target="_blank" rel="noopener">ERA5</a>,
+      ECMWF's reanalysis for the Copernicus Climate Change Service: a model's reconstruction of the weather from the
+      observations of the time, not a forecast. Its 31 km grid smooths the strongest winds and heaviest rain, so each
+      event compares ERA5 with what was measured. The text puts the weather first, then gives the impacts briefly, with
+      sources. Times are in the event's own time zone, or UTC (see Units).</p>
 
     <h3>Playing the forecast</h3>
     <ul>

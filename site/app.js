@@ -93,6 +93,11 @@ const S = {
   })(),
   view: null,           // {lon, lat, s, fit}: centre in degrees and pixels per Earth radius
   flight: null,         // a move to a new scene's view in progress (flyTo)
+  tab: "now",            // the list shown: "now" (highlights) or "past"
+  pastOrder: (() => { try { return localStorage.getItem("wx.pastOrder") || "new"; } catch { return "new"; } })(),
+  overview: false,      // the past events globe, with no scene loaded
+  hover: null,          // the past event under the pointer (marker or list row)
+  lastNow: null,        // the last highlight shown, for the Highlights tab
   token: 0,             // bumps on every scene load, to ignore stale results
 };
 
@@ -167,7 +172,7 @@ function resize() {
   }
   // Keep the scene fitted until the viewer pans or zooms (a flight in progress just lands).
   if (S.flight) { S.view = S.flight.to; S.flight = null; }
-  if (S.entry && (!S.view || !S.view.touched)) fit();
+  if ((S.entry || S.overview) && (!S.view || !S.view.touched)) fit();
   drawAll();
 }
 
@@ -288,6 +293,7 @@ function fit() {
     const r = mapEl.getBoundingClientRect();
     W = r.width; H = r.height;
   }
+  if (S.overview) { S.view = overviewView(); return; }
   S.view = fitBox(sceneBox(), W, H);
 }
 
@@ -1031,6 +1037,7 @@ function drawOverlay() {
   const g = overlay.getContext("2d");
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.clearRect(0, 0, W, H);
+  if (S.overview && S.view) { drawOverview(g); return; }
   if (!S.view || !S.meta) return;
   const cm = contourMeta();
   const c = S.contour;
@@ -1357,6 +1364,12 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   const token = ++S.token;
   S.entry = entry;
   S.sceneIndex = sceneIndex;
+  S.overview = false; S.hover = null; mapEl.style.cursor = "";
+  S.tab = entry.past ? "past" : "now";
+  if (!entry.past) S.lastNow = entry;
+  $(".stage").classList.remove("overview");
+  $("#pastBack").hidden = !entry.past || OFFLINE;
+  renderFresh();
   // Times in the text ("06 UTC 16 Oct") are read in the event's year; past events credit ERA5.
   const year = entry.past ? entry.item.when?.peak || entry.item.when?.start : S.feed?.generated_utc;
   if (year) Units.setYear(parseTime(year).getUTCFullYear());
@@ -1558,6 +1571,7 @@ scrub.oninput = () => {
 };
 
 function frameChanged() {
+  if (!S.meta) return;
   updateTime();
   drawField();
   updateContours();
@@ -1572,6 +1586,7 @@ function tick(now) {
   last = now;
   if (S.recording) { requestAnimationFrame(tick); return; }
   if (S.flight) stepFlight(now);
+  else spinGlobe(dt);
   if (S.playing && S.meta) {
     const n = S.meta.fill.frames.length;
     const next = Math.min(n - 1, posAfter(S.pos, dt));
@@ -1631,8 +1646,20 @@ const up = (e) => {
   if (!pointers.has(e.pointerId)) return;
   pointers.delete(e.pointerId);
   mapEl.classList.remove("dragging");
-  if (!moved && pointers.size === 0) readout(e.offsetX, e.offsetY);
+  if (moved || pointers.size) return;
+  if (S.overview) { const p = markerAt(e.offsetX, e.offsetY); if (p) navigate(p, 0); return; }
+  readout(e.offsetX, e.offsetY);
 };
+// On the past events globe, a marker under the pointer lights up with its row in the list.
+mapEl.addEventListener("pointermove", (e) => {
+  if (!S.overview || pointers.size) return;
+  const key = markerAt(e.offsetX, e.offsetY)?.key || null;
+  mapEl.style.cursor = key ? "pointer" : "";
+  if (key === S.hover) return;
+  S.hover = key;
+  for (const b of document.querySelectorAll(".entry.past")) b.classList.toggle("hot", b.dataset.key === key);
+  drawOverlay();
+});
 mapEl.addEventListener("pointerup", up);
 mapEl.addEventListener("pointercancel", (e) => { pointers.delete(e.pointerId); mapEl.classList.remove("dragging"); });
 mapEl.addEventListener("wheel", (e) => {
@@ -1643,12 +1670,13 @@ mapEl.addEventListener("wheel", (e) => {
 function zoomAt(px, py, k) {
   if (!S.view) return;
   const q = toWorld(px, py);
-  S.view = { ...S.view, s: Math.max(S.view.fit * 0.5, globeScale(), Math.min(S.view.fit * 10, S.view.s * k)) };
+  S.view = { ...S.view, s: Math.max(S.overview ? S.view.fit : Math.max(S.view.fit * 0.5, globeScale()), Math.min(S.view.fit * 10, S.view.s * k)) };
   keepAt(q, px, py);                       // the point under the cursor stays there
   viewChanged();
 }
 $("#zoomIn").onclick = () => zoomAt(W / 2, H / 2, 1.5);
 $("#zoomOut").onclick = () => zoomAt(W / 2, H / 2, 1 / 1.5);
+$("#pastBack").onclick = () => { location.hash = "past"; };
 $("#zoomFit").onclick = () => { fit(); viewChanged(false); };
 
 // Full screen: the map and timeline cover the page. Where the browser allows it (not iPhone
@@ -1766,15 +1794,212 @@ function renderList() {
   const main = S.entries.filter((e) => !e.requested && !e.past), req = S.entries.filter((e) => e.requested);
   const past = S.entries.filter((e) => e.past);
   const shared = S.shared && !S.entries.includes(S.shared) ? [S.shared] : [];
-  el.innerHTML = (shared.length ? `<h2>Shared with you</h2>${shared.map(row).join("")}` : "")
-    + `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : "")
-    + (past.length ? `<h2>Past events</h2>${past.map(row).join("")}` : "");
+  const tabs = past.length ? `<div class="list-tabs" role="tablist">
+      <button role="tab" data-tab="now" aria-selected="${S.tab !== "past"}">Highlights</button>
+      <button role="tab" data-tab="past" aria-selected="${S.tab === "past"}">Past events</button></div>` : "";
+  el.innerHTML = tabs + (S.tab === "past" && past.length ? pastList(past)
+    : (shared.length ? `<h2>Shared with you</h2>${shared.map(row).join("")}` : "")
+      + `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : ""));
   for (const b of el.querySelectorAll(".entry")) {
     b.onclick = () => {
       const e = [...shared, ...S.entries].find((x) => x.key === b.dataset.key);
       if (e && e !== S.entry) navigate(e, 0);
     };
+    if (b.classList.contains("past")) {
+      b.onmouseenter = () => { S.hover = b.dataset.key; if (S.overview) drawOverlay(); };
+      b.onmouseleave = () => { S.hover = null; if (S.overview) drawOverlay(); };
+    }
   }
+  for (const b of el.querySelectorAll(".list-tabs button")) {
+    b.onclick = () => {
+      if (b.dataset.tab === "past") { if (!S.overview) location.hash = "past"; return; }
+      if (S.tab === "past") navigate(S.lastNow && S.entries.includes(S.lastNow) ? S.lastNow : main[0] || S.entries[0], 0);
+    };
+  }
+  const order = el.querySelector(".past-order");
+  if (order) order.onclick = () => {
+    S.pastOrder = S.pastOrder === "old" ? "new" : "old";
+    try { localStorage.setItem("wx.pastOrder", S.pastOrder); } catch { /* applied, not kept */ }
+    renderList();
+  };
+}
+
+// Past events by date, newest first (or oldest), under decade headings: "Dec 1991 · Samoa".
+const peakOf = (it) => parseTime(it.when?.peak || it.when?.start || "1900-01-01T00:00Z");
+function pastList(past) {
+  const old = S.pastOrder === "old";
+  const sorted = [...past].sort((a, b) => (peakOf(a.item) - peakOf(b.item)) * (old ? 1 : -1));
+  let decade = null, html = `<div class="past-head"><span>${past.length} events</span>
+    <button class="past-order" title="Change the order">${old ? "Oldest first" : "Newest first"}</button></div>`;
+  for (const e of sorted) {
+    const t = peakOf(e.item), d = `${Math.floor(t.getUTCFullYear() / 10) * 10}s`;
+    if (d !== decade) { decade = d; html += `<h2>${d}</h2>`; }
+    const date = t.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: e.item.where?.tz || "UTC" });
+    const where = e.item.where?.country || e.item.where?.label || "";
+    html += `<button class="entry past" data-key="${esc(e.key)}" aria-current="${S.entry === e}">
+      <span class="d">${esc([date, where].filter(Boolean).join(" · "))}</span><span class="t">${esc(loc(e.item.title))}</span></button>`;
+  }
+  return html;
+}
+
+// ------------------------------------------------------------------------------------------
+// Past events overview: the globe with a marker (and the track of the first scene's low) for
+// each event. Click a marker, or a row in the list, to open it.
+// ------------------------------------------------------------------------------------------
+
+// "Cyclone Val" → "Val", "The Great Storm of October 1987" → "Great Storm".
+function shortName(it) {
+  if (it.short_name) return loc(it.short_name);
+  const s = loc(it.title).replace(/^The\s+/i, "").replace(/\s+of\s+\w+\s+\d{4}$/i, "").replace(/\s+\(?\d{4}\)?$/, "")
+    .replace(/^(Storms?|Hurricane|Typhoon|(Tropical\s+)?Cyclone)\s+/i, "")
+    .replace(/^(northern|southern|eastern|western)\s+/i, "").replace(/^(\w+) storm$/, "$1");   // "Wahine storm", not "Great Storm"
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+const OVERVIEW_CENTRE = { lon: 15, lat: 15 };
+function overviewView() {
+  const s = Math.min(W, H) / 2 / Math.SQRT2 * 0.94;   // the hemisphere facing us (radius √2 Earth radii)
+  return { ...(S.view && S.overview ? { lon: S.view.lon, lat: S.view.lat } : OVERVIEW_CENTRE), s, fit: s };
+}
+function showOverview() {
+  S.token++;
+  play(false);
+  const wasOverview = S.overview;
+  S.overview = true; S.tab = "past";
+  S.entry = null; S.meta = null; S.pkg = "";
+  S.fill = []; S.uv = []; S.contourFrames = []; S.contour = null; S.tracked = []; parts = [];
+  worker.postMessage({ type: "reset" });
+  for (const id of ["#readout", "#caption", "#view3d", "#scenePick"]) $(id).hidden = true;
+  $("#legend").innerHTML = "";
+  $("#scenes").innerHTML = "";
+  $("#sceneLabel").textContent = "Past events";
+  $(".stage").classList.add("overview");
+  $("#pastBack").hidden = true;
+  $("#when").textContent = "–";
+  scrub.max = 0; scrub.value = 0; $("#ticks").innerHTML = "";
+  $("#attribution").textContent = S.pastAttribution || "";
+  $("#disclaimer").textContent = PAST_DISCLAIMER;
+  Units.setEventZone(null, null);
+  renderTimeZones();
+  renderList();
+  renderFresh();
+  renderOverviewDetails();
+  status(null);
+  if (!wasOverview) {
+    const from = S.view;
+    fit();                                 // measures the map first, on a page opened at #past
+    if (from) { const to = S.view; S.view = from; flyTo(to); }
+  }
+  drawAll();
+  track("past", "Past events");
+}
+function renderOverviewDetails() {
+  const past = S.entries.filter((e) => e.past);
+  const years = past.map((e) => peakOf(e.item).getUTCFullYear());
+  $("#details").innerHTML = `<h2>Past events</h2>
+    <p>Famous storms from ${Math.min(...years)} to ${Math.max(...years)}, replayed hour by hour from ERA5, the
+    ECMWF reanalysis made for the Copernicus Climate Change Service. Each one sets out the weather first, compares
+    ERA5 with what was measured, and then gives the impacts, with sources.</p>
+    <p>Spin the globe and click a marker, or choose an event from the list. The yellow lines are the tracks of
+    the main lows as ERA5 has them.</p>
+    <p class="muted">A reanalysis is a model's best reconstruction of past weather from the observations of the
+    time. On a 31 km grid it smooths the strongest winds and the heaviest rain, so the measured values in each
+    event's table are usually higher.</p>`;
+}
+// The markers, front side of the globe only. Returns [{e, x, y}] for clicks.
+function pastMarkers() {
+  const out = [];
+  for (const e of S.entries) {
+    if (!e.past) continue;
+    const c = e.item.where?.centre;
+    if (!c) continue;
+    const [x, y, cos] = toScreen(c[1], c[0]);
+    if (cos > 0.05) out.push({ e, x, y });
+  }
+  return out;
+}
+function drawOverview(g) {
+  const st = style();
+  // Tracks: the first scene's lows, thin and faint.
+  g.lineWidth = 1.5;
+  g.lineJoin = "round";
+  for (const e of S.entries) {
+    if (!e.past) continue;
+    const hot = e.key === S.hover;
+    for (const tr of tracksOf(e.item.scenes[0])) {
+      g.beginPath();
+      let pen = false;
+      for (const p of tr.points) {
+        const [x, y, c] = toScreen(p.lon, p.lat);
+        if (c <= 0.05) { pen = false; continue; }
+        if (pen) g.lineTo(x, y); else g.moveTo(x, y);
+        pen = true;
+      }
+      g.strokeStyle = hot ? TRACK : "rgba(255,214,102,0.55)";
+      g.stroke();
+    }
+  }
+  // Markers, then labels that don't overlap (the hovered or nearest-the-centre first).
+  const ms = pastMarkers().sort((a, b) => (b.e.key === S.hover) - (a.e.key === S.hover)
+    || Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2));
+  for (const m of [...ms].reverse()) {
+    const hot = m.e.key === S.hover;
+    g.beginPath();
+    g.arc(m.x, m.y, hot ? 8 : 6, 0, 2 * Math.PI);
+    g.fillStyle = hot ? "#ffffff" : TRACK;
+    g.fill();
+    g.lineWidth = 2;
+    g.strokeStyle = "rgba(0,0,0,0.75)";
+    g.stroke();
+  }
+  const boxes = ms.map((m) => [m.x - 9, m.y - 9, m.x + 9, m.y + 9]);
+  labelHits = [];
+  g.font = "600 13px system-ui, -apple-system, sans-serif";
+  g.textBaseline = "middle";
+  const free = (b) => b[0] >= 2 && b[2] <= W - 2 && b[1] >= 2 && b[3] <= H - 2
+    && !boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
+  for (const m of ms) {
+    const text = `${shortName(m.e.item)} ${peakOf(m.e.item).getUTCFullYear()}`;
+    const w = g.measureText(text).width;
+    // Right, left, above, below.
+    const spots = [[m.x + 11, m.y, "left"], [m.x - 11, m.y, "right"], [m.x, m.y - 17, "center"], [m.x, m.y + 17, "center"]];
+    for (const [x, y, align] of spots) {
+      const x0 = align === "left" ? x : align === "right" ? x - w : x - w / 2;
+      const b = [x0 - 2, y - 9, x0 + w + 2, y + 9];
+      if (m.e.key !== S.hover && !free(b)) continue;
+      boxes.push(b);
+      labelHits.push({ e: m.e, b });
+      g.textAlign = align;
+      g.lineWidth = 3.5;
+      g.strokeStyle = st.grid[2];
+      g.strokeText(text, x, y);
+      g.fillStyle = m.e.key === S.hover ? TRACK : st.grid[1];
+      g.fillText(text, x, y);
+      break;
+    }
+  }
+}
+// The globe turns slowly, as the Earth does (6° a second), until the viewer drags or zooms it, and pauses
+// while the pointer is on a marker or a row, so every event comes round.
+let spinWait = 0;
+function spinGlobe(dt) {
+  if (!S.overview || !S.view || S.view.touched || S.hover || reducedMotion.matches || document.hidden) return;
+  S.view = { ...S.view, lon: ((S.view.lon - 6 * dt + 540) % 360) - 180 };
+  spinWait += dt;
+  if (spinWait < 1 / 30) return;           // 30 redraws a second is smooth enough
+  spinWait = 0;
+  drawAll();
+}
+// A marker's label is clickable too: the labels drawn last time, with their boxes.
+let labelHits = [];
+function markerAt(px, py) {
+  const lab = labelHits.find(({ b }) => px >= b[0] - 3 && px <= b[2] + 3 && py >= b[1] - 3 && py <= b[3] + 3);
+  if (lab) return lab.e;
+  let best = null, dmin = 18;
+  for (const m of pastMarkers()) {
+    const d = Math.hypot(m.x - px, m.y - py);
+    if (d < dmin) { dmin = d; best = m.e; }
+  }
+  return best;
 }
 
 // Scene tabs above the map: each highlight tells its story in one or more scenes.
@@ -2066,7 +2291,15 @@ function unitsChanged() {
   $("#readout").hidden = true;
 }
 
+const TAGLINE = "Interesting weather around the world, animated from ECMWF Open Data";
+const PAST_TAGLINE = "Famous storms of the past, replayed from ERA5, the ECMWF reanalysis";
 function renderFresh() {
+  $("#tagline").textContent = S.tab === "past" && !OFFLINE ? PAST_TAGLINE : TAGLINE;
+  if (S.tab === "past" && !OFFLINE) {
+    const n = S.entries.filter((e) => e.past).length;
+    $("#fresh").textContent = `Past events · ERA5 reanalysis · ${n} events`;
+    return;
+  }
   const f = S.feed;
   if (!f?.generated_utc) return;
   const t = parseTime(f.generated_utc);
@@ -2128,9 +2361,7 @@ function parseHash() {
   };
 }
 
-// Past events (ERA5, built by history.py) are listed only behind the unlisted link #past, or when a
-// shared link opens one, while they are being tried out.
-const wantsPast = () => /^#(past\b|.*\bh=history(\/|%2F))/.test(location.hash);
+// Past events (ERA5, built by history.py), in their own tab of the list; #past opens the globe of them.
 async function loadPast() {
   if (S.past || OFFLINE) return;
   const index = await fetch(dataUrl("history/index.json"), { cache: "no-cache" })
@@ -2141,9 +2372,10 @@ async function loadPast() {
 }
 
 async function route() {
-  if (wantsPast()) await loadPast();
+  await loadPast();
   const r = parseHash();
-  if (r.key === "past") r.key = S.past?.[0]?.key;
+  if (r.key === "past" && S.past?.length) { showOverview(); return; }
+  if (r.key === "past") r.key = null;
   let entry = r.key ? S.entries.find((e) => e.key === r.key || e.item.id === r.key) : null;
   if (!entry && S.shared?.key === r.key) entry = S.shared;
   if (r.key && !entry) {
@@ -2156,7 +2388,7 @@ async function route() {
     }
     if (!entry) notice("That shared highlight is no longer available (they are kept for a week). Here are the latest highlights.");
   }
-  entry ||= S.entries[0];
+  entry ||= S.entries.find((e) => !e.past) || S.entries[0];
   if (!entry) {
     $("#list").innerHTML = `<p class="muted pad">No highlights at the moment.</p>`;
     return;
@@ -2658,11 +2890,12 @@ new ResizeObserver(resize).observe(mapEl);
   setInterval(async () => {
     try {
       if (await loadFeed()) {
-        if (!S.entries.includes(S.entry) && S.entry !== S.shared) {
+        if (S.entry && !S.entries.includes(S.entry) && S.entry !== S.shared) {
           const same = S.entries.find((e) => e.key === S.entry?.key);
           if (same) S.entry = same; else route();
         }
         renderList();
+        renderFresh();
       }
     } catch { /* keep showing what we have */ }
   }, FEED_REFRESH_MS);
