@@ -62,8 +62,8 @@ const DEFAULT_SPEED = 2;                  // 6 forecast hours a second suits mos
 const FEED_REFRESH_MS = 10 * 60 * 1000;
 const ATTRIBUTION = "Data: © ECMWF, CC BY 4.0.";   // as in index.html, for feeds without their own
 const DISCLAIMER = document.getElementById("disclaimer").textContent;
-const PAST_DISCLAIMER = "Past events are written by an AI model from the official reports and papers cited, and reviewed "
-  + "before they are published. The maps show the ERA5 reanalysis, not a forecast.";
+const PAST_DISCLAIMER = "Past events are written by an AI model from the official reports and papers cited, and may "
+  + "contain errors: check the sources for anything that matters. The maps show the ERA5 reanalysis, not a forecast.";
 const DEG = Math.PI / 180;
 
 // Scene grids and satellite tiles are regular in Web Mercator y; the map itself is not (below).
