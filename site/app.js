@@ -172,7 +172,7 @@ function resize() {
   }
   // Keep the scene fitted until the viewer pans or zooms (a flight in progress just lands).
   if (S.flight) { S.view = S.flight.to; S.flight = null; }
-  if ((S.entry || S.overview) && (!S.view || !S.view.touched)) fit();
+  if ((S.entry || S.overview) && (!S.view || !S.view.touched || !S.view.s)) fit();   // !s: opened while hidden
   drawAll();
 }
 
@@ -1938,10 +1938,10 @@ function drawOverview(g) {
       g.stroke();
     }
   }
-  // Markers, then labels that don't overlap (the hovered or nearest-the-centre first).
-  const ms = pastMarkers().sort((a, b) => (b.e.key === S.hover) - (a.e.key === S.hover)
-    || Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2));
-  for (const m of [...ms].reverse()) {
+  // Markers, then labels that don't overlap, nearest the centre first. Hovering only changes the
+  // colour, so a label never jumps to another side under the pointer.
+  const ms = pastMarkers().sort((a, b) => Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2));
+  for (const m of [...ms].reverse().sort((a, b) => (a.e.key === S.hover) - (b.e.key === S.hover))) {   // hovered on top
     const hot = m.e.key === S.hover;
     g.beginPath();
     g.arc(m.x, m.y, hot ? 8 : 6, 0, 2 * Math.PI);
@@ -1965,7 +1965,7 @@ function drawOverview(g) {
     for (const [x, y, align] of spots) {
       const x0 = align === "left" ? x : align === "right" ? x - w : x - w / 2;
       const b = [x0 - 2, y - 9, x0 + w + 2, y + 9];
-      if (m.e.key !== S.hover && !free(b)) continue;
+      if (!free(b)) continue;
       boxes.push(b);
       labelHits.push({ e: m.e, b });
       g.textAlign = align;
