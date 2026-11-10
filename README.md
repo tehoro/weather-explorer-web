@@ -3,7 +3,7 @@
 A public, read-only web page that plays the current Weather Explorer highlights:
 **https://weatherexplorer.neilgordon.me/** (the original https://tehoro.github.io/weather-explorer-web/ redirects here)
 
-Weather Explorer is a prototype for exploring animated ECMWF weather forecasts. Twice a day an AI
+Weather Explorer is a prototype for exploring animated ECMWF weather forecasts. Once a day an AI
 research agent picks about fifteen interesting weather situations around the world and describes
 how to show them; this viewer animates them on an interactive map, with a 3D view for tropical
 cyclones. The research runs in the backend: https://github.com/tehoro/weather-explorer-backend

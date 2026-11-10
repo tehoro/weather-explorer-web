@@ -2309,7 +2309,7 @@ function renderFresh() {
   } else {
     const h = (Date.now() - t) / 3.6e6;
     const age = h < 1 ? `${Math.max(1, Math.round(h * 60))} min ago` : `${Math.round(h)} h ago`;
-    $("#fresh").textContent = `Highlights from ${Units.formatTime(t, { day: false })} (${age}) · refreshed twice a day`;
+    $("#fresh").textContent = `Highlights from ${Units.formatTime(t, { day: false })} (${age}) · refreshed once a day, about 22 UTC`;
   }
   if (f.attribution) $("#attribution").textContent = f.attribution;
 }
