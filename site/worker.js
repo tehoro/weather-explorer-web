@@ -151,6 +151,19 @@ self.onmessage = async ({ data: m }) => {
     } else if (m.type === "frame") {
       const d = await decode(m.src, m.channels);
       self.postMessage({ id: m.id, data: d.slice() });
+    } else if (m.type === "probe") {
+      // One contour-field value at grid fraction (fx, fy), blended between two frames as the
+      // isobars are (eye: the same storm-relative shift), for the live reading under the pointer.
+      const [a, b] = await Promise.all([decode(m.srcA, 2), decode(m.srcB, 2)]);
+      let fa = [m.fx, m.fy], fb = [m.fx, m.fy];
+      if (m.eye) {
+        const d = Math.hypot((m.fx - m.eye.x) / m.eye.rx, (m.fy - m.eye.y) / m.eye.ry);
+        const s = d <= 0.5 ? 0 : Math.min(1, (d - 0.5) / 0.5), w = 1 - s * s * (3 - 2 * s);
+        fa = [m.fx + m.eye.ax * w, m.fy + m.eye.ay * w]; fb = [m.fx + m.eye.bx * w, m.fy + m.eye.by * w];
+      }
+      const va = sampleAt(a, fa[0], fa[1], m.meta, m.top), vb = sampleAt(b, fb[0], fb[1], m.meta, m.top);
+      const scale = (m.meta.hi - m.meta.lo) / (m.top - 1);
+      self.postMessage({ id: m.id, value: m.meta.lo + scale * (va * (1 - m.t) + vb * m.t) });
     } else if (m.type === "contours") {
       const [a, b] = await Promise.all([decode(m.srcA, 2), decode(m.srcB, 2)]);
       const v = values(a, b, m.q, m.meta, m.top, m.eye);

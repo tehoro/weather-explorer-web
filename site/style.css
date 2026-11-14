@@ -206,7 +206,10 @@ button { font: inherit; color: inherit; }
   position: relative; flex: 1; min-height: 420px; overflow: hidden;
   background: var(--ocean); touch-action: none; cursor: grab;
 }
-.map.dragging { cursor: grabbing; }
+/* On a scene the pointer is a cross, for the live reading; a hand only while the map is held down
+   (to drag it). The globe keeps the open hand. */
+.stage:not(.overview) .map { cursor: crosshair; }
+.map.dragging, .stage:not(.overview) .map.dragging { cursor: grabbing; }
 .map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .caption {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
@@ -215,20 +218,25 @@ button { font: inherit; color: inherit; }
   backdrop-filter: blur(6px);
 }
 .readout {
-  position: absolute; background: rgba(8, 14, 19, 0.9); border: 1px solid var(--line);
-  padding: 5px 9px; border-radius: 6px; font-size: 13px; pointer-events: none; white-space: nowrap;
-  transform: translate(-50%, calc(-100% - 10px));
+  position: absolute; background: rgba(8, 14, 19, 0.88); border: 1px solid var(--line);
+  padding: 4px 8px; border-radius: 6px; font-size: 13px; pointer-events: none; white-space: nowrap;
+  transform: translate(12px, calc(-100% - 10px)); font-variant-numeric: tabular-nums;
 }
-/* The exact point the value is for: a small dot, joined to the bubble by a short line. */
-.readout::before {
-  content: ""; position: absolute; left: 50%; top: 100%; width: 1px; height: 10px;
-  background: rgba(255, 255, 255, 0.8); transform: translateX(-50%);
+.readout .sep { color: var(--muted); }
+.readout.flip-x { transform: translate(calc(-100% - 12px), calc(-100% - 10px)); }
+.readout.flip-y { transform: translate(12px, 10px); }
+.readout.flip-x.flip-y { transform: translate(calc(-100% - 12px), 10px); }
+/* The point the reading is for: a small cross (a ring too when pinned). */
+.readout::before, .readout::after {
+  content: ""; position: absolute; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+  left: -12px; top: calc(100% + 10px);
 }
-.readout::after {
-  content: ""; position: absolute; left: 50%; top: calc(100% + 10px); width: 7px; height: 7px; border-radius: 50%;
-  background: #fff; border: 2px solid #0b1218; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
-  transform: translate(-50%, -50%);
-}
+.readout::before { width: 15px; height: 1.5px; transform: translate(-50%, -50%); }
+.readout::after { width: 1.5px; height: 15px; transform: translate(-50%, -50%); }
+.readout.flip-x::before, .readout.flip-x::after { left: calc(100% + 12px); }
+.readout.flip-y::before, .readout.flip-y::after { top: -10px; }
+.readout.pinned { border-color: rgba(255, 255, 255, 0.7); }
+.readout:not(.pinned)::before, .readout:not(.pinned)::after { display: none; }   /* the cursor is the cross */
 .status {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   background: rgba(8, 14, 19, 0.85); padding: 6px 12px; border-radius: 6px; font-size: 13px; color: var(--muted);

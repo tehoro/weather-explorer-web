@@ -114,7 +114,8 @@ function inPageWorker() {
   return { postMessage: (data) => self.onmessage({ data }), set onmessage(f) { reply = f; } };
 }
 function startWorker() {
-  if (!OFFLINE) return new Worker(`worker.js?v=${VERSION}`);
+  // Run locally ("dev"), browsers keep an old worker.js even through a hard reload: fetch it afresh.
+  if (!OFFLINE) return new Worker(`worker.js?v=${VERSION === "dev" ? `dev-${Date.now()}` : VERSION}`);
   let real;
   try {
     real = new Worker(URL.createObjectURL(new Blob([OFFLINE.worker], { type: "text/javascript" })));
@@ -1510,12 +1511,12 @@ function vectorMeta() {
   for (const role of ["vectors", "fill", "contours"]) if (m?.[role]?.vectors) return { meta: m[role], role };
   return null;
 }
-function windAt(vm, br, x, y) {
-  // Screen point -> fraction of the vector grid, then bilinear u/v blended between two frames.
-  const m = vm.meta, q = toWorld(x, y);
-  if (!q) return null;
-  const [fx, fy] = gridFrac(m, q[0], q[1]);
-  if (fx < 0 || fx > 1 || fy < 0 || fy > 1) return null;
+// Wind (u, v in m/s) at a longitude and latitude: bilinear in the vector grid, blended between
+// two frames; null outside the scene.
+function uvAt(vm, br, lon, lat) {
+  const m = vm.meta;
+  const [fx, fy] = gridFrac(m, lon, lat);
+  if (fx < 0 || fx > 1 || fy < 0 || fy > 1 || !S.uv[br.i] || !S.uv[br.j]) return null;
   const nx = m.vectors.nx, ny = m.vectors.ny;
   const gx = Math.min(nx - 1.001, Math.max(0, fx * nx - 0.5)), gy = Math.min(ny - 1.001, Math.max(0, fy * ny - 0.5));
   const i = Math.floor(gx), j = Math.floor(gy), tx = gx - i, ty = gy - j;
@@ -1526,7 +1527,14 @@ function windAt(vm, br, x, y) {
     return m.vectors.lo + span * v / 254;
   };
   const A = S.uv[br.i], B = S.uv[br.j];
-  const u = sample(A, 0) * (1 - br.t) + sample(B, 0) * br.t, v = sample(A, 1) * (1 - br.t) + sample(B, 1) * br.t;
+  return [sample(A, 0) * (1 - br.t) + sample(B, 0) * br.t, sample(A, 1) * (1 - br.t) + sample(B, 1) * br.t];
+}
+function windAt(vm, br, x, y) {
+  // Screen point -> wind, turned into screen directions.
+  const q = toWorld(x, y);
+  const uv = q && uvAt(vm, br, q[0], q[1]);
+  if (!uv) return null;
+  const [u, v] = uv;
   // East and north on screen turn away from the centre of the view (and round the pole).
   const [x0, y0] = toScreen(q[0], q[1]), [xe, ye] = toScreen(q[0] + 0.05, q[1]), [xn, yn] = toScreen(q[0], Math.min(89.99, q[1] + 0.05));
   const le = Math.hypot(xe - x0, ye - y0) || 1, ln = Math.hypot(xn - x0, yn - y0) || 1;
@@ -1604,7 +1612,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   S.meta = null;
   S.fill = []; S.uv = []; S.contourFrames = []; S.contour = null; S.tracked = []; parts = [];
   S.failed = new Set();   // frames that would not load after retries: playback skips them
-  $("#readout").hidden = true;   // a reading belongs to the scene it was taken in
+  clearProbe();                    // a reading belongs to the scene it was taken in
   S.pos = 0;
   worker.postMessage({ type: "reset" });
   renderList();
@@ -1795,6 +1803,7 @@ function frameChanged() {
   updateTime();
   drawField();
   updateContours();
+  updateProbe();
   if (tracksOf(S.entry.item.scenes[S.sceneIndex]).length) drawOverlay();   // the lows' markers glide between isobar updates
 }
 // Isobars are worked out for steps of a frame: quarters, or eighths round a tracked low.
@@ -1883,7 +1892,7 @@ const up = (e) => {
   }
   if (moved || pointers.size) return;
   if (S.overview) { const p = markerAt(e.offsetX, e.offsetY); if (p) navigate(p, 0); return; }
-  readout(e.offsetX, e.offsetY);
+  tapProbe(e.offsetX, e.offsetY);
 };
 // On the past events globe, a marker under the pointer lights up with its row in the list.
 mapEl.addEventListener("pointermove", (e) => {
@@ -1949,38 +1958,176 @@ function viewChanged(touched = true) {
   S.flight = null;                         // panning or zooming stops a flight where it is
   if (touched) lastInput = performance.now();
   if (S.view) S.view.touched = touched;
-  $("#readout").hidden = true;
   particles.getContext("2d").clearRect(0, 0, particles.width, particles.height);
   drawAll();
 }
 
-function readout(px, py) {
-  const el = $("#readout");
-  const m = S.meta?.fill;
-  const i = Math.round(S.pos);
-  const f = S.fill[i];
-  if (!m || !f) { el.hidden = true; return; }
-  const w = toWorld(px, py);
-  if (!w) { el.hidden = true; return; }
-  const [lon, lat] = w, L = lon;
-  const [fx, fy] = gridFrac(m, lon, lat);
-  if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) { el.hidden = true; return; }
-  const q = f.data[Math.floor(fy * m.ny) * m.nx + Math.floor(fx * m.nx)];
-  if (q === 255) { el.hidden = true; return; }
-  let text;
-  if (m.categories) {
-    text = q > 0 && m.categories[q - 1] ? m.categories[q - 1].label : "Nothing falling";
-  } else {
+// ------------------------------------------------------------------------------------------
+// Live reading: what the scene shows under the pointer (or at a pinned point), updated as it
+// plays: "NW 15 km/h · 1003 hPa". A mouse shows it on hover; a click or tap pins it to that
+// place (tap it again, or anywhere away from the map, to clear it). Values are rounded on
+// purpose: the frames are 8-bit, and the model is a guide, not a measurement.
+// ------------------------------------------------------------------------------------------
+
+const probe = { on: false, pinned: false, x: 0, y: 0, lon: 0, lat: 0, extra: null, extraKey: "", busy: false };
+
+function clearProbe() {
+  probe.on = false; probe.pinned = false; probe.extra = null; probe.extraKey = "";
+  $("#readout").hidden = true;
+}
+
+// A colour-fill value at grid fraction (fx, fy) of one frame, bilinear; NaN where missing.
+function fillAt(m, data, fx, fy) {
+  const x = Math.max(0, Math.min(m.nx - 1, fx * m.nx - 0.5)), y = Math.max(0, Math.min(m.ny - 1, fy * m.ny - 0.5));
+  const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(m.nx - 1, x0 + 1), y1 = Math.min(m.ny - 1, y0 + 1);
+  const val = (ix, iy) => {
+    const q = data[iy * m.nx + ix];
+    if (q === 255) return NaN;
     let t = q / 254;
     if (m.scale === "sqrt") t *= t;
-    text = Units.format(m.lo + (m.hi - m.lo) * t, m.units);
+    return m.lo + (m.hi - m.lo) * t;
+  };
+  const tx = x - x0, ty = y - y0;
+  const v = (val(x0, y0) * (1 - tx) + val(x1, y0) * tx) * (1 - ty) + (val(x0, y1) * (1 - tx) + val(x1, y1) * tx) * ty;
+  return Number.isNaN(v) ? val(Math.round(x), Math.round(y)) : v;
+}
+
+// "NW" for the direction the wind blows from.
+function compass(u, v) {
+  const deg = (Math.atan2(-u, -v) / DEG + 360) % 360;
+  return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(deg / 45) % 8];
+}
+
+// A value in the viewer's units, rounded to what is worth reading off a model map.
+function rough(v, u) {
+  if (!Number.isFinite(v)) return "";
+  const c = Units.convert(v, u), du = Units.unit(u);
+  const to = (step) => Math.round(c / step) * step;
+  let n;
+  if (u === "mm/h" || u === "mm") {
+    const inch = du.startsWith("in");
+    if (c < (inch ? 0.005 : (u === "mm" ? 0.5 : 0.1))) return "no rain";
+    if (inch) n = c < 0.1 ? "<0.1" : c.toFixed(1);
+    else if (u === "mm/h") n = c < 1 ? "<1" : String(c < 20 ? Math.round(c) : to(5));
+    else n = String(c < 20 ? Math.round(c) : c < 100 ? to(5) : to(10));
+  } else if (u === "m/s") n = String(c < 20 ? Math.round(c) : to(5));
+  else if (u === "J/kg") n = String(to(100));
+  else if (u === "W/m²") n = String(to(10));
+  else if (u === "m") n = c < 3 ? to(0.5).toFixed(1) : String(Math.round(c));
+  else if (u === "%") n = String(to(5));
+  else n = String(Math.round(c));                       // hPa, dam, °C, kg/m²
+  return du.startsWith("°") || du === "%" ? n + du : du ? `${n} ${du}` : n;
+}
+
+// Where the reading is, on screen: the pointer, or the pinned place as the map moves.
+function probeXY() {
+  if (!probe.pinned) return [probe.x, probe.y];
+  const [x, y, c] = toScreen(probe.lon, probe.lat);
+  return c > 0 ? [x, y] : null;
+}
+
+function updateProbe() {
+  const el = $("#readout");
+  const m = S.meta?.fill;
+  const xy = probe.on && m && !S.overview && !S.flight ? probeXY() : null;
+  const br = xy && bracket(S.fill, S.pos);
+  const w = br && toWorld(xy[0], xy[1]);
+  const [fx, fy] = w ? gridFrac(m, w[0], w[1]) : [-1, -1];
+  if (!w || fx < 0 || fx >= 1 || fy < 0 || fy >= 1 || xy[0] < 0 || xy[1] < 0 || xy[0] > W || xy[1] > H) { el.hidden = true; return; }
+  const sc = S.entry.item.scenes[S.sceneIndex];
+  const parts = [];
+  // The colour layer, moved with a tracked low as the colours are.
+  const e = eyeShift(m, sc, br.i, br.j, br.t);
+  let a = [fx, fy], b = [fx, fy];
+  if (e) {
+    const d = Math.hypot((fx - e.x) / e.rx, (fy - e.y) / e.ry);
+    const s = d <= 0.5 ? 0 : Math.min(1, (d - 0.5) / 0.5), k = 1 - s * s * (3 - 2 * s);
+    a = [fx + e.ax * k, fy + e.ay * k]; b = [fx + e.bx * k, fy + e.by * k];
   }
-  const ll = `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? "N" : "S"} ${Math.abs(((L + 540) % 360) - 180).toFixed(1)}°${((L + 540) % 360) - 180 >= 0 ? "E" : "W"}`;
-  el.innerHTML = `<b>${esc(text)}</b> <span class="muted">${ll}</span>`;
-  el.style.left = `${px}px`;
-  el.style.top = `${py}px`;
+  const vm = vectorMeta(), ubr = vm && bracket(S.uv, S.pos);
+  const uv = ubr && uvAt(vm, ubr, w[0], w[1]);
+  if (m.categories) {
+    const q = S.fill[br.t < 0.5 ? br.i : br.j].data[Math.min(m.ny - 1, Math.floor(fy * m.ny)) * m.nx + Math.min(m.nx - 1, Math.floor(fx * m.nx))];
+    if (q !== 255) parts.push(q > 0 && m.categories[q - 1] ? m.categories[q - 1].label : "Nothing falling");
+  } else {
+    const v = fillAt(m, S.fill[br.i].data, ...a) * (1 - br.t) + fillAt(m, S.fill[br.j].data, ...b) * br.t;
+    if (m.units === "m/s" && uv) {
+      // A wind layer: its speed, with the direction from the streaks.
+      const text = rough(v, m.units);
+      if (text) parts.push(`${m.layer === "gust" ? "Gusts " : ""}${Math.hypot(...uv) < 0.5 ? "" : compass(...uv) + " "}${text}`);
+    } else {
+      const text = rough(v, m.units);
+      if (text) parts.push(text);
+    }
+  }
+  if (uv && m.units !== "m/s") {
+    const sp = Math.hypot(...uv);
+    parts.push(sp < 0.5 ? "calm" : `${compass(...uv)} ${rough(sp, "m/s")}`);
+  }
+  // Isobars (or other contours) of a second field: asked of the worker, which holds those frames.
+  const cm = contourMeta();
+  if (cm && cm.role === "contours") {
+    const cbr = bracket(S.contourFrames, S.pos);
+    if (cbr) {
+      const [cx, cy] = gridFrac(cm.meta, w[0], w[1]);
+      const key = `${S.token}:${cbr.i}:${cbr.j}:${Math.round(cbr.t * 8)}:${Math.round(cx * 2000)}:${Math.round(cy * 2000)}`;
+      if (key !== probe.extraKey && !probe.busy) askProbe(cm, cbr, cx, cy, key, sc);
+      if (probe.extra !== null) parts.push(rough(probe.extra, cm.meta.units));
+    }
+  }
+  if (!parts.length) { el.hidden = true; return; }
+  const html = parts.map((t, i) => (i ? esc(t) : `<b>${esc(t)}</b>`)).join(`<span class="sep"> · </span>`);
+  if (el.innerHTML !== html) el.innerHTML = html;
+  el.style.left = `${xy[0]}px`;
+  el.style.top = `${xy[1]}px`;
+  el.classList.toggle("flip-x", xy[0] > W - 170);
+  el.classList.toggle("flip-y", xy[1] < 44);
+  el.classList.toggle("pinned", probe.pinned);
   el.hidden = false;
 }
+async function askProbe(cm, br, fx, fy, key, sc) {
+  probe.busy = true;
+  const token = S.token;
+  const src = (i) => frameSource(`${S.pkg}/contours/${String(i).padStart(3, "0")}.c12.webp`);
+  try {
+    const r = await Promise.race([ask({ type: "probe", srcA: src(br.i), srcB: src(br.j), t: br.t, fx, fy, top: 4095,
+      eye: eyeShift(cm.meta, sc, br.i, br.j, br.t),
+      meta: { nx: cm.meta.nx, ny: cm.meta.ny, lo: cm.meta.lo, hi: cm.meta.hi } }),
+      new Promise((_, no) => setTimeout(() => no(new Error("no reply")), 4000))]);
+    if (token === S.token) { probe.extra = Number.isFinite(r.value) ? r.value : null; probe.extraKey = key; }
+  } catch { /* the frame is still loading: asked again on the next step */ }
+  probe.busy = false;
+  if (token === S.token) updateProbe();
+}
+
+// A mouse over the scene: the reading follows it, unless one is pinned.
+mapEl.addEventListener("pointermove", (e) => {
+  if (e.pointerType !== "mouse" || probe.pinned || S.overview) return;
+  if (e.buttons || e.target.closest(".zoom, .legend, .caption")) { if (probe.on) { probe.on = false; updateProbe(); } return; }
+  probe.on = true; probe.x = e.offsetX; probe.y = e.offsetY;
+  updateProbe();
+});
+mapEl.addEventListener("pointerleave", (e) => {
+  if (e.pointerType === "mouse" && !probe.pinned) { probe.on = false; updateProbe(); }
+});
+// A click or tap pins the reading there; on the pinned point itself, it clears it.
+function tapProbe(px, py) {
+  const at = probe.pinned && probeXY();
+  if (at && Math.hypot(at[0] - px, at[1] - py) < 20) {
+    probe.pinned = false; probe.on = false; updateProbe();
+    return;
+  }
+  const w = toWorld(px, py);
+  if (!w) return;
+  Object.assign(probe, { on: true, pinned: true, lon: w[0], lat: w[1], x: px, y: py });
+  updateProbe();
+}
+// A tap or click anywhere away from the map clears a pinned reading (not the play controls, so
+// it can be watched while scrubbing).
+document.addEventListener("pointerdown", (e) => {
+  if (probe.pinned && !e.target.closest("#map, .timeline")) clearProbe();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && probe.pinned) clearProbe(); });
 
 function drawAll() {
   if (!S.view) { drawBase(); return; }
@@ -1988,6 +2135,7 @@ function drawAll() {
   drawField();
   drawOverlay();
   updateContours();
+  updateProbe();
 }
 
 // ------------------------------------------------------------------------------------------
@@ -2112,7 +2260,8 @@ function showOverview(kind = "past") {
   S.entry = null; S.meta = null; S.pkg = "";
   S.fill = []; S.uv = []; S.contourFrames = []; S.contour = null; S.tracked = []; parts = [];
   worker.postMessage({ type: "reset" });
-  for (const id of ["#readout", "#caption", "#view3d", "#scenePick", "#pastBack"]) $(id).hidden = true;
+  clearProbe();
+  for (const id of ["#caption", "#view3d", "#scenePick", "#pastBack"]) $(id).hidden = true;
   $("#legend").innerHTML = "";
   $("#scenes").innerHTML = "";
   $("#sceneLabel").textContent = kind === "past" ? "Past events" : "Highlights";
@@ -2591,7 +2740,7 @@ function unitsChanged() {
   renderFresh();
   if (S.entry) { renderScenes(); renderDetails(); }
   if (S.meta) { renderLegend(); updateTime(); }
-  $("#readout").hidden = true;
+  updateProbe();                           // the reading in the new units
 }
 
 const TAGLINE = "Interesting weather around the world, animated from ECMWF Open Data";
