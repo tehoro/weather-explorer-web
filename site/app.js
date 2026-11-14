@@ -181,24 +181,53 @@ function resize() {
 // poles (Mercator makes 75°N look four times bigger than 60°N). Panning turns the globe under
 // the view, so north is always straight up through the centre. Plane units are Earth radii; the
 // whole globe fits in a disc of radius 2.
+//
+// Zoomed out beyond a hemisphere, the map becomes a globe: the orthographic projection (the
+// Earth as seen from far away), which is azimuthal too, with the same centre. The two differ only
+// in how far out a point at angle c from the centre is drawn: 2 sin(c/2) on the map, sin c on the
+// globe. Between them the distance is blended, by g (0 map, 1 globe), so zooming in turns the
+// globe into the map without a jump. Only the near side (c ≤ 90°) is drawn while g > 0; its
+// edge, the horizon, is at R(g) Earth radii.
+const rhoOf = (g, c) => g * Math.sin(c) + (1 - g) * 2 * Math.sin(c / 2);
+const horizonR = (g) => g + (1 - g) * Math.SQRT2;
+// The angle c drawn at distance r: Newton's method from c = r, which approaches the answer from
+// below (the distance curve is concave and never steeper than 1), so it never overshoots.
+function angleAt(g, r) {
+  if (g <= 0) return 2 * Math.asin(Math.min(1, r / 2));
+  if (g >= 0.999) return Math.asin(Math.min(1, r));
+  let c = Math.min(r, Math.PI / 2);
+  for (let k = 0; k < 8; k++) c = Math.min(Math.PI / 2, c + (r - rhoOf(g, c)) / (g * Math.cos(c) + (1 - g) * Math.cos(c / 2)));
+  return c;
+}
+// How much of a globe the view at scale s (pixels per Earth radius) is: 1 at the size of the
+// globe overview or smaller, 0 once the screen is within a hemisphere (all scene views).
+const globeFit = () => Math.min(W, H) / 2 * 0.84;
+function globeness(s) {
+  const a = Math.log(globeFit()), b = Math.log(globeScale());
+  if (!(b > a)) return s <= Math.exp(b) ? 1 : 0;
+  const t = Math.max(0, Math.min(1, (Math.log(s) - a) / (b - a)));
+  return 1 - t * t * (3 - 2 * t);
+}
 function projection(v) {
-  if (v._p?.lon === v.lon && v._p.lat === v.lat) return v._p;
+  const g = v.g ?? globeness(v.s);
+  if (v._p?.lon === v.lon && v._p.lat === v.lat && v._p.g === g) return v._p;
   const lon0 = v.lon, sp = Math.sin(v.lat * DEG), cp = Math.cos(v.lat * DEG);
+  const R = g > 0 ? horizonR(g) : 2;
   const p = {
-    lon: v.lon, lat: v.lat, sp, cp,
+    lon: v.lon, lat: v.lat, sp, cp, g, R,
     // -> [x, y, cos of the distance from the centre] (negative on the far side of the globe)
     fwd(lon, lat) {
       const l = (lon - lon0) * DEG, sl = Math.sin(lat * DEG), cl = Math.cos(lat * DEG), cd = Math.cos(l);
       const cosc = sp * sl + cp * cl * cd;
-      const k = Math.sqrt(2 / Math.max(1e-9, 1 + cosc));
+      const k = g + (1 - g) * Math.sqrt(2 / Math.max(1e-9, 1 + cosc));   // distance / sin c
       return [k * cl * Math.sin(l), k * (cp * sl - sp * cl * cd), cosc];
     },
     // -> [lon, lat], or null off the globe
     inv(x, y) {
       const r = Math.hypot(x, y);
-      if (r > 2) return null;
+      if (r > R) return null;
       if (r < 1e-12) return [lon0, v.lat];
-      const c = 2 * Math.asin(r / 2), sc = Math.sin(c), cc = Math.cos(c);
+      const c = angleAt(g, r), sc = Math.sin(c), cc = Math.cos(c);
       return [lon0 + Math.atan2(x * sc, r * cp * cc - y * sp * sc) / DEG,
               Math.asin(Math.max(-1, Math.min(1, cc * sp + y * sc * cp / r))) / DEG];
     },
@@ -271,7 +300,7 @@ function sceneBox() {
 // The view that fits box b in w × h pixels. The box's outline bulges towards the pole, so the
 // view is centred on the middle of the outline, not on the box's middle latitude.
 function fitBox(b, w, h) {
-  let v = { lon: (b.w + b.e) / 2, lat: (b.s + b.n) / 2, s: 1 };
+  let v = { lon: (b.w + b.e) / 2, lat: (b.s + b.n) / 2, s: 1, g: 0 };
   for (let pass = 0; pass < 3; pass++) {
     const p = projection(v);
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -283,8 +312,9 @@ function fitBox(b, w, h) {
     }
     const s = Math.min(w / (x1 - x0), h / (y1 - y0)) * 0.94;
     const c = p.inv((x0 + x1) / 2, (y0 + y1) / 2);
-    v = { lon: c[0], lat: c[1], s, fit: s };
+    v = { lon: c[0], lat: c[1], s, fit: s, g: 0 };
   }
+  delete v.g;                              // shown as a map, or a globe if zoomed right out
   return v;
 }
 
@@ -293,7 +323,7 @@ function fit() {
     const r = mapEl.getBoundingClientRect();
     W = r.width; H = r.height;
   }
-  if (S.overview) { S.view = overviewView(); return; }
+  if (S.overview) { S.view = overviewView(true); return; }
   S.view = fitBox(sceneBox(), W, H);
 }
 
@@ -337,8 +367,16 @@ function flyTo(to) {
   if (!(S_ > 0.01)) return;               // already there
   // About 1.5–3 s, longer for longer flights; never showing more than a hemisphere.
   const wMax = Math.max(W / globeScale(), w0, w1);
+  // To or from the globe, the globe unrolls into the map over the first half of the flight (or
+  // rolls up over the second half), rather than in the instant the zoom passes a hemisphere.
+  const g0 = projection(from).g, g1 = projection(to).g;
+  const morph = Math.abs(g1 - g0) > 0.01;
+  const gAt = !morph ? null : (e) => {
+    const k = g1 < g0 ? Math.min(1, e / 0.55) : Math.max(0, (e - 0.45) / 0.55);
+    return g0 + (g1 - g0) * k * k * (3 - 2 * k);
+  };
   S.view = { ...to, lon: from.lon, lat: from.lat, s: from.s };
-  S.flight = { to, at, along, wMax, start: performance.now(), ms: Math.max(1050, Math.min(3000, 675 * S_)) };
+  S.flight = { to, at, along, wMax, gAt, start: performance.now(), ms: Math.max(morph ? 2200 : 1050, Math.min(3200, 675 * S_)) };
 }
 
 function stepFlight(now) {
@@ -352,6 +390,7 @@ function stepFlight(now) {
     const [u, w] = f.at(e);
     const [lon, lat] = f.along(u);
     S.view = { ...f.to, lon, lat, s: W / Math.min(w, f.wMax) };
+    if (f.gAt) S.view.g = f.gAt(e);
   }
   drawAll();
 }
@@ -390,18 +429,18 @@ fetch(fileUrl("basemap.json")).then((r) => r.json()).then((j) => {
 // from NOAA ETOPO 2022 by tools/make_relief.py; a saved copy fetches them from the live site.
 const RELIEF = OFFLINE ? "https://weatherexplorer.neilgordon.me/relief/" : "relief/";
 const MAP_STYLES = {
-  dark: { ocean: "#0d1923", land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
+  dark: { ocean: "#0d1923", space: "#05080b", glow: "110,170,220", limb: 0.55, land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
           grid: ["rgba(170,190,205,0.6)", "rgba(200,215,225,0.85)", "rgba(0,0,0,0.7)"],
           line: "rgba(255,255,255,0.78)", streak: "rgba(255,255,255,0.75)" },
-  light: { ocean: "#c4d3de", land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
+  light: { ocean: "#c4d3de", space: "#f3f5f7", glow: "120,160,200", limb: 0.22, land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
            grid: ["rgba(70,85,100,0.6)", "rgba(40,55,70,0.85)", "rgba(255,255,255,0.75)"],
            line: "rgba(20,30,40,0.78)", streak: "rgba(20,30,40,0.7)" },
-  satellite: { ocean: "#08131f", land: null, coast: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.4)",
+  satellite: { ocean: "#08131f", space: "#020406", glow: "110,170,230", limb: 0.6, land: null, coast: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.4)",
                grid: ["rgba(255,255,255,0.65)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
                line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
                tiles: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg",
                maxZoom: 8, credit: "Imagery: NASA Blue Marble (GIBS)" },
-  relief: { ocean: "#0f2034", land: null, coast: "rgba(255,255,255,0.5)", border: "rgba(255,255,255,0.32)",
+  relief: { ocean: "#0f2034", space: "#03070c", glow: "110,170,230", limb: 0.6, land: null, coast: "rgba(255,255,255,0.5)", border: "rgba(255,255,255,0.32)",
             grid: ["rgba(255,255,255,0.6)", "rgba(255,255,255,0.9)", "rgba(0,0,0,0.75)"],
             line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
             tiles: RELIEF + "{z}/{x}/{y}.webp", maxZoom: 6, credit: "Relief: NOAA ETOPO 2022" },
@@ -547,8 +586,25 @@ function drawBase() {
   const g = base.getContext("2d");
   const st = style();
   g.setTransform(DPR, 0, 0, DPR, 0, 0);
-  g.fillStyle = st.ocean;
-  g.fillRect(0, 0, W, H);
+  const pv = S.view && projection(S.view);
+  if (pv?.g > 0) {
+    // A globe in space: a faint glow of atmosphere round the ocean's disc.
+    const R = pv.R * S.view.s, cx = W / 2, cy = H / 2;
+    g.fillStyle = st.space;
+    g.fillRect(0, 0, W, H);
+    const glow = g.createRadialGradient(cx, cy, R * 0.98, cx, cy, R * 1.12);
+    glow.addColorStop(0, `rgba(${st.glow},${0.45 * pv.g})`);
+    glow.addColorStop(1, `rgba(${st.glow},0)`);
+    g.fillStyle = glow;
+    g.fillRect(0, 0, W, H);
+    g.beginPath();
+    g.arc(cx, cy, R, 0, 2 * Math.PI);
+    g.fillStyle = st.ocean;
+    g.fill();
+  } else {
+    g.fillStyle = st.ocean;
+    g.fillRect(0, 0, W, H);
+  }
   if (!S.view) return false;
   const vb = visibleBox();
   const loading = st.tiles ? drawTiles(g, st, vb) : false;
@@ -564,12 +620,12 @@ function drawBase() {
     // pulled in onto it, and edges between two such points run round it. A ring around the point
     // opposite the centre comes out inside out, so it is filled the other way: with a square round
     // the whole globe, which the even-odd rule turns into the ring's true inside.
-    const v = S.view, p = projection(v), R = Math.SQRT2;
+    const v = S.view, p = projection(v), R = horizonR(p.g);
     const anti = [v.lon + 180, -v.lat];
     const proj = (lon, lat) => {
-      let [x, y] = p.fwd(lon, lat);
+      let [x, y, c] = p.fwd(lon, lat);
       const r = Math.hypot(x, y);
-      return r > R ? [x * R / r, y * R / r, true] : [x, y, false];
+      return c < 0 || r > R ? (r > 1e-9 ? [x * R / r, y * R / r, true] : [R, 0, true]) : [x, y, false];
     };
     const to = (x, y, first) => { const px = W / 2 + x * v.s, py = H / 2 - y * v.s; first ? g.moveTo(px, py) : g.lineTo(px, py); };
     g.beginPath();
@@ -597,7 +653,26 @@ function drawBase() {
       if (inverted) g.rect(W / 2 - 2 * v.s, H / 2 - 2 * v.s, 4 * v.s, 4 * v.s);
     }
     g.fillStyle = st.land;
-    g.fill("evenodd");
+    if (p.g > 0) {                         // the square of an inverted ring stops at the horizon
+      g.save();
+      const clip = new Path2D();
+      clip.arc(W / 2, H / 2, R * v.s, 0, 2 * Math.PI);
+      g.clip(clip);
+      g.fill("evenodd");
+      g.restore();
+    } else g.fill("evenodd");
+  }
+  // On a globe, the surface darkens towards the horizon, so it reads as a ball.
+  if (pv?.g > 0) {
+    const R = pv.R * S.view.s, cx = W / 2, cy = H / 2;
+    const shade = g.createRadialGradient(cx - R * 0.3, cy - R * 0.35, R * 0.2, cx, cy, R);
+    shade.addColorStop(0, "rgba(255,255,255,0)");
+    shade.addColorStop(0.55, "rgba(0,0,0,0)");
+    shade.addColorStop(1, `rgba(0,0,0,${st.limb * pv.g})`);
+    g.fillStyle = shade;
+    g.beginPath();
+    g.arc(cx, cy, R, 0, 2 * Math.PI);
+    g.fill();
   }
   // Lines stop where they go round to the far side of the globe; the edges of the Antarctic
   // ring that run to the South Pole aren't coastline.
@@ -729,6 +804,7 @@ function drawGrid(g, st, vb) {
   g.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
   g.lineWidth = 3;
   g.lineJoin = "round";
+  if (projection(S.view).g > 0.5) labels.length = 0;   // on the globe the lines speak for themselves
   for (const [text, x, y, align, base] of labels) {
     g.textAlign = align;
     g.textBaseline = base;
@@ -778,6 +854,7 @@ function setupGL() {
     uniform vec2 size;     // canvas, device pixels
     uniform float scale;   // device pixels per Earth radius
     uniform vec3 centre;   // longitude (degrees), sin and cos of latitude
+    uniform float globe;   // 0 map (equal-area), 1 globe (orthographic), between while zooming
     uniform vec4 box;      // west, width (degrees), Mercator y of north and south edges (degrees)
     uniform float polar;   // 0 Mercator grid; 1 or -1 polar grid round the north or south pole
     uniform vec4 ext;      // polar grid: x0, x1, y0, y1 (Earth radii)
@@ -787,7 +864,18 @@ function setupGL() {
       vec2 q = (gl_FragCoord.xy - 0.5 * size) / scale;
       float r = length(q);
       if (r > 1.999) discard;
-      float d = 2.0 * asin(r * 0.5), sc = sin(d), cc = cos(d);
+      float d;             // the angle from the centre (see angleAt)
+      if (globe <= 0.0) d = 2.0 * asin(min(1.0, r * 0.5));
+      else {
+        if (r > globe + (1.0 - globe) * 1.41421356) discard;   // beyond the horizon
+        if (globe >= 0.999) d = asin(min(1.0, r));
+        else {
+          d = min(r, 1.5707963);
+          for (int k = 0; k < 8; k++)
+            d = min(1.5707963, d + (r - globe * sin(d) - (1.0 - globe) * 2.0 * sin(0.5 * d)) / (globe * cos(d) + (1.0 - globe) * cos(0.5 * d)));
+        }
+      }
+      float sc = sin(d), cc = cos(d);
       float lat = r < 1e-7 ? asin(centre.y) : asin(clamp(cc * centre.y + q.y * sc * centre.z / r, -1.0, 1.0));
       float dl = r < 1e-7 ? 0.0 : atan(q.x * sc, r * centre.z * cc - q.y * centre.y * sc);
       float fx, fy;
@@ -968,6 +1056,7 @@ function drawField() {
   gl.uniform2f(gl.getUniformLocation(prog, "size"), field.width, field.height);
   gl.uniform1f(gl.getUniformLocation(prog, "scale"), S.view.s * field.width / W);
   gl.uniform3f(gl.getUniformLocation(prog, "centre"), p.lon, p.sp, p.cp);
+  gl.uniform1f(gl.getUniformLocation(prog, "globe"), p.g);
   gl.uniform4f(gl.getUniformLocation(prog, "box"), b.west, east - b.west, mercY(b.north), mercY(b.south));
   const polar = m.projection === "polar";
   gl.uniform1f(gl.getUniformLocation(prog, "polar"), polar ? m.pole : 0);
@@ -1368,7 +1457,9 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   S.tab = entry.past ? "past" : "now";
   if (!entry.past) S.lastNow = entry;
   $(".stage").classList.remove("overview");
-  $("#pastBack").hidden = !entry.past || OFFLINE;
+  $("#pastBack").hidden = !!OFFLINE;
+  $("#pastBack").textContent = entry.past ? "← All past events" : "← All highlights";
+  $("#pastBack").title = entry.past ? "Back to the globe of past events" : "Back to the globe of today's highlights";
   renderFresh();
   // Times in the text ("06 UTC 16 Oct") are read in the event's year; past events credit ERA5.
   const year = entry.past ? entry.item.when?.peak || entry.item.when?.start : S.feed?.generated_utc;
@@ -1614,10 +1705,11 @@ function tick(now) {
 // ------------------------------------------------------------------------------------------
 
 const pointers = new Map();
-let dragStart = null, moved = false;
+let dragStart = null, moved = false, dragTrail = [];
 mapEl.addEventListener("pointerdown", (e) => {
   if (e.target.closest(".zoom")) return;
-  S.flight = null;
+  S.flight = null; S.fling = null; dragTrail = []; lastInput = performance.now();
+  if (S.view) delete S.view.g;             // a flight stopped part way: back to the globe or map its zoom gives
   mapEl.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
   dragStart = { x: e.offsetX, y: e.offsetY };
@@ -1639,13 +1731,26 @@ mapEl.addEventListener("pointermove", (e) => {
   }
   pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
   if (Math.hypot(e.offsetX - dragStart.x, e.offsetY - dragStart.y) > 4) moved = true;
-  keepAt(toWorld(prev[0], prev[1]), e.offsetX, e.offsetY);
+  const q = toWorld(prev[0], prev[1]);
+  if (q) keepAt(q, e.offsetX, e.offsetY);
+  else if (S.overview) S.view = offsetView(S.view, prev[0] - e.offsetX, prev[1] - e.offsetY);   // dragging in space beside the globe
+  dragTrail.push([performance.now(), e.offsetX, e.offsetY]);
+  if (dragTrail.length > 8) dragTrail.shift();
   viewChanged();
 });
 const up = (e) => {
   if (!pointers.has(e.pointerId)) return;
   pointers.delete(e.pointerId);
   mapEl.classList.remove("dragging");
+  // A flick of the globe keeps it turning: the speed over the last moments of the drag (generous,
+  // as a slow phone may take a while to draw each step).
+  if (moved && !pointers.size && S.overview && S.view.s <= globeScale()) {
+    const t = performance.now(), recent = dragTrail.filter((d) => t - d[0] < 160);
+    if (recent.length > 1 && t - recent[recent.length - 1][0] < 100) {
+      const a = recent[0], b = recent[recent.length - 1], dt = Math.max(16, b[0] - a[0]) / 1000;
+      S.fling = { vx: (b[1] - a[1]) / dt, vy: (b[2] - a[2]) / dt };
+    }
+  }
   if (moved || pointers.size) return;
   if (S.overview) { const p = markerAt(e.offsetX, e.offsetY); if (p) navigate(p, 0); return; }
   readout(e.offsetX, e.offsetY);
@@ -1657,7 +1762,7 @@ mapEl.addEventListener("pointermove", (e) => {
   mapEl.style.cursor = key ? "pointer" : "";
   if (key === S.hover) return;
   S.hover = key;
-  for (const b of document.querySelectorAll(".entry.past")) b.classList.toggle("hot", b.dataset.key === key);
+  for (const b of document.querySelectorAll(".entry")) b.classList.toggle("hot", b.dataset.key === key);
   drawOverlay();
 });
 mapEl.addEventListener("pointerup", up);
@@ -1669,14 +1774,15 @@ mapEl.addEventListener("wheel", (e) => {
 
 function zoomAt(px, py, k) {
   if (!S.view) return;
+  S.flight = null; delete S.view.g;
   const q = toWorld(px, py);
-  S.view = { ...S.view, s: Math.max(S.overview ? S.view.fit : Math.max(S.view.fit * 0.5, globeScale()), Math.min(S.view.fit * 10, S.view.s * k)) };
+  S.view = { ...S.view, s: Math.max(S.overview ? S.view.fit * 0.8 : Math.max(S.view.fit * 0.5, globeScale()), Math.min(S.view.fit * 10, S.view.s * k)) };
   keepAt(q, px, py);                       // the point under the cursor stays there
   viewChanged();
 }
 $("#zoomIn").onclick = () => zoomAt(W / 2, H / 2, 1.5);
 $("#zoomOut").onclick = () => zoomAt(W / 2, H / 2, 1 / 1.5);
-$("#pastBack").onclick = () => { location.hash = "past"; };
+$("#pastBack").onclick = () => { location.hash = S.entry?.past ? "past" : "now"; };
 $("#zoomFit").onclick = () => { fit(); viewChanged(false); };
 
 // Full screen: the map and timeline cover the page. Where the browser allows it (not iPhone
@@ -1711,6 +1817,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && stage.cl
 
 function viewChanged(touched = true) {
   S.flight = null;                         // panning or zooming stops a flight where it is
+  if (touched) lastInput = performance.now();
   if (S.view) S.view.touched = touched;
   $("#readout").hidden = true;
   particles.getContext("2d").clearRect(0, 0, particles.width, particles.height);
@@ -1805,15 +1912,13 @@ function renderList() {
       const e = [...shared, ...S.entries].find((x) => x.key === b.dataset.key);
       if (e && e !== S.entry) navigate(e, 0);
     };
-    if (b.classList.contains("past")) {
-      b.onmouseenter = () => { S.hover = b.dataset.key; if (S.overview) drawOverlay(); };
-      b.onmouseleave = () => { S.hover = null; if (S.overview) drawOverlay(); };
-    }
+    b.onmouseenter = () => { if (S.overview) { S.hover = b.dataset.key; drawOverlay(); } };
+    b.onmouseleave = () => { if (S.overview) { S.hover = null; drawOverlay(); } };
   }
   for (const b of el.querySelectorAll(".list-tabs button")) {
     b.onclick = () => {
-      if (b.dataset.tab === "past") { if (!S.overview) location.hash = "past"; return; }
-      if (S.tab === "past") navigate(S.lastNow && S.entries.includes(S.lastNow) ? S.lastNow : main[0] || S.entries[0], 0);
+      if (b.dataset.tab === "past") { if (S.overview !== "past") location.hash = "past"; return; }
+      if (S.overview !== "now") location.hash = "now";
     };
   }
   const order = el.querySelector(".past-order");
@@ -1856,43 +1961,65 @@ function shortName(it) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 const OVERVIEW_CENTRE = { lon: 15, lat: 15 };
-function overviewView() {
-  const s = Math.min(W, H) / 2 / Math.SQRT2 * 0.94;   // the hemisphere facing us (radius √2 Earth radii)
-  return { ...(S.view && S.overview ? { lon: S.view.lon, lat: S.view.lat } : OVERVIEW_CENTRE), s, fit: s };
+// The globe's view: the whole Earth with a margin. Today's highlights open facing the first one.
+function overviewView(keep) {
+  const s = globeFit();
+  let c = OVERVIEW_CENTRE;
+  if (keep && S.view && S.view.s <= globeScale()) c = { lon: S.view.lon, lat: S.view.lat };
+  else if (S.overview === "now") {
+    const first = overviewEntries().find((e) => e.item.where?.centre)?.item.where.centre;
+    if (first) c = { lon: first[1], lat: Math.max(-30, Math.min(30, first[0])) };
+  }
+  return { ...c, s, fit: s };
 }
-function showOverview() {
+// The entries on the globe: today's highlights (and requested ones), or the past events.
+const overviewEntries = () => S.entries.filter((e) => (S.overview === "past") === !!e.past);
+function showOverview(kind = "past") {
   S.token++;
   play(false);
-  const wasOverview = S.overview;
-  S.overview = true; S.tab = "past";
+  const was = S.overview;
+  S.overview = kind; S.tab = kind; S.hover = null;
   S.entry = null; S.meta = null; S.pkg = "";
   S.fill = []; S.uv = []; S.contourFrames = []; S.contour = null; S.tracked = []; parts = [];
   worker.postMessage({ type: "reset" });
-  for (const id of ["#readout", "#caption", "#view3d", "#scenePick"]) $(id).hidden = true;
+  for (const id of ["#readout", "#caption", "#view3d", "#scenePick", "#pastBack"]) $(id).hidden = true;
   $("#legend").innerHTML = "";
   $("#scenes").innerHTML = "";
-  $("#sceneLabel").textContent = "Past events";
+  $("#sceneLabel").textContent = kind === "past" ? "Past events" : "Highlights";
   $(".stage").classList.add("overview");
-  $("#pastBack").hidden = true;
   $("#when").textContent = "–";
   scrub.max = 0; scrub.value = 0; $("#ticks").innerHTML = "";
-  $("#attribution").textContent = S.pastAttribution || "";
-  $("#disclaimer").textContent = PAST_DISCLAIMER;
+  $("#attribution").textContent = kind === "past" ? S.pastAttribution || "" : S.feed?.attribution || ATTRIBUTION;
+  $("#disclaimer").textContent = kind === "past" ? PAST_DISCLAIMER : DISCLAIMER;
   Units.setEventZone(null, null);
   renderTimeZones();
   renderList();
   renderFresh();
   renderOverviewDetails();
   status(null);
-  if (!wasOverview) {
+  if (was !== kind) {
     const from = S.view;
-    fit();                                 // measures the map first, on a page opened at #past
-    if (from) { const to = S.view; S.view = from; flyTo(to); }
+    fit();                                 // measures the map first, on a page opened at the globe
+    S.view = overviewView(false);
+    // Back from a scene (or the other globe), the globe still faces the same place.
+    if (from?.s) S.view = { ...S.view, lon: from.lon, lat: Math.max(-40, Math.min(40, from.lat)) };
+    if (from?.s) { const to = S.view; S.view = from; flyTo(to); }
   }
   drawAll();
-  track("past", "Past events");
+  track(kind === "past" ? "past" : "globe", kind === "past" ? "Past events" : "Highlights globe");
 }
 function renderOverviewDetails() {
+  if (S.overview === "now") {
+    const n = overviewEntries().length, t = S.feed?.generated_utc;
+    $("#details").innerHTML = `<h2>Today's highlights</h2>
+      <p>${n} weather events worth watching around the world${t ? `, picked from the ECMWF forecast of ${esc(Units.formatTime(parseTime(t)))}` : ""}.
+      Each one is an animation of the forecast with notes on what to look for.</p>
+      <p>Spin the globe and click a marker, or choose a highlight from the list. The colour of a marker is its main
+      hazard (key below); a ring is an explainer. The yellow lines are the forecast tracks of the main lows.</p>
+      <p class="hz-key">${HAZARD_KEY.map(([k, label]) => `<span><i style="background:${HAZARD_COLOUR[k]}"></i>${label}</span>`).join("")}</p>
+      <p class="muted">Model guidance, not official warnings: for those, see your national weather service.</p>`;
+    return;
+  }
   const past = S.entries.filter((e) => e.past);
   const years = past.map((e) => peakOf(e.item).getUTCFullYear());
   $("#details").innerHTML = `<h2>Past events</h2>
@@ -1905,11 +2032,25 @@ function renderOverviewDetails() {
     time. On a 31 km grid it smooths the strongest winds and the heaviest rain, so the measured values in each
     event's table are usually higher.</p>`;
 }
+// Marker colours on the highlights globe, by an item's first hazard.
+const HAZARD_COLOUR = {
+  "tropical-cyclone": "#ff5d73", wind: "#5fd4c4", rain: "#4da3ff", flood: "#4da3ff", convection: "#b48cff",
+  snow: "#e4f1ff", ice: "#9fd8ff", heat: "#ff9b42", cold: "#8fb8ff", coastal: "#4dd0e1", other: "#ffd666",
+};
+const HAZARD_KEY = [["tropical-cyclone", "Tropical cyclone"], ["wind", "Wind"], ["rain", "Rain or flood"],
+  ["convection", "Storms"], ["snow", "Snow"], ["heat", "Heat"], ["other", "Other"]];
+const markerColour = (it) => HAZARD_COLOUR[(it.hazards || []).find((h) => HAZARD_COLOUR[h])] || HAZARD_COLOUR.other;
+// A marker's label: "Gabrielle 2023" for a past event; the country or the first place for a highlight.
+function markerLabel(it) {
+  if (S.overview === "past") return `${shortName(it)} ${peakOf(it).getUTCFullYear()}`;
+  if (it.short_name) return loc(it.short_name);
+  const c = (it.where?.country || "").trim() || (it.where?.label || "").split(/[,;(]| and /)[0].trim();
+  return c.length > 26 ? `${c.slice(0, 24)}…` : c;
+}
 // The markers, front side of the globe only. Returns [{e, x, y}] for clicks.
 function pastMarkers() {
   const out = [];
-  for (const e of S.entries) {
-    if (!e.past) continue;
+  for (const e of overviewEntries()) {
     const c = e.item.where?.centre;
     if (!c) continue;
     const [x, y, cos] = toScreen(c[1], c[0]);
@@ -1922,8 +2063,7 @@ function drawOverview(g) {
   // Tracks: the first scene's lows, thin and faint.
   g.lineWidth = 1.5;
   g.lineJoin = "round";
-  for (const e of S.entries) {
-    if (!e.past) continue;
+  for (const e of overviewEntries()) {
     const hot = e.key === S.hover;
     for (const tr of tracksOf(e.item.scenes[0])) {
       g.beginPath();
@@ -1939,17 +2079,25 @@ function drawOverview(g) {
     }
   }
   // Markers, then labels that don't overlap, nearest the centre first. Hovering only changes the
-  // colour, so a label never jumps to another side under the pointer.
+  // colour, so a label never jumps to another side under the pointer. Markers fade towards the
+  // horizon of the globe.
+  const now = S.overview === "now";
   const ms = pastMarkers().sort((a, b) => Math.hypot(a.x - W / 2, a.y - H / 2) - Math.hypot(b.x - W / 2, b.y - H / 2));
   for (const m of [...ms].reverse().sort((a, b) => (a.e.key === S.hover) - (b.e.key === S.hover))) {   // hovered on top
-    const hot = m.e.key === S.hover;
+    const hot = m.e.key === S.hover, col = now ? markerColour(m.e.item) : TRACK;
+    const ring = now && m.e.item.kind === "explainer";
     g.beginPath();
     g.arc(m.x, m.y, hot ? 8 : 6, 0, 2 * Math.PI);
-    g.fillStyle = hot ? "#ffffff" : TRACK;
-    g.fill();
     g.lineWidth = 2;
     g.strokeStyle = "rgba(0,0,0,0.75)";
-    g.stroke();
+    if (ring) {
+      g.lineWidth = 5; g.stroke();
+      g.lineWidth = 2.5; g.strokeStyle = hot ? "#ffffff" : col; g.stroke();
+    } else {
+      g.fillStyle = hot ? "#ffffff" : col;
+      g.fill();
+      g.stroke();
+    }
   }
   const boxes = ms.map((m) => [m.x - 9, m.y - 9, m.x + 9, m.y + 9]);
   labelHits = [];
@@ -1958,7 +2106,8 @@ function drawOverview(g) {
   const free = (b) => b[0] >= 2 && b[2] <= W - 2 && b[1] >= 2 && b[3] <= H - 2
     && !boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
   for (const m of ms) {
-    const text = `${shortName(m.e.item)} ${peakOf(m.e.item).getUTCFullYear()}`;
+    const text = markerLabel(m.e.item);
+    if (!text) continue;
     const w = g.measureText(text).width;
     // Right, left, above, below.
     const spots = [[m.x + 11, m.y, "left"], [m.x - 11, m.y, "right"], [m.x, m.y - 17, "center"], [m.x, m.y + 17, "center"]];
@@ -1972,18 +2121,37 @@ function drawOverview(g) {
       g.lineWidth = 3.5;
       g.strokeStyle = st.grid[2];
       g.strokeText(text, x, y);
-      g.fillStyle = m.e.key === S.hover ? TRACK : st.grid[1];
+      g.fillStyle = m.e.key === S.hover ? (now ? "#ffffff" : TRACK) : st.grid[1];
       g.fillText(text, x, y);
       break;
     }
   }
 }
-// The globe turns slowly, as the Earth does (6° a second), until the viewer drags or zooms it, and pauses
-// while the pointer is on a marker or a row, so every event comes round.
-let spinWait = 0;
+// The globe turns slowly, as the Earth does (6° a second), and pauses while the viewer drags or
+// zooms it, or the pointer is on a marker or a row, so every event comes round. Left alone for
+// 2 s, it starts turning again, easing up to speed (unless zoomed in to a map). A flick of the
+// globe keeps it turning for a moment (inertia: pixels a second, slowing down).
+const SPIN_IDLE_MS = 2000;
+let spinWait = 0, lastInput = 0;
 function spinGlobe(dt) {
-  if (!S.overview || !S.view || S.view.touched || S.hover || reducedMotion.matches || document.hidden) return;
-  S.view = { ...S.view, lon: ((S.view.lon - 6 * dt + 540) % 360) - 180 };
+  if (!S.overview || !S.view || reducedMotion.matches || document.hidden) return;
+  const fl = S.fling;
+  if (fl && !pointers.size) {
+    const k = Math.exp(-3 * dt);
+    S.view = { ...offsetView(S.view, -fl.vx * dt, -fl.vy * dt), touched: true };
+    fl.vx *= k; fl.vy *= k;
+    if (Math.hypot(fl.vx, fl.vy) < 8) { S.fling = null; lastInput = performance.now(); }
+    drawAll();
+    return;
+  }
+  if (S.hover || pointers.size) return;
+  let speed = 1;
+  if (S.view.touched) {
+    const idle = performance.now() - lastInput - SPIN_IDLE_MS;
+    if (idle < 0 || S.view.s > globeScale()) return;
+    speed = Math.min(1, idle / 1500);
+  }
+  S.view = { ...S.view, lon: ((S.view.lon - 6 * speed * dt + 540) % 360) - 180 };
   spinWait += dt;
   if (spinWait < 1 / 30) return;           // 30 redraws a second is smooth enough
   spinWait = 0;
@@ -2374,7 +2542,9 @@ async function loadPast() {
 async function route() {
   await loadPast();
   const r = parseHash();
-  if (r.key === "past" && S.past?.length) { showOverview(); return; }
+  if (r.key === "past" && S.past?.length) { showOverview("past"); return; }
+  if ((r.key === "now" || (!r.key && !OFFLINE)) && S.entries.some((e) => !e.past)) { showOverview("now"); return; }
+  if (r.key === "now") r.key = null;
   if (r.key === "past") r.key = null;
   let entry = r.key ? S.entries.find((e) => e.key === r.key || e.item.id === r.key) : null;
   if (!entry && S.shared?.key === r.key) entry = S.shared;

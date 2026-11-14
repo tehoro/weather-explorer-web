@@ -377,3 +377,8 @@ button { font: inherit; color: inherit; }
   .details { padding: 14px 16px 20px; }
   .foot { padding: 10px 16px; }
 }
+
+/* The highlights globe's key to marker colours. */
+.hz-key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.hz-key span { display: inline-flex; align-items: center; gap: 6px; }
+.hz-key i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,0.6); }
