@@ -139,7 +139,8 @@ jobs:
           done
           echo "::warning::live feed.json still differs after 10 min"; exit 1
 
-  # 3D views for tropical cyclones (build3d.py). They take minutes per storm to fetch from Open Data,
+  # 3D views for tropical cyclones (build3d.py), and the clouds on the globe of highlights
+  # (buildglobe.py). The 3D views take minutes per storm to fetch from Open Data,
   # so they are built after the site is live and then deployed again; sync.py only attaches bundles
   # that already exist. Runs after every successful sync, so a storm whose build failed is retried.
   build3d:
@@ -161,16 +162,21 @@ jobs:
           key: data-${{ github.run_id }}-3d
           restore-keys: data-
 
-      - name: Build 3D views
+      - name: Build 3D views and the globe's clouds
         id: build
+        # The clouds (buildglobe.py) are rebuilt when a new 00 or 12 UTC run is on Open Data. If
+        # they fail, the site keeps the last ones and the 3D views still go out.
         run: |
           set +e
           uv run --frozen build3d.py
           code=$?
+          uv run --frozen buildglobe.py
+          globe=$?
           set -e
-          if [ "$code" = 0 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"
-          elif [ "$code" = 3 ]; then echo "changed=false" >> "$GITHUB_OUTPUT"
-          else exit "$code"; fi
+          if [ "$globe" != 0 ] && [ "$globe" != 3 ]; then echo "::warning::buildglobe.py failed ($globe)"; fi
+          if [ "$code" != 0 ] && [ "$code" != 3 ]; then exit "$code"; fi
+          if [ "$code" = 0 ] || [ "$globe" = 0 ]; then echo "changed=true" >> "$GITHUB_OUTPUT"
+          else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Save converted scenes
         if: steps.build.outputs.changed == 'true'

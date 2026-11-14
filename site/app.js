@@ -432,7 +432,7 @@ const MAP_STYLES = {
   dark: { ocean: "#0d1923", space: "#05080b", glow: "110,170,220", limb: 0.55, land: "#1b2731", coast: "rgba(170,190,205,0.55)", border: "rgba(170,190,205,0.28)",
           grid: ["rgba(170,190,205,0.6)", "rgba(200,215,225,0.85)", "rgba(0,0,0,0.7)"],
           line: "rgba(255,255,255,0.78)", streak: "rgba(255,255,255,0.75)" },
-  light: { ocean: "#c4d3de", space: "#f3f5f7", glow: "120,160,200", limb: 0.22, land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
+  light: { ocean: "#c4d3de", space: "#f3f5f7", cloud: [0.36, 0.43, 0.5], glow: "120,160,200", limb: 0.22, land: "#eceee8", coast: "rgba(70,85,100,0.6)", border: "rgba(70,85,100,0.35)",
            grid: ["rgba(70,85,100,0.6)", "rgba(40,55,70,0.85)", "rgba(255,255,255,0.75)"],
            line: "rgba(20,30,40,0.78)", streak: "rgba(20,30,40,0.7)" },
   satellite: { ocean: "#08131f", space: "#020406", glow: "110,170,230", limb: 0.6, land: null, coast: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.4)",
@@ -821,7 +821,7 @@ function drawGrid(g, st, vb) {
 // ------------------------------------------------------------------------------------------
 
 const gl = field.getContext("webgl2", { premultipliedAlpha: true, antialias: false });
-let prog = null, lutTex = null, quad = null;
+let prog = null, lutTex = null, quad = null, cloudProg = null;
 
 function linkProgram(gl, vs, fs) {
   const sh = (type, src) => {
@@ -838,6 +838,36 @@ function linkProgram(gl, vs, fs) {
   return p;
 }
 
+// Each pixel of the field canvas back through the projection (see projection and angleAt):
+// unproject gives its latitude and its longitude east of the centre (radians), or false off the
+// globe. Shared by the scene's colours and the globe's clouds.
+const UNPROJECT_GLSL = `
+    uniform vec2 size;     // canvas, device pixels
+    uniform float scale;   // device pixels per Earth radius
+    uniform vec3 centre;   // longitude (degrees), sin and cos of latitude
+    uniform float globe;   // 0 map (equal-area), 1 globe (orthographic), between while zooming
+    bool unproject(out float lat, out float dl) {
+      vec2 q = (gl_FragCoord.xy - 0.5 * size) / scale;
+      float r = length(q);
+      lat = 0.0; dl = 0.0;
+      if (r > 1.999) return false;
+      float d;             // the angle from the centre
+      if (globe <= 0.0) d = 2.0 * asin(min(1.0, r * 0.5));
+      else {
+        if (r > globe + (1.0 - globe) * 1.41421356) return false;   // beyond the horizon
+        if (globe >= 0.999) d = asin(min(1.0, r));
+        else {
+          d = min(r, 1.5707963);
+          for (int k = 0; k < 8; k++)
+            d = min(1.5707963, d + (r - globe * sin(d) - (1.0 - globe) * 2.0 * sin(0.5 * d)) / (globe * cos(d) + (1.0 - globe) * cos(0.5 * d)));
+        }
+      }
+      float sc = sin(d), cc = cos(d);
+      lat = r < 1e-7 ? asin(centre.y) : asin(clamp(cc * centre.y + q.y * sc * centre.z / r, -1.0, 1.0));
+      dl = r < 1e-7 ? 0.0 : atan(q.x * sc, r * centre.z * cc - q.y * centre.y * sc);
+      return true;
+    }`;
+
 function setupGL() {
   if (!gl) return;
   // The quad covers the canvas; each pixel is taken back through the projection to longitude
@@ -851,33 +881,15 @@ function setupGL() {
     out vec4 o;
     uniform sampler2D A, B, LUT;
     uniform float mixT, lo, hi, rlo, rhi, sq, cat;
-    uniform vec2 size;     // canvas, device pixels
-    uniform float scale;   // device pixels per Earth radius
-    uniform vec3 centre;   // longitude (degrees), sin and cos of latitude
-    uniform float globe;   // 0 map (equal-area), 1 globe (orthographic), between while zooming
+    ${UNPROJECT_GLSL}
     uniform vec4 box;      // west, width (degrees), Mercator y of north and south edges (degrees)
     uniform float polar;   // 0 Mercator grid; 1 or -1 polar grid round the north or south pole
     uniform vec4 ext;      // polar grid: x0, x1, y0, y1 (Earth radii)
     uniform vec4 eye;      // tracked low: centre (xy) and radius (zw) in grid fractions; z = 0 for none
     uniform vec4 shift;    // where frames A (xy) and B (zw) have that low, relative to the centre
     void main() {
-      vec2 q = (gl_FragCoord.xy - 0.5 * size) / scale;
-      float r = length(q);
-      if (r > 1.999) discard;
-      float d;             // the angle from the centre (see angleAt)
-      if (globe <= 0.0) d = 2.0 * asin(min(1.0, r * 0.5));
-      else {
-        if (r > globe + (1.0 - globe) * 1.41421356) discard;   // beyond the horizon
-        if (globe >= 0.999) d = asin(min(1.0, r));
-        else {
-          d = min(r, 1.5707963);
-          for (int k = 0; k < 8; k++)
-            d = min(1.5707963, d + (r - globe * sin(d) - (1.0 - globe) * 2.0 * sin(0.5 * d)) / (globe * cos(d) + (1.0 - globe) * cos(0.5 * d)));
-        }
-      }
-      float sc = sin(d), cc = cos(d);
-      float lat = r < 1e-7 ? asin(centre.y) : asin(clamp(cc * centre.y + q.y * sc * centre.z / r, -1.0, 1.0));
-      float dl = r < 1e-7 ? 0.0 : atan(q.x * sc, r * centre.z * cc - q.y * centre.y * sc);
+      float lat, dl;
+      if (!unproject(lat, dl)) discard;
       float fx, fy;
       if (polar != 0.0) {
         float l = radians(centre.x) + dl, rho = 2.0 * sin(0.785398163 - 0.5 * polar * lat);
@@ -913,6 +925,25 @@ function setupGL() {
       o = vec4(c.rgb * c.a, c.a);
     }`;
   prog = linkProgram(gl, vs, fs);
+  // The globe's clouds: a 0.5° latitude-longitude grid (buildglobe.py), brighter = colder tops,
+  // drawn as white (or the style's cloud colour) with more cover where the tops are colder.
+  const cfs = `#version 300 es
+    precision highp float;
+    out vec4 o;
+    uniform sampler2D A, B;
+    uniform float mixT, alpha;
+    uniform vec3 tint;
+    ${UNPROJECT_GLSL}
+    void main() {
+      float lat, dl;
+      if (!unproject(lat, dl)) discard;
+      float lon = centre.x + degrees(dl);
+      vec2 uv = vec2(fract((lon + 180.0) / 360.0 + 0.5 / 720.0), ((90.0 - degrees(lat)) * 2.0 + 0.5) / 361.0);
+      float v = mix(texture(A, uv).r, texture(B, uv).r, mixT);
+      float a = smoothstep(0.22, 0.85, v) * alpha;
+      o = vec4(tint * a, a);
+    }`;
+  cloudProg = linkProgram(gl, vs, cfs);
   quad = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
@@ -1028,6 +1059,100 @@ function eyeShift(m, sc, i, j, t) {
   return { x: cx, y: cy, rx, ry, ax: ax - cx, ay: ay - cy, bx: bx - cx, by: by - cy };
 }
 
+// ------------------------------------------------------------------------------------------
+// The globe's clouds: the forecast's cloud tops (buildglobe.py), looping over the next three
+// days while the globe is shown, and fading out as it unrolls into a scene's map.
+// ------------------------------------------------------------------------------------------
+
+const CLOUD_HOURS_PER_SEC = 3;            // as the scenes at 1×
+const CLOUD_SPAN_H = 72;
+const clouds = { meta: null, tex: [], first: 0, last: 0, pos: 0, held: 0, wait: 0, asked: false };
+async function loadClouds() {
+  if (clouds.asked || OFFLINE || !gl) return;
+  clouds.asked = true;
+  let meta;
+  try {
+    meta = await fetch(dataUrl(`globe/meta.json?r=${Date.now() / 6e5 | 0}`)).then((r) => r.ok ? r.json() : null);
+  } catch { meta = null; }
+  if (!meta?.frames?.length) return;
+  // The loop starts at the frame at or just before now and runs three days on.
+  const now = Date.now(), times = meta.frames.map((f) => parseTime(f.valid_time).getTime());
+  let first = 0;
+  times.forEach((t, i) => { if (t <= now) first = i; });
+  const last = Math.max(first, times.findLastIndex((t) => t <= times[first] + CLOUD_SPAN_H * 3.6e6));
+  Object.assign(clouds, { meta, times, first, last, pos: first, tex: [] });
+  for (let i = first; i <= last; i++) {   // in order, so the loop can start with what has arrived
+    const img = new Image();
+    img.src = dataUrl(`${meta.path}/${String(i).padStart(3, "0")}.webp`);
+    try { await img.decode(); } catch { continue; }
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    clouds.tex[i] = t;
+    if (i === first) { showCloudClock(); drawField(); }
+  }
+}
+// How much of the clouds to show: all of them on the globe, none on a scene's map.
+// Only with today's highlights: a past event's globe and maps are of other times.
+const cloudAlpha = () => (S.view && clouds.tex[clouds.first] && S.overview !== "past" && !S.entry?.past ? projection(S.view).g : 0);
+function drawClouds() {
+  const a = cloudAlpha();
+  if (!(a > 0.001) || !cloudProg) return;
+  const br = bracket(clouds.tex.slice(0, clouds.last + 1), clouds.pos);
+  if (!br) return;
+  const p = projection(S.view), st = style();
+  gl.useProgram(cloudProg);
+  const U = (n) => gl.getUniformLocation(cloudProg, n);
+  gl.uniform2f(U("size"), field.width, field.height);
+  gl.uniform1f(U("scale"), S.view.s * field.width / W);
+  gl.uniform3f(U("centre"), p.lon, p.sp, p.cp);
+  gl.uniform1f(U("globe"), p.g);
+  gl.uniform1f(U("mixT"), br.t);
+  gl.uniform1f(U("alpha"), 0.92 * a);
+  gl.uniform3fv(U("tint"), st.cloud || [1, 1, 1]);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, clouds.tex[br.i]); gl.uniform1i(U("A"), 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, clouds.tex[br.j]); gl.uniform1i(U("B"), 1);
+  const loc = gl.getAttribLocation(cloudProg, "p");
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+// Moves the loop on (waiting for frames still loading) and redraws about 30 times a second.
+function stepClouds(dt) {
+  if (!clouds.meta || !(cloudAlpha() > 0.001) || document.hidden) return;
+  if (!reducedMotion.matches) {
+    if (clouds.pos >= clouds.last) {
+      clouds.held += dt;
+      if (clouds.held > 1.5) { clouds.held = 0; clouds.pos = clouds.first; }
+    } else {
+      const hours = (clouds.times[Math.min(clouds.last, Math.floor(clouds.pos) + 1)] - clouds.times[Math.floor(clouds.pos)]) / 3.6e6 || 3;
+      const next = Math.min(clouds.last, clouds.pos + dt * CLOUD_HOURS_PER_SEC / hours);
+      if (clouds.tex[Math.ceil(next)]) clouds.pos = next;
+    }
+  }
+  showCloudClock();
+  clouds.wait += dt;
+  if (clouds.wait < 1 / 30) return;
+  clouds.wait = 0;
+  if (!S.flight) drawField();              // a flight redraws everything anyway
+}
+// The time the clouds show, under the globe.
+let clockText = "";
+function showCloudClock() {
+  const el = $("#globeClock");
+  const on = S.overview === "now" && !!clouds.tex[clouds.first] && !S.flight;
+  el.hidden = !on;
+  if (!on) return;
+  const t = new Date(clouds.times[Math.round(clouds.pos)]);
+  const text = `Cloud forecast · ${Units.formatTime(t)}`;
+  if (text !== clockText) { el.textContent = text; clockText = text; }
+}
+
 // The two loaded frames either side of the position, and the blend between them.
 function bracket(list, pos) {
   const n = list.length;
@@ -1046,6 +1171,9 @@ function drawField() {
   gl.viewport(0, 0, field.width, field.height);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);   // colours are premultiplied
+  drawClouds();
   const m = S.meta?.fill;
   const br = m && bracket(S.fill, S.pos);
   if (!br) return;
@@ -1458,6 +1586,7 @@ async function loadScene(entry, sceneIndex, opts = {}) {
   if (!entry.past) S.lastNow = entry;
   $(".stage").classList.remove("overview");
   $("#pastBack").hidden = !!OFFLINE;
+  $("#globeClock").hidden = true;
   $("#pastBack").textContent = entry.past ? "← All past events" : "← All highlights";
   $("#pastBack").title = entry.past ? "Back to the globe of past events" : "Back to the globe of today's highlights";
   renderFresh();
@@ -1678,6 +1807,7 @@ function tick(now) {
   if (S.recording) { requestAnimationFrame(tick); return; }
   if (S.flight) stepFlight(now);
   else spinGlobe(dt);
+  stepClouds(dt);
   if (S.playing && S.meta) {
     const n = S.meta.fill.frames.length;
     const next = Math.min(n - 1, posAfter(S.pos, dt));
@@ -2006,6 +2136,8 @@ function showOverview(kind = "past") {
     if (from?.s) { const to = S.view; S.view = from; flyTo(to); }
   }
   drawAll();
+  if (kind === "now") loadClouds();
+  showCloudClock();
   track(kind === "past" ? "past" : "globe", kind === "past" ? "Past events" : "Highlights globe");
 }
 function renderOverviewDetails() {
@@ -2016,6 +2148,9 @@ function renderOverviewDetails() {
       Each one is an animation of the forecast with notes on what to look for.</p>
       <p>Spin the globe and click a marker, or choose a highlight from the list. The colour of a marker is its main
       hazard (key below); a ring is an explainer. The yellow lines are the forecast tracks of the main lows.</p>
+      <p>The clouds are the forecast for the next three days: the model's cloud-top temperature, a guide to what a
+      weather satellite's infrared camera would see (cold, high tops bright; low cloud faint). Very cold ground,
+      such as Antarctica's ice sheet, shows up pale too.</p>
       <p class="hz-key">${HAZARD_KEY.map(([k, label]) => `<span><i style="background:${HAZARD_COLOUR[k]}"></i>${label}</span>`).join("")}</p>
       <p class="muted">Model guidance, not official warnings: for those, see your national weather service.</p>`;
     return;

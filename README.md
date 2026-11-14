@@ -76,6 +76,7 @@ The main files:
 | `site/3d/app3d.js` | three.js: ray-marched cloud volume, a sea shader with isobars, particle ribbons, storm-relative blending of frames. |
 | `sync.py` | Turning the backend's JSON scenes into small lossless WebP images, 8 bits per value. |
 | `build3d.py` | Fetching about 1,500 pieces of GRIB2 files from Open Data with HTTP Range requests and packing them into a 3D bundle. |
+| `buildglobe.py` | The forecast cloud on the globe of highlights: one global field per frame, turned into a small greyscale image. |
 
 The rest of this README describes each part in detail.
 
@@ -143,6 +144,24 @@ the item is listed and rebuilt only for a new run.
 
 ```bash
 uv run build3d.py          # build missing bundles for site/data/feed.json; exit 0 = changed, 3 = nothing new
+```
+
+### Clouds on the globe
+
+The site opens on a globe of today's highlights, with the forecast's clouds moving over it for the
+next three days. They are outgoing longwave radiation (OLR) from IFS HRES 0.25°: the infrared
+energy leaving the top of the atmosphere, low where cloud tops are cold and high, so it looks like
+an infrared satellite image. Very cold ground (the Antarctic ice sheet) looks pale too.
+
+`buildglobe.py` takes the newest 00 or 12 UTC run, fetches its accumulated `ttr` every 3 hours
+(34 range requests, under a minute), averages each 3-hour mean to 0.5° and writes
+`data/globe/meta.json` and `data/globe/<run>/NNN.webp` (720 × 361, lossy, about 30 KB each, 33
+frames from a few hours before the build to four days on). It runs in the `build3d` job, so it is
+rebuilt soon after each run reaches Open Data. The viewer loops the frames from now to three days
+ahead and fades them out as the globe unrolls into a scene's map. Past events have no clouds.
+
+```bash
+uv run buildglobe.py       # exit 0 = new run built, 3 = already up to date
 ```
 
 ## Data format
