@@ -39,6 +39,7 @@ import os
 import re
 import shutil
 import sys
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -87,7 +88,8 @@ def get_json(path: str, key: str):
 
 def webp(arr: np.ndarray) -> bytes:
     b = io.BytesIO()
-    Image.fromarray(arr).save(b, "WEBP", lossless=True, quality=100, method=6)
+    # Effort 4 keeps identical pixels; effort 6 saves little space but is much slower.
+    Image.fromarray(arr).save(b, "WEBP", lossless=True, quality=100, method=4)
     return b.getvalue()
 
 
@@ -172,6 +174,7 @@ def package(scene: dict, key: str, root: Path) -> str | None:
     except (OSError, ValueError):
         pass
     tmp = folder.with_name(folder.name + ".part")
+    started = time.monotonic()
     shutil.rmtree(tmp, ignore_errors=True)
     meta = {}
     for role, name in files.items():
@@ -187,7 +190,7 @@ def package(scene: dict, key: str, root: Path) -> str | None:
     (tmp / "meta.json").write_text(json.dumps(meta | {"format": FORMAT}, separators=(",", ":")))
     shutil.rmtree(folder, ignore_errors=True)
     tmp.rename(folder)
-    print(f"[sync] built {rel}", flush=True)
+    print(f"[sync] built {rel} in {time.monotonic() - started:.1f}s", flush=True)
     return rel
 
 

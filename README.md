@@ -14,11 +14,13 @@ cyclones. The research runs in the backend: https://github.com/tehoro/weather-ex
 
 ## Who made this, and how
 
-All of the code and documentation in this repository was written by **Claude Opus 5.5**, an AI
+The original code and documentation in this repository were written by **Claude Opus 5.5**, an AI
 model made by [Anthropic](https://www.anthropic.com), working in
 [Claude Code](https://claude.com/claude-code) at the direction of **Neil Gordon**. Neil set the
 goals, the design rules and the priorities, tested the results and decided what to keep. Claude
 wrote the code, ran the tests and wrote the commit messages.
+
+Subsequent maintenance also uses OpenAI Codex, including the November 2026 sync optimisation.
 
 Neil developed Weather Explorer as an **ECMWF Visiting Scientist**. ECMWF supported
 the work by providing the Claude Opus 5.5 usage, through its enterprise account, with which the
@@ -99,6 +101,8 @@ backend (Replit) ──/api/highlights, /api/requests, /scenes──▶ sync.py 
 - `sync.py` — fetches the feed, requested events and scene files; writes `site/data/`. Scene files
   never change once built, so each is converted once (kept in the Actions cache). Exit 3 means
   nothing new, and the workflow then skips deploying.
+  Lossless WebP uses encoder effort 4: identical pixels with much faster encoding than effort 6,
+  at a small increase in file size. New packages log their build time.
 - `site/` — the viewer: `index.html` (including the Help text), `style.css`, `app.js` (equal-area map projection centred on the view,
   WebGL2 colour fill, pan/zoom, timeline, wind particles, panels), `worker.js` (frame decoding, isobars, highs and lows) and
   `basemap.json` (Natural Earth 1:50m land and borders, public domain).
@@ -227,7 +231,8 @@ Apache 2.0), [NumPy](https://numpy.org), [Pillow](https://python-pillow.org) and
 [truststore](https://github.com/sethmlarson/truststore) for the data scripts (versions in
 `uv.lock`); [GoatCounter](https://www.goatcounter.com) for visit counts.
 
-**AI.** The code was written by Claude Opus 5.5 ([Anthropic](https://www.anthropic.com)). The
+**AI.** The original code was written by Claude Opus 5.5 ([Anthropic](https://www.anthropic.com)),
+with subsequent maintenance also using OpenAI Codex. The
 highlights are chosen and written by an AI model in the backend (currently GPT-6.1 Sol from
 [OpenAI](https://openai.com); Claude Opus 5.5 is the alternative).
 
