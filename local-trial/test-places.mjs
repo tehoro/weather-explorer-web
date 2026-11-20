@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {placeTiles,selectPlaces,overlaps} from './place-selection.mjs';
+const available=new Set(['71-18','00-18']);assert.deepEqual(placeTiles({west:179,north:0,lonSpan:2,latSpan:1},available),['71-18','00-18']);
+const p=(id,x,y,population=1000)=>({id,name:'Place '+id,x,y,population,box:{left:x,right:x+70,top:y-10,bottom:y+10}});
+const candidates=[p(1,50,50,1e6),p(2,55,50,500),p(3,250,50),p(4,450,50),p(5,50,250),p(6,250,250),p(7,450,250)];
+const labels=selectPlaces(candidates);assert.equal(labels.length,5);assert.ok(labels.some(p=>p.id===1));assert.ok(!labels.some(p=>p.id===2));
+for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++)assert.ok(!overlaps(labels[i].box,labels[j].box,22));
+assert.ok(!selectPlaces(candidates,[{left:0,right:150,top:0,bottom:100}]).some(p=>p.id===1));
+assert.equal(selectPlaces([]).length,0);assert.equal(selectPlaces([p(1,50,50)]).length,1);
+console.log('Global tile wrapping, five-label cap, population ranking, collision avoidance, panel exclusion and sparse views passed.');

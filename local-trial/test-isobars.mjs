@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {isobarInterval,pressureAnomalies} from './isobars.mjs';
+assert.equal(isobarInterval(500),4);assert.equal(isobarInterval(200),2);assert.equal(isobarInterval(60),1);
+assert.equal(isobarInterval(340,4),4);assert.equal(isobarInterval(310,4),2);
+assert.equal(isobarInterval(125,1),1);assert.equal(isobarInterval(140,1),2);
+const n=9,constant=new Float32Array(n*n).fill(1012),c=pressureAnomalies(constant,n);assert(c.every(v=>v===12));
+const plane=Float32Array.from({length:n*n},(_,i)=>1000+i%n+2*Math.floor(i/n));
+const smooth=pressureAnomalies(plane,n);assert(smooth.every((v,i)=>v===plane[i]-1000),'Smoothing must retain a linear pressure gradient and its contour positions');
+for(const step of [1,2,4])for(const pressure of [988,1000,1012,1024])assert.equal(Math.abs((pressure-1000)/step%1),0,'Contours stay at whole multiples of the interval');
+console.log('Adaptive 4/2/1 hPa spacing, hysteresis, flat fields and pressure-gradient preservation passed.');
+const {pressureContours}=await import('./pressure-contours.mjs');
+assert.equal(pressureContours(constant,n,1).length,0,'Flat isobar values must not make filled areas');
+const contours=pressureContours(plane,n,2);assert(contours.length>0);
+for(const s of contours)for(const [x,y] of [s.start,s.end])assert(Math.abs(1000+x+2*y-s.level)<1e-8,'Every contour vertex must lie on the pressure level');
+const hill=Float32Array.from({length:81},(_,i)=>1000+(i%9-4)**2+(Math.floor(i/9)-4)**2);
+const ring=pressureContours(hill,9,5).filter(s=>s.level===1005),degrees=new Map();
+for(const s of ring)for(const p of [s.start,s.end]){const key=p.map(v=>v.toFixed(8)).join(',');degrees.set(key,(degrees.get(key)||0)+1);}
+assert(ring.length>0&&[...degrees.values()].every(n=>n===2),'Closed low must have a continuous, unbranched contour');
+for(const a of [[1002,999,999,1002],[1001,998,998,1001]])assert.equal(pressureContours(a,2,1000).length,2,'Saddle must produce two distinct contour segments');
+console.log('Marching-squares contour positions, closed lows, saddles and flat-field regressions passed.');

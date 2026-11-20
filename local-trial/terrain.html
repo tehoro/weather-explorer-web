@@ -1,0 +1,221 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Weather Explorer · Local IFS trial</title>
+<style>
+:root{color-scheme:dark;font:14px system-ui,sans-serif;color:#e7f3f6;background:#07131f}*{box-sizing:border-box}body{margin:0;overflow:hidden}#scene{position:absolute;inset:0}canvas{display:block}.glass{background:#0b1b2cdd;border:1px solid #91c8db30;backdrop-filter:blur(16px);box-shadow:0 10px 40px #0004;border-radius:16px}header{position:absolute;left:24px;top:22px;padding:18px 22px;max-width:410px}h1{font-size:25px;margin:3px 0 7px;letter-spacing:-.6px}.eyebrow{font-size:10px;letter-spacing:2px;color:#76e8c7;font-weight:700}a{color:#a0cbd9;text-decoration:none}.sub{font-size:12px;color:#9db9c7;line-height:1.5}#panel{position:absolute;right:24px;top:22px;width:260px;padding:18px}label{display:block;color:#b4cbd5;font-size:12px;margin:14px 0 7px}select,button{font:inherit;color:#e8f6fb;border:1px solid #a1c7d338;background:#152f40;border-radius:8px;padding:8px 10px;cursor:pointer}select{width:100%}button:hover{background:#255067}button.active{background:#087d73;border-color:#80e3c4}input[type=range]{accent-color:#6ce4c2;width:100%}.row{display:flex;align-items:center;gap:8px}.row button{flex:1}#play{flex:0 0 80px}.check{display:flex;align-items:center;gap:8px}.check input{accent-color:#6ce4c2}#timeline{position:absolute;bottom:24px;left:24px;right:24px;padding:15px 20px;max-width:1100px;margin:auto}#time{font-size:19px;font-weight:600}#lead{font-size:12px;color:#a1bdca;margin-left:auto}#hours{margin:14px 0 5px}#ends{display:flex;justify-content:space-between;font-size:11px;color:#91b4c5}#info{position:absolute;left:24px;bottom:162px;max-width:340px;padding:13px 17px;font-size:12px;line-height:1.7}#hint{position:absolute;left:24px;top:160px;color:#a5c3d1;font-size:12px;max-width:360px}#legend{margin-top:16px}.gradient{height:7px;border-radius:6px;background:linear-gradient(90deg,#264e6c,#237fea,#44d5f3,#58d39a,#f3d66c,#e372ba)}.numbers{display:flex;justify-content:space-between;color:#aac1cf;font-size:10px;margin-top:5px}#section{position:absolute;left:24px;bottom:250px;width:min(580px,calc(100vw - 48px));padding:14px;display:none}#section canvas{width:100%;height:150px}#sectionTitle{color:#78e5c7;font-size:12px;margin-bottom:5px}#closeSection{float:right;padding:1px 7px}#compass{position:absolute;right:30px;bottom:180px;border:1px solid #7196ad66;border-radius:50%;width:46px;height:46px;text-align:center;padding-top:12px;color:#7ee7ce;font-weight:bold;background:#0c2030aa}#cameraNote{margin-top:12px;font-size:11px;color:#8faab8}button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid #76e8c7}#play{min-width:80px}.mobile{display:none}@media(max-width:760px){header{left:12px;top:12px;padding:12px;max-width:240px}h1{font-size:20px}header .sub{display:none}#panel{right:12px;top:12px;width:170px;padding:10px}#panel label{margin:8px 0 5px}#hint{left:12px;top:110px;width:180px}#timeline{left:12px;right:12px;bottom:12px;padding:12px}#time{font-size:14px}#info{left:12px;bottom:150px;max-width:220px}#section{left:12px;bottom:245px;width:calc(100vw - 24px)}#cameraNote{display:none}#compass{display:none}}
+
+#credits{margin-top:10px;font-size:11px;line-height:1.5}#credits summary{cursor:pointer;color:#a0cbd9}#credits[open]{max-height:50vh;overflow:auto}#credits p{margin:8px 0}#credits a{text-decoration:underline}#hint{position:static;width:auto;max-width:none;margin-top:10px;line-height:1.5}#panel{max-height:calc(100vh - 165px);overflow:auto}
+#previousHour,#nextHour,#nowHour{flex:0 0 auto;white-space:nowrap}button:disabled{opacity:.4;cursor:default}#timeline .row{flex-wrap:wrap} @media(max-width:760px){#timeline #time{flex-basis:100%}}  #placeSearch{margin-top:12px}#placeQuery{width:100%;box-sizing:border-box;padding:8px;border:1px solid #526a7c;border-radius:6px;background:#132b3d;color:#edf6fb;font:inherit}#placeMatches{max-height:200px;overflow:auto}#placeMatches button{display:block;width:100%;text-align:left;font-size:11px;margin-top:3px;padding:8px}#placeSearchNote{margin-top:5px} #panel,header,#info,#timeline{z-index:3}#mapTime{position:fixed;z-index:3;pointer-events:none;color:#e7f3f6;text-shadow:0 2px 8px #07131f,0 0 18px #07131f;font:600 clamp(25px,2.8vw,44px)/1.15 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;white-space:pre}#mapTimeZone{text-align:right;font:12px system-ui;color:#a5c3d1;margin-top:5px}#surfaceChoices button[aria-pressed="true"]{background:#2e7286;border-color:#89daec}#weatherFields legend{font-weight:600}#weatherFields select{width:100%}</style>
+<script type="importmap">{"imports":{"three":"/terrain-assets/three.module.js"}}</script><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=1"><link rel="alternate icon" href="/favicon.ico?v=1"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=1"><meta name="theme-color" content="#0b1b2c"><style>#generateText,#pointPanel,#openPoint,#copyForecast{display:none!important}</style></head><body><script>if(matchMedia('(max-width: 700px), (max-height: 520px) and (pointer: coarse)').matches)document.body.classList.add('clearView')</script>
+<div id="scene" aria-label="Interactive 3D terrain and surface weather"></div>
+<header class="glass"><div class="eyebrow">WEATHER EXPLORER · PRIVATE LOCAL TRIAL</div><h1>IFS over the ranges</h1><div class="sub">Zoom in anywhere in New Zealand for terrain detail down to about 90 m. The landscape opens at true scale (1×). Weather is shown on the 0.1° IFS forecast grid.<br>Textured clouds show humidity. Rain and snow fall close to the terrain. Rain appears as blue dots from above. At shallow viewing angles, fewer distant drops are drawn so perspective does not make light rain look heavy. Precipitation uses IFS amounts independently of the selected cloud display.</div><div class="sub" style="margin-top:10px;color:#f1d08d">Experimental forecast demonstration · not official guidance</div><div id="hint">Drag to orbit · scroll to approach<br>Shift-drag to pan the whole view<br>Right-drag also pans · double-click to focus<br>Touch: pinch to zoom · two fingers to pan</div><details id="credits"><summary>Acknowledgements &amp; limitations</summary><p>Data: © 2026 ECMWF, CC BY 4.0. Regridded and unit-converted. IFS 0.1° Open Data, every three hours. Rain and snow are average rates over the preceding three hours; snow is water equivalent.</p><p>Renderer adapted from Neil Gordon’s Weather Explorer Local. Copernicus DEM GLO-90: © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018. Provided under the <a href="https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model" target="_blank" rel="noopener">Copernicus DEM licence</a>. Shorelines: ESA WorldCover 2021 v200, CC BY 4.0, and Natural Earth.</p><p>Fine terrain does not add forecast resolution. Trails follow the display surface, not modelled vertical air motion. Humidity clouds are illustrative. Low/middle/high cloud cover uses schematic heights. Model terrain height is estimated hypsometrically from IFS fields; below-ground pressure levels are masked using surface pressure.</p></details><div id="viewCount" style="margin-top:8px;font-size:11px;color:#91acba" title="Page loads, including refreshes. Not unique visitors.">Views: …</div></header>
+
+<aside id="panel" class="glass"><label for="region" style="margin-top:0">Explore</label><select id="region"><option value="otaki">Cook Strait to Manawatū Gorge</option><option value="alps">Southern Alps</option></select><label class="check"><input id="detailTerrain" type="checkbox" checked> Detailed terrain</label><div id="detailNote" class="sub"></div><div id="viewButtons" class="row" style="margin-top:12px"><button id="resetView" title="Restore the original overview for this region">Reset view</button><button id="topDownView" title="Look straight down with north at the top">Top-down view</button></div>
+<div id="tileStatus" class="sub" hidden></div><label for="exaggeration">Terrain height <strong id="exLabel">1×</strong></label><input id="exaggeration" type="range" min="1" max="20" step=".5" value="1">
+
+
+<label for="density">Wind trail density</label><input id="density" type="range" min="0" max="4" step="0.05" value="2" aria-label="Wind trail density"><div class="sub" style="display:flex;justify-content:space-between"><span>Off</span><span>Standard</span><span>2×</span></div>
+<label for="speed">Wind trail animation speed</label><input id="speed" type="range" min=".2" max="3" step=".1" value="1.6">
+
+
+<fieldset id="weatherFields" style="border:0;padding:0;margin:12px 0"><legend>Colour the landscape</legend><div id="surfaceChoices" class="row" style="flex-wrap:wrap"><button data-surface="rain" aria-pressed="false">Rain / snow</button><button data-surface="temperature" aria-pressed="false">Temperature</button><button data-surface="wind" aria-pressed="false">Wind speed</button><button data-surface="terrain" aria-pressed="true">Terrain</button></div>
+<div id="surfaceOpacityOptions" hidden><label for="surfaceOpacity"><span id="surfaceOpacityName">Rain / snow opacity</span> <span id="surfaceOpacityValue">50%</span></label><input id="surfaceOpacity" type="range" min="0" max="100" step="1" value="50"><div class="sub">Reveal the terrain beneath the weather colours.</div></div>
+<label class="check"><input id="pressureContours" type="checkbox"> MSL pressure contours · 2 hPa</label>
+<label class="check"><input id="pressureClouds" type="checkbox" checked> 3D clouds by humidity</label>
+<label class="check"><input id="fallingRain" type="checkbox" checked> Falling rain</label>
+<label class="check"><input id="rainSplashes" type="checkbox" checked> Rain splashes</label>
+<label class="check"><input id="fallingSnow" type="checkbox" checked> Falling snow</label>
+<div id="cloudOptions"><label class="check"><input id="textureCloud" type="checkbox" checked> Textured clouds</label><label for="cloudLevel">Cloud level</label><select id="cloudLevel"><option value="all">All pressure levels</option><option value="low">Lower levels · 1000–700 hPa</option><option value="middle">Middle levels · 600–400 hPa</option><option value="high">Upper levels · 300–50 hPa</option></select>
+<label for="cloudThreshold">Middle cloud threshold <span id="cloudThresholdValue">65%</span></label><input id="cloudThreshold" type="range" min="0" max="100" step="1" value="65">
+<div id="cloudThresholdSummary" class="sub">Low 78% · Middle 65% · High 52%</div>
+<div class="sub">Low and high thresholds scale with this slider, within 0–100%.</div>
+<label for="cloudOpacity">Cloud density <span id="cloudOpacityValue">15%</span></label><input id="cloudOpacity" type="range" min="0" max="100" step="1" value="15">
+<div class="sub">Illustrative cloud volumes from relative humidity, extending halfway to adjacent levels. Density controls thickness of appearance. Cloud heights use their own multiplier, never lower than the terrain multiplier.</div></div><div id="atmosphereStatus" class="sub" role="status"></div></fieldset>
+<div id="placeSearch"><label for="placeQuery">Find a location</label><input id="placeQuery" type="search" placeholder="Town or settlement…" autocomplete="off" aria-controls="placeMatches" aria-expanded="false"><div id="placeMatches"></div><section id="orbitSettings" hidden aria-label="Location orbit">
+<strong id="orbitCity"></strong>
+<label for="orbitHeight">Height above sea level · <output id="heightRead">60 km</output></label>
+<input id="orbitHeight" type="range" min="0.5" max="150" step="0.5" value="60">
+<label for="orbitDistance">Distance from location · <output id="distanceRead">100 km</output></label>
+<input id="orbitDistance" type="range" min="10" max="500" step="5" value="100">
+<label for="orbitPeriod">Time per circuit · <output id="periodRead">60 s</output></label>
+<input id="orbitPeriod" type="range" min="15" max="180" step="5" value="60">
+<button id="resumeOrbit" hidden>Resume orbit</button>
+</section>
+<style>#orbitSettings{margin:12px 0;border-top:1px solid #456171;padding-top:10px}#orbitSettings input{width:100%}#resumeClearOrbit{display:none}body.clearView #resumeClearOrbit:not([hidden]){display:block;position:fixed;z-index:20;bottom:calc(65px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);white-space:nowrap}</style>
+<div id="placeSearchNote" class="sub" aria-live="polite">Type at least two letters.</div></div><button id="shareView" style="width:100%;margin-top:8px">Share this view</button><div id="shareResult" hidden><p id="shareStatus" class="sub" role="status"></p><input id="shareLink" aria-label="Shareable view link" readonly style="width:100%;box-sizing:border-box"></div><div id="legend"><strong class="sub">Three-hour mean precipitation · mm/h</strong><div class="sub" style="margin-top:8px">Rain</div><div class="gradient" style="background:linear-gradient(90deg,#264e6c,#237fea,#44d5f3,#57b8f4,#9bd6ff,#d3eeff)"></div><div class="numbers"><span>0.1</span><span>1</span><span>2</span><span>5</span><span>10</span><span>20+</span></div><div class="sub" style="margin-top:8px">Snow · water equivalent</div><div class="gradient" style="background:linear-gradient(90deg,#442365,#6d39ad,#9257d1,#ae80e4,#ceb0f0,#eadbff)"></div><div class="numbers"><span>0.1</span><span>1</span><span>2</span><span>5</span><span>10</span><span>20+</span></div></div>
+<div class="sub" style="margin-top:14px">Wind trails · km/h · thicker = faster</div><div style="display:flex;gap:3px;margin-top:5px;text-align:center;font-size:10px;color:#07131f"><span style="flex:1;border-radius:3px;padding:5px 0;background:#fff3b0">&lt;30</span><span style="flex:1;border-radius:3px;padding:5px 0;background:#ffd12f">30–59</span><span style="flex:1;border-radius:3px;padding:5px 0;background:#ff851b">60–89</span><span style="flex:1;border-radius:3px;padding:5px 0;background:#ff334f">90–119</span><span style="flex:1;border-radius:3px;padding:5px 0;background:#e64dff">120+</span></div><div id="cameraNote">Switchable display terrain; weather on the 0.1° IFS model grid. Wind paths follow the surface; they are not vertical wind or parcel trajectories. Purple indicates the snow-water share of precipitation. Amounts are water equivalent, not snow depth.</div></aside>
+<div id="compass" title="Direction of north in the view">↑ N</div>
+<div id="info" class="glass">Click the landscape to inspect the forecast.</div>
+
+
+<div id="timeline" class="glass"><div class="row"><button id="play" aria-label="Play forecast">▶ Play</button><button id="previousHour" aria-label="Previous forecast hour" disabled>−3 h</button><button id="nextHour" aria-label="Next forecast hour" disabled>+3 h</button><button id="nowHour" title="Nearest forecast hour to the current time" disabled>Now</button><div id="time"></div><span id="lead"></span></div><input id="hours" aria-label="Forecast hour" type="range" min="1" max="101" value="1"><div id="freshness" class="sub" role="status"></div><div id="ends"><span id="start"></span><span id="cycle"></span><span id="end"></span></div></div>
+<script type="module" src="/terrain-assets/terrain.js?v=0182af7634c2"></script><section id="pointPanel" class="glass" hidden aria-label="Point forecast meteogram"><div id="pointDragHandle" title="Drag to move this panel"><button id="closePoint" aria-label="Close point forecast">×</button><button id="minPoint" type="button" aria-controls="pointBody" aria-expanded="true" aria-label="Minimise point forecast" title="Minimise point forecast">−</button><div id="pointPlace" style="font-weight:700;font-size:16px;margin-bottom:5px"></div><strong id="pointHeading">Point forecast</strong><div id="pointTime"></div><div id="pointTotal"></div><span class="sub">Drag heading to move · drag corners to resize</span></div><div id="pointBody"><div id="pointNote" class="sub"></div><div style="margin-top:10px"><button id="generateText">Generate text forecast</button></div><div id="forecastText" aria-live="polite" style="font-size:13px;line-height:1.6"></div><div id="pointCharts"></div></div><span class="pointResize nw" data-corner="nw" title="Drag to resize" aria-hidden="true"></span><span class="pointResize ne" data-corner="ne" title="Drag to resize" aria-hidden="true"></span><span class="pointResize sw" data-corner="sw" title="Drag to resize" aria-hidden="true"></span><span class="pointResize se" data-corner="se" title="Drag to resize" aria-hidden="true"></span></section>
+<style>
+.officialAlert{border-left:3px solid #ffbe64;background:#45341d66;padding:10px;margin:8px 0}.officialAlert p{margin:5px 0;white-space:pre-line}#forecastText a{color:#9bd6ff}
+
+#pointTotal{font-size:13px;color:#9bd6ff;margin:6px 0;font-weight:600}#pointBody{overflow:auto;min-height:0;flex:1}#pointDragHandle{flex-shrink:0;cursor:grab;touch-action:none;user-select:none;padding-bottom:7px}#pointDragHandle:active{cursor:grabbing}
+#pointPanel[hidden]{display:none}#pointPanel{position:absolute;z-index:10;left:24px;bottom:150px;width:min(760px,calc(100vw - 48px));max-height:calc(100vh - 180px);overflow:hidden;display:flex;flex-direction:column;padding:16px;background:#0b1b2cf5}#closePoint{float:right;padding:2px 10px;font-size:20px}#pointTime{color:#f0b5b9;font-size:12px;margin:5px 0}#pointNote{font-size:11px;padding-right:20px}.pointChart{display:block;width:100%;min-width:0;cursor:crosshair}#pointCharts{overflow-x:auto;margin-top:10px}#openPoint{font-size:12px;margin-top:7px} @media(max-width:760px){#pointPanel{left:12px;width:calc(100vw - 24px);bottom:170px;max-height:calc(100vh - 190px)}}
+.pointResize{position:absolute;width:18px;height:18px;touch-action:none;z-index:2;border-color:#9ebdce;border-style:solid;opacity:.8}.pointResize.nw{left:0;top:0;border-width:2px 0 0 2px;cursor:nwse-resize}.pointResize.ne{right:0;top:0;border-width:2px 2px 0 0;cursor:nesw-resize}.pointResize.sw{left:0;bottom:0;border-width:0 0 2px 2px;cursor:nesw-resize}.pointResize.se{right:0;bottom:0;border-width:0 2px 2px 0;cursor:nwse-resize}
+#panel,header,#info,#timeline{z-index:3}#mapTime{position:fixed;z-index:3;pointer-events:none;color:#e7f3f6;text-shadow:0 2px 8px #07131f,0 0 18px #07131f;font:600 clamp(25px,2.8vw,44px)/1.15 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;white-space:pre}#mapTimeZone{text-align:right;font:12px system-ui;color:#a5c3d1;margin-top:5px}#surfaceChoices button[aria-pressed="true"]{background:#2e7286;border-color:#89daec}#weatherFields legend{font-weight:600}#weatherFields select{width:100%}</style>
+<div id="mapTime" hidden><div><small id="mapTimeDate"></small> <span id="mapTimeMain"></span></div><div id="mapTimeZone"></div></div><div id="clearToolbar" role="group" aria-label="Clear view forecast controls">
+<button id="clearBack" aria-label="Previous forecast hour">−3 h</button>
+<button id="clearPlay" aria-label="Play forecast">▶ Play</button>
+<button id="clearForward" aria-label="Next forecast hour">+3 h</button>
+<select id="forecastPlaybackSpeed" aria-label="Forecast playback speed" title="Forecast playback speed"><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option><option value="12">12×</option><option value="16">16×</option></select>
+<button id="clearNow" title="Nearest forecast hour to now">Now</button>
+<button id="restoreControls" aria-expanded="true" aria-controls="panel timeline" title="Show or hide menus and timeline">Hide controls</button>
+</div>
+<style>
+#clearToolbar{position:fixed;z-index:20;bottom:calc(8px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:5px;border-radius:12px;background:#07131fd9;max-width:calc(100vw - 16px);box-sizing:border-box}
+#clearToolbar button{min-height:44px;padding:7px 7px;white-space:nowrap;font:13px system-ui;border-radius:8px}#clearPlay{min-width:65px}
+#clearToolbar[hidden]{display:none}
+body.clearView header,body.clearView #panel,body.clearView #timeline,body.clearView #info,body.clearView #pointPanel,body.clearView #compass,body.clearView #section{display:none!important}
+body.clearView #mapTime{left:auto!important;right:max(16px,env(safe-area-inset-right));top:max(16px,env(safe-area-inset-top))!important;font-size:clamp(25px,5vw,44px)}
+
+#timeline{bottom:calc(72px + env(safe-area-inset-bottom));padding:7px 12px;max-width:1000px;border-radius:10px}
+#timeline button{display:none!important}#timeline .row{flex-wrap:nowrap;gap:8px}#timeline #time{font-size:12px;flex-basis:auto;font-weight:400}#timeline #lead{font-size:11px}
+#timeline #hours{display:block;margin:5px 0 3px;height:16px}#timeline #ends{font-size:10px;gap:8px}#timeline #freshness{font-size:10px}
+@media(max-width:480px){#timeline #ends{flex-wrap:wrap;gap:3px}#timeline #cycle{order:3;flex-basis:100%;text-align:center}#timeline #end{margin-left:auto}}
+
+/* The idle hint occupies the otherwise empty corner beside the playback bar. */
+@media(min-width:761px){#info:not(:has(*)){left:12px;bottom:calc(8px + env(safe-area-inset-bottom));max-width:calc((100vw - 370px)/2 - 24px)}}
+#surfaceChoices button[aria-pressed="true"]{background:#2e7286;border-color:#89daec}#weatherFields legend{font-weight:600}#weatherFields select{width:100%}</style>
+
+<style>
+#minPoint{float:right;margin-right:5px;padding:2px 10px;font-size:20px}
+#pointPanel.pointRolled{height:auto!important;min-height:0!important;max-width:min(330px,calc(100vw - 24px));resize:none}
+#pointPanel.pointRolled :is(#pointBody,#pointTime,#pointTotal,.pointResize,#pointDragHandle .sub){display:none!important}
+#pointPanel.pointRolled #pointDragHandle{margin:0;padding-bottom:0}
+#surfaceChoices button[aria-pressed="true"]{background:#2e7286;border-color:#89daec}#weatherFields legend{font-weight:600}#weatherFields select{width:100%}</style>
+
+<style>#mapTimeDate{font-size:.55em;color:#cfdee4}body.clearView #mapTime{margin-top:6px}#surfaceChoices button[aria-pressed="true"]{background:#2e7286;border-color:#89daec}#weatherFields legend{font-weight:600}#weatherFields select{width:100%}</style>
+
+<style>@media (max-width:700px), (max-height:520px) and (pointer:coarse){
+ #panel:not(.panelRolled){box-sizing:border-box;width:clamp(136px,38vw,154px);right:max(5px,env(safe-area-inset-right));padding:8px;overflow-x:hidden}
+ #panel .panelDisclosure{gap:3px!important}
+ #panel .panelDisclosure button{min-width:28px;padding:2px 4px}
+ #panel select,#panel input:not([type=checkbox]),#panel fieldset{min-width:0;max-width:100%}
+ #panel #surfaceChoices,#panel #viewButtons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px}
+ #panel #surfaceChoices button,#panel #viewButtons button{min-width:0;padding:4px 1px;min-height:38px;font-size:11px;line-height:1.2}
+ #panel #surfaceChoices button[data-surface=temperature]{grid-column:1/-1;grid-row:2}
+ #panel #surfaceChoices button[data-surface=terrain]{grid-column:1/-1}
+ #panel #legend .numbers{font-size:10px}
+}
+#surfaceChoices button[aria-pressed="true"]{background:#2e7286;border-color:#89daec}#weatherFields legend{font-weight:600}#weatherFields select{width:100%}</style>
+
+<style>#clearToolbar select{width:auto;min-height:44px;padding:3px;font:13px system-ui;border-radius:8px}@media(max-width:380px){#clearToolbar{gap:2px;padding:3px;max-width:calc(100vw - 4px)}#clearToolbar button{padding:4px;font-size:12px}#clearPlay{min-width:48px}}#surfaceChoices button[aria-pressed="true"]{background:#2e7286;border-color:#89daec}#weatherFields legend{font-weight:600}#weatherFields select{width:100%}</style>
+<button id="viewerHelp" style="font:14px system-ui;padding:4px 8px;min-width:0" aria-haspopup="dialog">Help</button>
+<dialog id="viewerHelpDialog" aria-labelledby="viewerHelpTitle" style="color:#e6f3fa;background:#0c2230;border:1px solid #507585;border-radius:12px;width:min(600px,85vw);max-height:80vh;overflow:auto;padding:24px;line-height:1.5">
+<form method="dialog" style="float:right"><button aria-label="Close help">Close</button></form><h2 id="viewerHelpTitle">Using the 3D weather viewer</h2>
+<p>Explore the forecast across the landscape. This is an experimental model forecast; official MetService warnings take precedence.</p>
+<h3>Move around</h3><p>Drag to rotate, scroll to zoom, and Shift-drag or right-drag to pan. On a touchscreen, drag with one finger to rotate, pinch to zoom and drag with two fingers to pan. Double-click with a mouse to focus. <b>Reset view</b> restores the region overview; <b>Top-down view</b> looks north-up from above. Choose a region under <b>Explore</b>.</p>
+<h3>Fly to a location</h3><p>Search under <b>Find a location</b>. Choose <b>Fly to &amp; stay</b> to hold a stationary view, or <b>Fly to &amp; orbit</b> to circle. The camera turns towards the location, approaches, then starts a 60-second circuit, 100 km away and 5 km above sea level. Adjust the height, distance and circuit time beneath the location search while circling. Drag to take control, choose <b>Resume orbit</b> to continue, or use <b>Reset view</b> to return to the overview.</p>
+<h3>Terrain and wind trails</h3><p><b>Detailed terrain</b> loads finer Copernicus relief as you zoom, pan or orbit anywhere in New Zealand, down to about 90 m. The readout shows the finest grid currently visible. Switch it off to see model terrain. Weather uses the 0.1° IFS forecast grid. <b>Terrain height</b> starts at true scale (1×). Terrain height changes the landscape; Cloud height independently stretches model cloud heights above sea level. Terrain starts at 1× and cloud height at 5×. Cloud height cannot be lower than terrain height: increasing terrain raises clouds when needed. Wind trails show surface flow, with colour and thickness indicating speed. Density changes the number of trails; animation speed changes their motion on screen, not the forecast wind.</p>
+<h3>Record a video</h3><p>Choose a frame and resolution in the bottom toolbar, then press Record. Stop opens a preview with options to view or save the clip. On iPhone or iPad, choose Save to Photos, then Save Video in the share sheet. The recording includes the forecast time and map labels.</p>
+<h3>Colour the landscape</h3><p><b>Rain / snow</b> shows three-hour mean rates, with snow expressed as liquid-water equivalent, not snow depth. <b>Temperature</b> shows 2 m air temperature. <b>Wind speed</b> shows 10 m wind in km/h. <b>Terrain</b> shows elevation alone. The opacity slider reveals terrain beneath rain/snow or wind, remembering separate settings for each (50% and 20%). Temperature stays fully coloured.</p>
+<h3>Falling rain and snow</h3><p>You can switch falling rain and falling snow on independently. In wide, oblique views the viewer automatically emphasises distant precipitation. Use Rain splashes to show or hide ground impacts in these views. The view opens with terrain colouring, the information panel minimised and wind animation speed at the middle setting. Small rain streaks and varied snowflakes complete each fall in 1.5 seconds. Both use the same density curve based on their liquid-water rate, reaching maximum density at 10 mm/h. Light precipitation has a small minimum density. At shallow viewing angles, more ground fits into each pixel. The viewer draws fewer distant raindrops to compensate for this apparent crowding. Forecast rainfall rates stay the same. From above, rain appears as blue dots, splashes as expanding rings and snow as white flakes. They fall within 500 m of the displayed terrain, below the estimated cloud base. Snow uses the forecast snow-water amount and snow level. Rain and snow use IFS forecast amounts, independently of the cloud visualisation.</p>
+<h3>Pressure and 3D clouds</h3><p><b>MSL pressure contours</b> show sea-level pressure every 2 hPa, lightly smoothed for display. <b>3D clouds by humidity</b> gives illustrative cloud volumes on pressure levels, not observed cloud. All levels are selected by default. The middle-cloud threshold defaults to 65%; low/high thresholds scale with it (78%/52%), bounded at 0–100%. Texture adds gentle shading without changing cloud coverage or opacity. Cloud density adjusts transparency in both modes, starting at 15%.</p>
+<h3>Forecast time</h3><p>Use the timeline, play or ±3 h buttons to move through the forecast. Now selects the nearest available time. Rain and snow are average rates over the preceding three hours. Click the landscape for a readout. This private trial has no generated text forecasts.</p><p>Click the landscape or search for a place, then open <b>Point forecast</b> for hourly charts. Drag its heading to move it or its corners to resize. <b>Generate text forecast</b> summarises the remaining hours; it may queue or pause while the weather model runs. Official alerts are shown separately. Copy can include both text and the meteogram.</p>
+<h3>Other controls</h3><p><b>Experimental fronts</b> is a research overlay. <b>Share this view</b> copies the selected location/view; the link opens the latest forecast for that view. Minimise the panels or use <b>Hide controls</b> for a clear view.</p>
+</dialog>
+<button id="resumeClearOrbit" hidden>Resume orbit</button><style>
+#clearToolbar{width:max-content;flex-wrap:wrap;justify-content:center;align-items:center}
+#videoTools{display:inline-flex;align-items:center;gap:4px}
+#clearToolbar #videoTools button,#videoTools select{font:13px system-ui;min-height:40px;padding:4px 7px}
+#timeline,body.clearView #resumeClearOrbit:not([hidden]){bottom:calc(var(--video-toolbar-height,54px) + 14px + env(safe-area-inset-bottom))}
+#videoGuide{position:fixed;pointer-events:none;border:1px dashed #fff9;box-shadow:0 0 0 200vmax #0004;z-index:2;box-sizing:border-box}
+#clipDialog{background:#102535;color:#ecf6ff;border:1px solid #7895a5;border-radius:12px;width:min(560px,85vw);max-height:85dvh;overflow:auto}
+#clipDialog::backdrop{background:#03101ac9}#clipDialog video{width:100%;max-height:50dvh;background:#081016}#clipDialog input{box-sizing:border-box;width:100%;margin:4px 0 12px;padding:8px}#clipDialog h2{margin-top:0}#clipDialog button{margin-right:5px}
+</style>
+<div id="videoGuide" hidden></div><div id="videoTools" role="group" aria-label="Video recording">
+<select id="videoFrame" aria-label="Video framing"><option value="view">Current view</option><option value="wide">Landscape</option><option value="square">Square</option><option value="tall">Portrait</option></select>
+<select id="videoQuality" aria-label="Video resolution"><option value="1080">1080p</option><option value="720">720p</option><option value="2160">4K · 2160p</option></select>
+<button id="videoRecord" disabled>● Record</button></div>
+<dialog id="clipDialog"><h2 id="clipHeading">Save video</h2><video controls playsinline id="clipPreview"></video>
+<label id="clipNameLabel">File name<input id="clipName"></label><div><button id="clipView">View</button><button id="clipSave">Download</button><button id="clipShare">Share</button><button id="clipClose">Close</button></div><p id="clipStatus" role="status"></p></dialog>
+<style>/* Private UI prototype. No weather rendering styles are changed. */
+[hidden]{display:none!important}
+body{--ui-border:#52708266;--ui-muted:#aec5d0}
+#uiTop{position:fixed;left:16px;top:16px;z-index:25;display:flex;gap:8px;align-items:center;background:#0b1b2cee;padding:6px 10px;border:1px solid var(--ui-border);border-radius:12px}
+.uiBrand{font-weight:700;font-size:16px}.uiBadge{font-size:10px;font-weight:700;color:#ffd49d;letter-spacing:.05em}
+#uiTop button{min-height:36px;font-size:12px}#uiTop #viewerHelp{min-height:36px}
+#panel.uiPanel{position:fixed;top:16px;right:16px;bottom:160px;left:auto;width:318px;max-height:none;padding:0;border-radius:14px;overflow:hidden;background:#0c2030f5;display:flex;flex-direction:column;z-index:30}
+.uiHeading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ui-border);flex-shrink:0}
+.uiHeading h2{font-size:20px;margin:0}.uiHeading button{min-height:40px;font-size:13px}
+.uiScroll{overflow:auto;padding:0 16px 16px;overscroll-behavior:contain;min-height:0}
+#panel label,.uiDialog label{font-size:13px;margin:14px 0 6px;color:#d0e2eb}
+#panel select,#panel input[type=search],.uiDialog select{width:100%;min-height:44px;font-size:14px;border-radius:8px}
+#panel #placeSearch{margin-top:10px}#panel #placeMatches{max-height:210px;overflow:auto}
+#panel #placeMatches button{min-height:44px;font-size:13px;padding:8px}
+#panel #placeSearchNote{font-size:12px;margin-top:7px}
+.uiTabs{display:flex;gap:6px;margin:18px 0 8px;border-bottom:1px solid var(--ui-border);padding-bottom:8px}
+.uiTabs button{flex:1;min-height:44px;font-size:14px}.uiTabs button[aria-selected=true]{background:#266b7a;border-color:#81d9d0;font-weight:600}
+#panel h3,.uiDialog h3{font-size:14px;margin:18px 0 10px;color:#e8f5f9}
+#panel #surfaceChoices{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#panel #surfaceChoices button{font-size:13px;padding:8px;min-height:44px;grid-column:auto;grid-row:auto}
+#panel .check,.uiDialog .check{display:flex;align-items:center;min-height:44px;margin:2px 0;gap:12px;font-size:14px}
+#panel .check input,.uiDialog .check input{width:18px;height:18px;accent-color:#6ce4c2;flex-shrink:0}
+#panel input[type=range],.uiDialog input[type=range]{height:30px;width:100%;margin:0;accent-color:#6ce4c2}
+#panel #viewButtons{display:flex;gap:6px}#panel #viewButtons button{min-height:44px;font-size:13px;padding:8px}
+#panel #legend{margin-top:10px}#panel #legend .sub{font-size:12px}
+#panel #orbitSettings{margin-top:20px;padding-top:12px}#orbitCity{display:block;margin:12px 0}
+.uiRow{display:flex;gap:6px}.uiRow button{flex:1;min-height:44px;font-size:13px}
+.uiFooter{margin-top:20px;border-top:1px solid var(--ui-border);padding-top:12px;display:grid;gap:8px}.uiFooter>button{width:100%;min-height:44px;margin:0!important}
+.uiLegend{margin-top:16px;font-size:12px}.uiLegend summary{cursor:pointer;padding:10px 0;min-height:36px}.uiLegend>div{display:flex;gap:3px}.uiLegend>div>*{flex:1;text-align:center}
+#uiPlace{margin-top:10px;padding:12px;border-radius:10px;background:#152f40;border:1px solid var(--ui-border)}
+#uiPlace #info{display:block;position:static!important;max-width:none!important;padding:5px 0 10px;background:none;box-shadow:none;border:0;backdrop-filter:none;font-size:12px;line-height:1.6}
+#uiPlace #info #openPoint{display:none}
+.uiDialog{color:#e7f3f6;background:#0c2030;border:1px solid #527082;border-radius:16px;width:min(540px,calc(100vw - 32px));max-height:85dvh;padding:20px;overflow:auto;box-sizing:border-box;line-height:1.5}
+.uiDialog::backdrop{background:#020b15b8}.uiDialog button{min-height:44px}.uiDialog .uiHeading{padding:0 0 12px}.uiAdvancedGroup{border-top:1px solid var(--ui-border);padding-bottom:18px}.uiAdvancedGroup:first-of-type{border-top:0}.uiAdvancedGroup>button{margin-top:12px;font-size:12px}.uiDialog p.sub{font-size:13px}
+#uiRecording select{margin-bottom:16px}#uiRecording button{margin:10px 8px 0 0}#uiRecording #videoRecord{background:#266b7a;border-color:#81d9d0}
+#mapTime{left:auto!important;top:74px!important;font-size:clamp(24px,2.5vw,38px)!important;z-index:22}#mapTimeDate{font-size:.5em}
+#clearToolbar{z-index:35;bottom:calc(10px + env(safe-area-inset-bottom));width:max-content;max-width:calc(100vw - 20px);flex-wrap:nowrap;padding:6px;gap:5px}
+#clearToolbar button{min-height:44px;font-size:13px;padding:6px 10px}#clearToolbar select{min-height:44px;font-size:14px}
+#timeline{bottom:calc(var(--video-toolbar-height,58px) + 20px + env(safe-area-inset-bottom));left:16px;right:16px;max-width:920px;z-index:24}
+#timeline #ends{font-size:10px;align-items:center}#timeline #time{font-size:13px}
+#resumeClearOrbit{display:none!important}
+#pointPanel{bottom:165px!important;left:16px;width:min(760px,calc(100vw - 370px));max-height:calc(100dvh - 190px);z-index:40}
+body.uiClean #uiTop,body.uiClean #timeline,body.uiClean #pointPanel,body.uiClean #compass{display:none!important}
+body.uiClean #mapTime{top:16px!important;right:16px!important}
+#compass{bottom:170px;right:350px}
+@media(max-width:700px),(max-height:520px) and (pointer:coarse){
+ #uiTop{left:8px;right:8px;top:calc(8px + env(safe-area-inset-top));gap:6px;padding:4px 8px;justify-content:space-between}
+ .uiBrand{font-size:14px}.uiBadge{font-size:9px}#uiTop button{font-size:11px;padding:5px 7px}
+ #panel.uiPanel{top:auto;left:0;right:0;bottom:0;width:100%;height:min(70dvh,650px);max-height:calc(100dvh - 70px);border-radius:20px 20px 0 0;z-index:60}
+ .uiScroll{padding:0 20px calc(22px + env(safe-area-inset-bottom))}.uiHeading{padding:12px 20px}
+ #panel label{margin-top:12px;font-size:14px}#panel #surfaceChoices{grid-template-columns:1fr 1fr;gap:8px}
+ #panel #surfaceChoices button{font-size:14px;grid-column:auto!important;grid-row:auto!important;min-height:44px;padding:8px}
+ #panel #viewButtons{display:flex;gap:8px}#panel #viewButtons button{font-size:14px;min-height:44px;padding:8px}
+ #panel select,#panel input[type=search]{font-size:16px;max-width:100%}
+ #mapTime{top:70px!important;right:12px!important;font-size:25px!important}#mapTimeDate{font-size:12px}
+ #clearToolbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:calc(100vw - 16px);gap:4px;max-width:480px;padding:6px}
+ #clearToolbar button,#clearToolbar select{font-size:12px;padding:4px;min-width:0;width:100%;min-height:44px}#clearPlay{min-width:0}
+ #restoreControls{grid-column:1/4}#uiRecord{grid-column:4/6}
+ #timeline{left:8px;right:8px;padding:6px 9px;border-radius:10px}#timeline #time{font-size:11px}#timeline #lead{display:none}#timeline #ends{display:none}
+ #pointPanel{left:8px!important;right:8px!important;top:auto!important;bottom:calc(var(--video-toolbar-height,108px) + 68px + env(safe-area-inset-bottom))!important;width:calc(100vw - 16px)!important;max-width:none!important;max-height:60dvh;height:55dvh}
+ #pointPanel.pointRolled{height:auto!important}#pointPanel .pointResize{display:none}#pointDragHandle .sub{display:none}
+ .uiDialog{width:calc(100vw - 20px);max-height:90dvh;padding:18px}
+}
+/* Shared window shell: the Close control never scrolls out of view. */
+.uiWindow,#viewerHelpDialog.uiWindow,#clipDialog.uiWindow{padding:0;overflow:hidden;box-sizing:border-box;max-height:calc(100dvh - 32px);border-radius:14px;border:1px solid #527082;background:#0c2030;color:#e7f3f6;line-height:1.5}
+.uiWindow[open]{display:flex;flex-direction:column}
+.uiWindowHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:1px solid #52708266;flex:0 0 auto;background:#102939}
+.uiWindowHeader h2{font-size:17px;line-height:1.3;margin:0}
+.uiWindowHeader .uiWindowClose,#panel .uiWindowClose,#uiRecording .uiWindowClose,#clipDialog .uiWindowClose{width:44px;min-height:44px;flex:0 0 auto;margin:0;padding:0;font-size:26px;line-height:1;white-space:nowrap}
+.uiWindowBody{overflow:auto;overscroll-behavior:contain;min-height:0;padding:0 16px 20px;flex:1 1 auto}
+.uiFloating,#viewerHelpDialog.uiFloating{position:fixed;inset:16px 16px auto auto;margin:0;width:318px;height:calc(100dvh - 176px);max-height:calc(100dvh - 32px);z-index:65;box-shadow:0 12px 36px #0005}
+.uiFloating .uiWindowHeader{cursor:move;touch-action:none}
+.uiFloating .uiWindowHeader:focus-visible{outline:2px solid #76e8c7;outline-offset:-3px}
+.uiWindow::backdrop{background:#020b1577}
+#uiRecording.uiWindow{height:auto;width:min(480px,calc(100vw - 32px))}
+#clipDialog.uiWindow{width:min(620px,calc(100vw - 32px));height:auto}
+#clipDialog .uiWindowBody{padding-top:16px}
+@media(max-width:700px),(max-height:520px) and (pointer:coarse){
+ .uiFloating,#viewerHelpDialog.uiFloating{inset:auto 0 0 0!important;width:100%;height:min(70dvh,650px);max-height:calc(100dvh - 70px);border-radius:20px 20px 0 0}
+ .uiFloating .uiWindowHeader{cursor:default;touch-action:auto}
+ .uiWindowBody{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+ .uiWindowHeader{padding:12px 20px}
+}
+
+.uiPlaceActions{flex-wrap:wrap}.uiPlaceActions button:first-child{flex-basis:100%}
+
+#uiRecording.uiFloating{width:318px;height:auto;max-height:calc(100dvh - 32px)}@media(max-width:700px),(max-height:520px) and (pointer:coarse){#uiRecording.uiFloating{width:100%;height:auto;max-height:70dvh}}
+</style></body></html>

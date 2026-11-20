@@ -1,0 +1,12 @@
+{
+  "retrieved": "2026-11-20",
+  "source": "https://weather3d.neilgordon.me/",
+  "renderer_version": "0182af7634c2",
+  "worker_version": "ae3f5aa7df65",
+  "three_version": "0.180.0",
+  "original_sha256": {
+    "terrain.js": "0182af7634c22ff503e21de4404b31743ff829bbc2ebe32457d4f1f87dad5805",
+    "terrain.html": "7f2077a2806ac0203614e18d139bc25225416cbe56e371d5e31ba87fa706e5d2",
+    "hour-worker.js": "ae3f5aa7df650b72cbc1536ec14d29f3afd5485103350ddf3ad1fe5b241cd56e"
+  }
+}

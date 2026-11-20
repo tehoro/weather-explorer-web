@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import {zoneAt,timeParts} from './local-time.mjs';
+const context={};vm.runInNewContext(readFileSync(new URL('./assets/tz-lookup-11.7.0.js',import.meta.url),'utf8'),context);const lookup=context.tzlookup;
+for(const [lat,lon,zone]of [[-41.1,174.8,'Pacific/Auckland'],[-43.8,170.25,'Pacific/Auckland'],[46.2,6.15,'Europe/Zurich'],[40.7,-74,'America/New_York'],[-43.95,-176.55,'Pacific/Chatham']])assert.equal(zoneAt(lat,lon,lookup),zone);
+assert.equal(timeParts('2026-11-20T06:00:00Z','Pacific/Auckland').hour,'7:00 PM');
+assert.equal(timeParts('2026-11-20T06:00:00Z','Pacific/Auckland').zone,'NZDT');
+assert.equal(timeParts('2026-06-20T06:00:00Z','Pacific/Auckland').zone,'NZST');
+assert.equal(timeParts('2026-11-20T06:00:00Z','Pacific/Chatham').hour,'7:45 PM');
+assert.equal(timeParts('2026-11-20T06:00:00Z','Europe/Zurich').hour,'7:00 AM');
+assert.equal(zoneAt(0,360,lookup),zoneAt(0,0,lookup));
+console.log('Centre time zones, NZ daylight saving, overseas times, quarter-hour offsets and longitude wrapping passed.');
