@@ -4,15 +4,15 @@ import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261120b';
-import {WeatherView} from './weather-view.mjs?v=20261120q';
+import {WeatherView} from './weather-view.mjs?v=20261120s';
 import {setupUI} from './global-ui.mjs?v=20261120p';
-import {PlaceLabels} from './place-labels.mjs?v=20261120f';
+import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
-const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,2200),controls=new OrbitControls(camera,renderer.domElement);
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,6000),controls=new OrbitControls(camera,renderer.domElement);
 controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
-controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=300;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
+controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=1200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
 scene.add(new THREE.HemisphereLight(0xc2eaff,0x293a22,2.2));const sun=new THREE.DirectionalLight(0xffefd8,2.6);sun.position.set(-200,400,-150);scene.add(sun);
 let anchor={lat:-41.1,lon:174.8},serial=0,catalogue,active=0,timer,rebasing=false,lastWeather='',failures=new Map();
 const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader;
@@ -56,7 +56,7 @@ function cameraFootprint(){
  camera.updateMatrixWorld();const ray=new THREE.Raycaster(),result=[];
  for(const [x,y]of [[-1,1],[1,1],[1,-1],[-1,-1]]){
   ray.setFromCamera(new THREE.Vector2(x,y),camera);const {origin,direction}=ray.ray;
-  const t=direction.y<-.0001?Math.min(900,-origin.y/direction.y):900;
+  const t=direction.y<-.0001?Math.min(4800,-origin.y/direction.y):4800;
   const point=origin.clone().addScaledVector(direction,t);
   result.push([point.x-controls.target.x,point.z-controls.target.z]);
  }
@@ -168,8 +168,8 @@ function groundHeight(x,z){
 }
 function weatherContext(){
  const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=points.map(p=>p[0]),zs=points.map(p=>p[1]),scale=111.2*cos();
- const west=Math.floor((c.lon+Math.max(-700,Math.min(...xs))/scale)*4)/4,north=Math.min(90,Math.ceil((c.lat-Math.max(-700,Math.min(...zs))/111.2)*4)/4);
- const east=Math.min(west+359,Math.ceil((c.lon+Math.min(700,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(700,Math.max(...zs))/111.2)*4)/4);
+ const west=Math.floor((c.lon+Math.max(-2400,Math.min(...xs))/scale)*4)/4,north=Math.min(90,Math.ceil((c.lat-Math.max(-2400,Math.min(...zs))/111.2)*4)/4);
+ const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
  return {camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};

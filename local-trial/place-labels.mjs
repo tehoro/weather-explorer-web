@@ -23,7 +23,7 @@ export class PlaceLabels{
   this.camera.updateMatrixWorld();const v=new THREE.Vector3(),candidates=[];
   for(const row of this.rows){const [id,name,lat,lon,population,elevation,capital]=row,position=c.projectPlace(lat,lon);
    // Cheap spatial rejection before projection or terrain sampling.
-   if(Math.abs(position.x-c.target.x)>950||Math.abs(position.z-c.target.z)>950)continue;
+   if(Math.abs(position.x-c.target.x)>Math.max(950,c.distance*4)||Math.abs(position.z-c.target.z)>Math.max(950,c.distance*4))continue;
    const ground=c.ground(position.x,position.z),y=Math.max(ground,Math.max(0,elevation)*.0015)+.15;
    v.set(position.x,y,position.z).project(this.camera);if(v.z<-1||v.z>1||Math.abs(v.x)>1||Math.abs(v.y)>1)continue;
    const x=(v.x+1)*width/2,screenY=(1-v.y)*height/2,labelWidth=this.measure.measureText(name).width+23,box={left:x-5,right:x+labelWidth,top:screenY-12,bottom:screenY+13};

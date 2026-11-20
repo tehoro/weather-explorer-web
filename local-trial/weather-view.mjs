@@ -1,9 +1,9 @@
-import {IsobarLines} from './isobar-lines.mjs?v=20261120q';
+import {IsobarLines} from './isobar-lines.mjs?v=20261120s';
 import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261120e';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261120d';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261120s';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 const noise=`float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}float fbm(vec2 p){return .57*noise(p)+.28*noise(p*2.03)+.15*noise(p*4.07);}`;
@@ -27,7 +27,7 @@ export class WeatherView{
   const c=this.context(),r=c.region,key=[r.west,r.north,r.lonSpan,r.latSpan].map(v=>v.toFixed(3)).join('/');
   if(!force&&key===this.regionKey)return;this.regionKey=key;this.region=r;
   // Geographic moves invalidate the old display immediately; never leave old weather over new land.
-  this.group.visible=false;if(this.surfaceUniforms){this.surfaceUniforms.mode.value=0;this.surfaceUniforms.isobars.value=0;}this.load(this.requestedFrame??this.frame,true);
+  this.group.visible=false;this.isobarLines?.hide();if(this.surfaceUniforms){this.surfaceUniforms.mode.value=0;this.surfaceUniforms.isobars.value=0;}this.load(this.requestedFrame??this.frame,true);
  }
  async load(frame,moved=false){
   if(!this.data.meta||!this.region)return;const token=++this.token;this.requestedFrame=frame;this.loading=true;

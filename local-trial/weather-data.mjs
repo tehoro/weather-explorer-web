@@ -13,6 +13,11 @@ export function decodeTile(buffer,manifest){
  }
  if(offset!==buffer.byteLength)throw Error('Invalid weather tile size');return result;
 }
+export function decodePressure(buffer){
+ if(buffer.byteLength!==10201*4)throw Error('Invalid pressure tile size');
+ const view=new DataView(buffer),a=new Float32Array(10201);
+ for(let i=0;i<a.length;i++){a[i]=view.getFloat32(i*4,true);if(!Number.isFinite(a[i]))throw Error('Invalid pressure value');}return a;
+}
 export function bilinear(a,n,x,y){
  x=clamp(x,0,n-1);y=clamp(y,0,n-1);const i=Math.min(n-2,Math.floor(x)),j=Math.min(n-2,Math.floor(y)),u=x-i,v=y-j,k=j*n+i;
  return (a[k]*(1-u)+a[k+1]*u)*(1-v)+(a[k+n]*(1-u)+a[k+n+1]*u)*v;
@@ -24,7 +29,8 @@ export class WeatherData{
  async tile(frame,x,y){
   const m=this.meta,key=`${frame}/${x}/${y}`;
   if(this.cache.has(key)){const p=this.cache.get(key);this.cache.delete(key);this.cache.set(key,p);return p;}
-  const promise=(async()=>{const r=await fetch(`/global-data/${m.run}/${String(m.steps[frame]).padStart(3,'0')}/fine/${String(x).padStart(2,'0')}-${String(y).padStart(2,'0')}.bin.gz`);if(!r.ok)throw Error('IFS tile unavailable');return decodeTile(await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),m);})();
+  const promise=(async()=>{const r=await fetch(`/global-data/${m.run}/${String(m.steps[frame]).padStart(3,'0')}/fine/${String(x).padStart(2,'0')}-${String(y).padStart(2,'0')}.bin.gz`);if(!r.ok)throw Error('IFS tile unavailable');const tile=decodeTile(await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),m);
+   if(m.pressure_path){const p=await fetch(`/global-data/${m.run}/${m.pressure_path}/${String(m.steps[frame]).padStart(3,'0')}/${String(x).padStart(2,'0')}-${String(y).padStart(2,'0')}.bin.gz`);if(!p.ok)throw Error('IFS pressure tile unavailable');tile.pressure=decodePressure(await new Response(p.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());}return tile;})();
   this.cache.set(key,promise);while(this.cache.size>96)this.cache.delete(this.cache.keys().next().value);
   try{return await promise;}catch(e){this.cache.delete(key);throw e;}
  }

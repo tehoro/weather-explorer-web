@@ -501,3 +501,39 @@ This is a development checkpoint, not a release. Merge and deployment require
 separate approval and completion of the outstanding validation. Keeping the
 trial directory separate means merging this checkpoint alone does not replace
 the production viewer.
+
+## Labelled pressure contours and wider views (20 November, build S)
+
+The Local viewer now carries across the highlights' persistent contour-label
+approach. Labels follow the nearest point of their previous pressure level;
+new labels use a stable candidate order. Both view angles use terrain-draped
+lines of constant screen width, with labels projected every render frame.
+Labels avoid controls and place names and are suppressed behind terrain.
+The isobar interval is automatically 4, 2 or 1 hPa, with zoom hysteresis.
+
+High/low markers use local extrema with a wider neighbourhood check, as in the
+highlights, plus a sub-grid quadratic fit. For adjacent frames up to six hours
+apart, mutually unambiguous centres are matched within a distance/time and
+pressure-change limit. Their surrounding pressure fields are shifted towards
+the interpolated centre before blending, with influence tapered to zero at the
+edge. Ambiguous matches, disappearing centres and large scrubs use ordinary
+field blending. These local matches are not authoritative named storm tracks.
+Readouts retain the unmodified forecast interpolation; contour smoothing and
+motion interpolation are display treatments.
+
+The native-precision pressure supplement is now read when `pressure_path` is in
+the manifest. Run `.venv/bin/python local-trial/prepare_pressure.py` after the
+global builder to produce it from cached GRIB. Older manifests remain supported
+using their 0.1 hPa packed pressure. The current local run has the supplement.
+The earlier checkpoint's outstanding label and pressure-reader tasks are done.
+
+The regional camera can now pull back to 1,200 km (previously 300 km); the weather
+footprint and far clipping plane were expanded with it. At wide scales the
+static global basemap supplies context outside the bounded terrain tile budget.
+This remains a regional planar view, not a return to the rotating globe.
+
+Validation: analytic moving lows retain their depth and move continuously;
+sub-grid centre fitting, ambiguous match rejection, exact endpoint fields,
+label anchoring and Float32 decoding are covered by `test-pressure-motion.mjs`.
+Existing contour, weather and terrain-stream tests pass. Browser checks cover
+Alaska pressure labels, a low marker, both view angles and wider zoom.
