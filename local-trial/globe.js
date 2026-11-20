@@ -37,6 +37,7 @@ const labels=new GlobePlaces(host,globe,camera,vector,choose);
 // A subtle atmospheric rim, matching the highlights globe's blue halo.
 const halo=new THREE.Mesh(new THREE.SphereGeometry(1.035,96,64),new THREE.ShaderMaterial({side:THREE.BackSide,transparent:true,depthWrite:false,vertexShader:'varying vec3 n,v;void main(){vec4 p=modelViewMatrix*vec4(position,1.);n=normalize(normalMatrix*normal);v=normalize(-p.xyz);gl_Position=projectionMatrix*p;}',fragmentShader:'varying vec3 n,v;void main(){float a=pow(1.-abs(dot(normalize(n),normalize(v))),3.);gl_FragColor=vec4(.3,.55,.7,a*.35);}'}));globe.add(halo);
 function choose(lat,lon,name='Selected location'){
+ if(flight||!active)return;
  if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>89.85){$('status').textContent='Enter a valid latitude and longitude.';return;}
  returnPosition=camera.position.clone();spin(false);controls.enabled=false;$('status').textContent='Approaching '+name+' · loading terrain…';
  const point=vector(lat,lon,1.2).applyQuaternion(globe.quaternion);
@@ -55,9 +56,15 @@ function revealTerrain(f){
  setTimeout(()=>{if(flight!==f)return;$('local').hidden=true;$('local').classList.remove('departing');$('viewer').classList.remove('revealing');active=false;flight=null;},reduced.matches?0:1800);
 }
 setupSearch($('search'),$('matches'),choose);
-renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
-renderer.domElement.addEventListener('pointerup',e=>{
- if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;
+let tap=false;
+renderer.domElement.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];tap=e.button===0;});
+renderer.domElement.addEventListener('pointermove',e=>{if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)tap=false;});
+renderer.domElement.addEventListener('pointercancel',()=>{down=null;tap=false;});
+renderer.domElement.addEventListener('pointerup',()=>{down=null;});
+renderer.domElement.addEventListener('dblclick',e=>{
+ if(!tap||e.button!==0||flight||!active)return;e.preventDefault();
+ // Pick the visible surface and undo the globe's current rotation.
+ camera.updateMatrixWorld();globe.updateMatrixWorld(true);
  const b=renderer.domElement.getBoundingClientRect(),pointer=new THREE.Vector2((e.clientX-b.left)/b.width*2-1,-(e.clientY-b.top)/b.height*2+1),ray=new THREE.Raycaster();ray.setFromCamera(pointer,camera);
  const hit=ray.intersectObject(sphere)[0];if(!hit)return;const p=globe.worldToLocal(hit.point.clone()).normalize();choose(Math.asin(p.y)*180/Math.PI,Math.atan2(-p.z,p.x)*180/Math.PI);
 });
@@ -65,7 +72,7 @@ function showTab(tab){
  flight=null;controls.enabled=true;if(returnPosition){camera.position.copy(returnPosition);controls.update();returnPosition=null;}$('viewer').inert=false;$('viewer').classList.remove('preparing','revealing');$('local').classList.remove('departing');
  document.querySelectorAll('[data-tab]').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
  active=tab==='local';$('local').hidden=!active;$('viewer').hidden=active;$('back').hidden=true;
- if(active){$('viewer').removeAttribute('src');$('status').textContent='Drag to turn the globe. Scroll to approach. Click to choose a location.';resize();}
+ if(active){$('viewer').removeAttribute('src');$('status').textContent='Drag to turn the globe. Scroll to approach. Click a named place or double-click anywhere on the globe.';resize();}
  else $('viewer').src='/explorer/#'+tab;
 }
 $('back').onclick=()=>showTab('local');document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));

@@ -7,14 +7,14 @@
 <header><div><strong>Weather Explorer</strong><span class="private">Private trial</span></div>
 <nav aria-label="Weather Explorer views"><button data-tab="now">Now</button><button data-tab="past">Past events</button><button data-tab="local" aria-current="page">Local</button></nav>
 <button id="back" hidden>← Globe</button></header>
-<main id="local"><div id="globe" aria-label="Globe: drag to turn, scroll to zoom, click a location"></div>
+<main id="local"><div id="globe" aria-label="Globe: drag to turn, scroll to zoom, double-click anywhere to choose a location"></div>
 <div id="globeClock" role="status">Loading cloud forecast…</div><button id="spinToggle">Pause rotation</button>
 <section id="chooser"><p class="eyebrow">IFS OPEN DATA · 0.1° · THREE-HOURLY</p><h1>Weather over the landscape</h1>
 <p>Choose a place and fly into the forecast. Explore the terrain, surface wind, clouds and precipitation.</p>
 <label for="search">Find a location</label><input id="search" type="search" placeholder="Town, place or latitude, longitude" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="matches" aria-autocomplete="list">
 <div id="matches" role="listbox" aria-label="Matching locations"></div>
-<p id="status" role="status">Drag to stop and turn the globe. Scroll to approach. Click a place or anywhere on the globe.</p>
-<p class="note">Click anywhere on the globe for streaming terrain, wind trails and IFS weather layers. Terrain refines automatically towards 90 m.</p>
+<p id="status" role="status">Drag to stop and turn the globe. Scroll to approach. Click a named place or double-click anywhere on the globe.</p>
+<p class="note">Double-click anywhere on the globe for streaming terrain, wind trails and IFS weather layers. Terrain refines automatically towards 90 m.</p>
 </section><footer>Data: © 2026 ECMWF, CC BY 4.0. Regridded and unit-converted. Places: GeoNames, CC BY 4.0.</footer></main>
 <iframe id="viewer" title="Local terrain forecast" hidden></iframe>
-<script type="module" src="globe.js?v=20261120n"></script></body></html>
+<script type="module" src="globe.js?v=20261120t"></script></body></html>

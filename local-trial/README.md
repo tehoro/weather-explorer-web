@@ -537,3 +537,12 @@ sub-grid centre fitting, ambiguous match rejection, exact endpoint fields,
 label anchoring and Float32 decoding are covered by `test-pressure-motion.mjs`.
 Existing contour, weather and terrain-stream tests pass. Browser checks cover
 Alaska pressure labels, a low marker, both view angles and wider zoom.
+
+## Globe point selection (build T)
+
+Click a named marker once, or double-click any unlabelled point on the globe,
+to use the same regional approach. A single background click pauses rotation;
+dragging only rotates. Point picking raycasts the visible sphere and transforms
+the hit back through the globe's current rotation before deriving coordinates.
+Repeated clicks during an approach are ignored so they cannot restart the flight.
+Verified by rotating the globe and double-clicking unlabelled inland Australia.
