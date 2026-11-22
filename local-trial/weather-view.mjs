@@ -116,6 +116,12 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
    material.onBeforeCompile=shader=>{
     Object.assign(shader.uniforms,this.surfaceUniforms);
     shader.vertexShader='varying vec3 weatherPosition;\n'+shader.vertexShader;
+    // Coarse relief displaces its vertices in its own shader rather than the
+    // standard material chunks. Sample weather at those same world positions.
+    if(material.userData.coarseRelief){
+     shader.vertexShader=shader.vertexShader.replace('gl_Position=projectionMatrix*modelViewMatrix*vec4(p.x,elevation*.0015,p.y,1.);','weatherPosition=vec3(p.x,elevation*.0015,p.y);gl_Position=projectionMatrix*modelViewMatrix*vec4(weatherPosition,1.);');
+     shader.fragmentShader=shader.fragmentShader.replace('gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);','vec4 diffuseColor=vec4(elevation<.1?sea:c*shade,1.);\n#include <color_fragment>\ngl_FragColor=diffuseColor;');
+    }
     shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>','weatherPosition=(modelMatrix*vec4(transformed,1.)).xyz;\n#include <project_vertex>');
     shader.fragmentShader='varying vec3 weatherPosition; uniform sampler2D surfaceA,surfaceB,cloudA,cloudB; uniform float blend,mode,isobars,isobarStep,weatherGridSize; uniform vec4 weatherBounds;\n'+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
@@ -123,7 +129,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
      if(all(greaterThanEqual(weatherUV,vec2(0)))&&all(lessThanEqual(weatherUV,vec2(1)))){
       vec2 sampleUV=(weatherUV*(weatherGridSize-1.)+.5)/weatherGridSize;
       vec4 s=mix(texture2D(surfaceA,sampleUV),texture2D(surfaceB,sampleUV),blend);
-      float rain=mix(texture2D(cloudA,weatherUV).a,texture2D(cloudB,weatherUV).a,blend);
+      float rain=mix(texture2D(cloudA,sampleUV).a,texture2D(cloudB,sampleUV).a,blend);
       vec3 colour=diffuseColor.rgb;float alpha=0.;
       if(mode>.5&&mode<1.5){colour=mix(vec3(.10,.35,.85),vec3(.95,.27,.08),clamp((s.r+10.)/45.,0.,1.));alpha=.48;}
       else if(mode>1.5&&mode<2.5){colour=mix(vec3(.18,.65,.72),vec3(1.,.38,.04),clamp(length(s.ba)/25.,0.,1.));alpha=.48;}
@@ -132,7 +138,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
 
      }`);
    };
-   material.customProgramCacheKey=()=> 'local-weather-q';material.needsUpdate=true;
+   material.customProgramCacheKey=()=> 'local-weather-g-'+Boolean(material.userData.coarseRelief);material.needsUpdate=true;
   }
  }
  sample(name,x,z){if(!this.current)return NaN;const b=this.bounds,n=this.current.n,px=(x-b.west)/(b.east-b.west)*(n-1),py=(z-b.north)/(b.south-b.north)*(n-1);return bilinear(this.previous.fields[name],n,px,py)*(1-this.blend)+bilinear(this.current.fields[name],n,px,py)*this.blend;}

@@ -668,3 +668,15 @@ like a fully ready view just because its elevation mesh is present. Buffering ke
 watching after tile failures, so a successful terrain Retry clears the warning
 automatically and preserves the Play/Pause choice. Camera and effects keep moving.
 The buffering browser test covers this recovery; particle tests check slower snow.
+
+### Weather over coarse relief (build G)
+
+Surface weather colours now also shade the global ETOPO1 relief mesh, using its
+shader-displaced world positions and the same forecast uniforms as detailed tiles.
+Previously only downloaded terrain meshes and the flat emergency backdrop received
+weather shading, leaving rectangular breaks where the coarse relief covered them.
+Rain sampling also uses the grid-node-to-texel-centre mapping used by other fields.
+Terrain appearance still refines during loading, but precipitation coverage no
+longer waits for detailed terrain. Browser verification near Pori at +9 h showed
+continuous precipitation while only 5/68 terrain/cover patches were ready, without
+shader errors.

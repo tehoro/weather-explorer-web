@@ -36,6 +36,7 @@ export class GlobalRelief{
     gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);
     #include <colorspace_fragment>
    }`});
+  material.userData.coarseRelief=true;
   const geometry=new THREE.PlaneGeometry(1,1,256,256);geometry.rotateX(-Math.PI/2);
   this.mesh=new THREE.Mesh(geometry,material);this.mesh.frustumCulled=false;this.mesh.renderOrder=-90;scene.add(this.mesh);
  }

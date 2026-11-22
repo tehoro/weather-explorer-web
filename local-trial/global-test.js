@@ -1,12 +1,12 @@
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
-import {GlobalRelief} from './global-relief.mjs?v=20261122c';
+import {GlobalRelief} from './global-relief.mjs?v=20261122g';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122c';
-import {WeatherView} from './weather-view.mjs?v=20261122f';
+import {WeatherView} from './weather-view.mjs?v=20261122g';
 import {setupUI} from './global-ui.mjs?v=20261122e';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
@@ -174,7 +174,7 @@ function weatherContext(){
  const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=points.map(p=>p[0]),zs=points.map(p=>p[1]),scale=111.2*cos();
  const west=Math.floor((c.lon+Math.max(-2400,Math.min(...xs))/scale)*4)/4,north=Math.min(90,Math.ceil((c.lat-Math.max(-2400,Math.min(...zs))/111.2)*4)/4);
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
- return {preloadStatus,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
+ return {preloadStatus,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};
 }
