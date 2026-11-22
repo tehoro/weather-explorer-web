@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Weather Explorer · Private Local trial</title>
+<title>Weather Explorer · Explore preview</title>
 <link rel="stylesheet" href="local.css?v=20261123c">
 <script type="importmap">{"imports":{"three":"/terrain-assets/three.module.js"}}</script>
 </head><body>
 <header><div><strong>Weather Explorer</strong><span class="private">Private trial</span></div>
-<nav aria-label="Weather Explorer views"><button data-tab="now">Now</button><button data-tab="past">Past events</button><button data-tab="local" aria-current="page">Local</button></nav>
+<nav aria-label="Weather Explorer views"><button data-tab="now">Highlights</button><button data-tab="past">Past events</button><button data-tab="local" aria-current="page">Explore</button></nav>
 <button id="back" hidden>← Globe</button></header>
 <main id="local"><div id="globe" aria-label="Globe: drag to turn, scroll to zoom, double-click anywhere to choose a location"></div>
 <div id="globeClock" role="status">Loading cloud forecast…</div><button id="spinToggle">Pause rotation</button>
@@ -16,5 +16,5 @@
 <p id="status" role="status">Drag to stop and turn the globe. Scroll to approach. Click a named place or double-click anywhere on the globe.</p>
 <p class="note">Double-click anywhere on the globe for streaming terrain, wind trails and IFS weather layers. Terrain refines automatically towards 90 m.</p>
 </section><footer>Data: © 2026 ECMWF, CC BY 4.0. Regridded and unit-converted. Places: GeoNames, CC BY 4.0. Terrain: NOAA ETOPO1, public domain. <a href="https://esa-worldcover.org/en/data-access" target="_blank" rel="noopener">Land cover: © ESA WorldCover project 2021</a>, CC BY 4.0. Contains modified Copernicus Sentinel data (2021), processed by ESA WorldCover consortium.</footer></main>
-<iframe id="viewer" title="Local terrain forecast" hidden></iframe>
+<iframe id="viewer" title="Explore terrain forecast" hidden></iframe>
 <script type="module" src="globe.js?v=20261123f"></script></body></html>

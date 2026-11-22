@@ -933,13 +933,14 @@ function setupGL() {
     out vec4 o;
     uniform sampler2D A, B;
     uniform float mixT, alpha;
+    uniform vec2 cloudGrid;
     uniform vec3 tint;
     ${UNPROJECT_GLSL}
     void main() {
       float lat, dl;
       if (!unproject(lat, dl)) discard;
       float lon = centre.x + degrees(dl);
-      vec2 uv = vec2(fract((lon + 180.0) / 360.0 + 0.5 / 720.0), ((90.0 - degrees(lat)) * 2.0 + 0.5) / 361.0);
+      vec2 uv = vec2(fract((lon + 180.0) / 360.0 + 0.5 / cloudGrid.x), ((90.0 - degrees(lat)) / 180.0 * (cloudGrid.y - 1.0) + 0.5) / cloudGrid.y);
       float v = mix(texture(A, uv).r, texture(B, uv).r, mixT);
       float a = smoothstep(0.22, 0.85, v) * alpha;
       o = vec4(tint * a, a);
@@ -1114,6 +1115,7 @@ function drawClouds() {
   gl.uniform1f(U("globe"), p.g);
   gl.uniform1f(U("mixT"), br.t);
   gl.uniform1f(U("alpha"), 0.92 * a);
+  gl.uniform2f(U("cloudGrid"), clouds.meta.nx, clouds.meta.ny);
   gl.uniform3fv(U("tint"), st.cloud || [1, 1, 1]);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, clouds.tex[br.i]); gl.uniform1i(U("A"), 0);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, clouds.tex[br.j]); gl.uniform1i(U("B"), 1);
@@ -1167,7 +1169,17 @@ function bracket(list, pos) {
   return { i, j, t };
 }
 
+let sharedGlobe,sharedGlobeAsked=false;
+function drawSharedGlobe(){
+ if(OFFLINE||!S.view)return;
+ const p=projection(S.view);
+ if(p.g>.001&&!sharedGlobeAsked){sharedGlobeAsked=true;import('./shared-globe.mjs?v='+VERSION).then(({SharedGlobe})=>{sharedGlobe=new SharedGlobe(field,drawField);}).catch(()=>{});}
+ const f=Math.floor(clouds.pos),a=clouds.times?.[f],b=clouds.times?.[Math.min(f+1,clouds.last)]??a;
+ const time=Number.isFinite(a)?new Date(a+(b-a)*(clouds.pos-f)).toISOString():new Date().toISOString();
+ sharedGlobe?.draw({...S.view,g:p.g},W,H,DPR,time,S.overview!=='past'&&!S.entry?.past);
+}
 function drawField() {
+  drawSharedGlobe();
   if (!gl || !prog) return;
   gl.viewport(0, 0, field.width, field.height);
   gl.clearColor(0, 0, 0, 0);

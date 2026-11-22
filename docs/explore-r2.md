@@ -80,3 +80,23 @@ Official setup references:
 - https://developers.cloudflare.com/r2/buckets/cors/
 - https://developers.cloudflare.com/r2/api/tokens/
 - https://developers.cloudflare.com/r2/pricing/
+
+## Unlisted Explore release
+
+The Pages build packages `local-trial/` at `/explore/` with `build_explore.py`.
+There is no public Explore tab; share the direct URL with preview testers.
+Both this preview and the Highlights globe use the same relief, land cover,
+surface snow/ice rendering and published globe cloud frames.
+
+Set repository variable `EXPLORE_TERRAIN_RELAY` to
+`https://weather-explorer-terrain.neilgordon.workers.dev`.
+The Worker source is `cloudflare/terrain-relay.mjs`; deploy it through Cloudflare
+Workers Edit code. It only relays bounded byte ranges from the two public terrain
+sources, with browser CORS headers. It contains no credentials or R2 binding.
+The globe needs no terrain relay; detailed Explore terrain does. The Worker has
+its own request allowance, separate from R2. Browser disk caching reuses terrain.
+
+The first R2 publication was verified on 23 November 2026 (NZDT), for IFS
+2026112212: 28 forecast frames, with packed tile ranges verified against local
+source files. Forecast preparation runs daily at 23:45 UTC and can also be
+started manually through Actions. Publication keeps the previous complete run.

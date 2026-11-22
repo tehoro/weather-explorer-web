@@ -1,6 +1,6 @@
 export function setupUI(){
  const $=id=>document.getElementById(id),aside=document.querySelector('aside');aside.id='settingsPanel';aside.setAttribute('aria-label','Settings');
- const header=document.createElement('header');header.className='brand glass';header.innerHTML='<strong>Weather Explorer <span>LOCAL</span></strong><small>Private trial · build C</small><button id="helpOpen">Help</button><button id="cleanView">Clean view</button>';document.body.append(header);
+ const header=document.createElement('header');header.className='brand glass';header.innerHTML='<strong>Weather Explorer <span>EXPLORE</span></strong><small>Private trial · build C</small><button id="helpOpen">Help</button><button id="cleanView">Clean view</button>';document.body.append(header);
  const clock=document.createElement('div');clock.id='mapClock';clock.innerHTML='<div id="clockDate"></div><div id="clockHour">Loading forecast…</div><div id="clockZone"></div>';document.body.append(clock);
  const timeline=document.createElement('section');timeline.id='timeline';timeline.className='glass';timeline.setAttribute('aria-label','Forecast timeline');timeline.innerHTML='<div class="timelineHeading"><div id="timeSlot"></div><span id="forecastLead"></span></div><div id="rangeSlot"></div><div class="timelineEnds"><span id="timelineStart"></span><span id="modelRun"></span><span id="timelineEnd"></span></div>';document.body.append(timeline);
  $('timeSlot').append($('validTime'));$('rangeSlot').append($('forecastTime'));

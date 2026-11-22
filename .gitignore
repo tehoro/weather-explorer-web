@@ -2,3 +2,4 @@
 __pycache__/
 site/data/
 .DS_Store
+site/explore/
