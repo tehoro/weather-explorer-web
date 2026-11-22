@@ -9,6 +9,7 @@ export function overlaps(a,b,padding=0){return a.left<b.right+padding&&a.right>b
 // Prefer nearby settlements, then population and spacing; retain close contenders.
 export function selectPlaces(candidates,blocked=[],previous=new Set(),limit=5,isVisible=()=>true,retainVisible=false){
  const remaining=candidates.filter(p=>!blocked.some(b=>overlaps(p.box,b,8))),chosen=[];
+ for(let i=remaining.length-1;i>=0;i--)if(remaining[i].fixed){const p=remaining.splice(i,1)[0];if(chosen.length<limit&&isVisible(p))chosen.push(p);}
  // During an orbit retain the established set, not merely a ranking bonus.
  if(retainVisible)for(const id of previous){const i=remaining.findIndex(p=>p.id===id);if(i<0)continue;const p=remaining.splice(i,1)[0];if(chosen.length<limit&&isVisible(p))chosen.push(p);}
  while(remaining.length&&chosen.length<limit){

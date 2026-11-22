@@ -18,3 +18,8 @@ assert.equal(fixed[0].id,11,'Orbit retains an existing visible label despite a b
 assert.equal(selectPlaces([near,far],[],new Set([11]),1,p=>p.id!==11,true)[0].id,10,'Terrain-hidden label is replaced');
 assert.equal(selectPlaces([near],[],new Set([11]),1,()=>true,true)[0].id,10,'Off-screen label is replaced');
 console.log('Orbit keeps its visible label set and replaces only missing or occluded labels.');
+
+const centred={...far,fixed:true};
+assert.equal(selectPlaces([near,centred],[],new Set(),1)[0].id,11,'Centred town takes priority outside orbit too');
+assert.equal(selectPlaces([near,centred],[],new Set(),1,p=>p.id!==11)[0].id,10,'Terrain can hide the centred town');
+assert.equal(selectPlaces([near,{...centred,fixed:false}],[],new Set(),1)[0].id,10,'Panning away restores automatic priorities');

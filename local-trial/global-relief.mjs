@@ -13,26 +13,28 @@ export function reliefHeight(a,lat,lon){
  return Math.max(0,(a[k]*(1-u)+a[k+1]*u)*(1-v)+(a[k+WIDTH]*(1-u)+a[k+WIDTH+1]*u)*v);
 }
 export class GlobalRelief{
+ scale=1;
+ setScale(value){this.scale=value;if(this.uniforms)this.uniforms.elevationScale.value=.001*value;}
  async load(scene,spherical=false){
   const {TerrainCache}=await import('./terrain-cache.mjs?v=20261122j');
   const disk=new TerrainCache(),key='etopo1-ice-5min-v1';let compressed=await disk.get(key);
   if(!compressed){const r=await fetch(new URL('./assets/etopo1-5min.bin.gz',import.meta.url));if(!r.ok)throw Error('Global relief unavailable');compressed=await r.arrayBuffer();void disk.put(key,compressed);}
   this.heights=decodeRelief(await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
   const texture=new THREE.DataTexture(this.heights,WIDTH,HEIGHT,THREE.RedFormat,THREE.FloatType);texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.needsUpdate=true;
-  this.uniforms={heights:{value:texture},anchor:{value:new THREE.Vector2()},extent:{value:new THREE.Vector4()},longitudeScale:{value:1},
+  this.uniforms={elevationScale:{value:.001*this.scale},heights:{value:texture},anchor:{value:new THREE.Vector2()},extent:{value:new THREE.Vector4()},longitudeScale:{value:1},
    colours:{value:['#234e45','#477353','#7a8960','#9b9b80','#b3b3aa','#e7eff0'].map(c=>new THREE.Color(c))},sea:{value:new THREE.Color('#12384e')}};
   const material=new THREE.ShaderMaterial({depthWrite:false,depthTest:false,uniforms:this.uniforms,vertexShader:`
-   uniform sampler2D heights;uniform vec2 anchor;uniform vec4 extent;uniform float longitudeScale;
+   uniform sampler2D heights;uniform vec2 anchor;uniform vec4 extent;uniform float longitudeScale,elevationScale;
    varying vec2 location;
    float heightAt(vec2 ll){vec2 uv=vec2(fract((ll.x+180.)/360.),clamp((90.-ll.y)/180.,0.,1.));uv=(uv*vec2(4320.,2160.)+.5)/vec2(4321.,2161.);return max(0.,texture2D(heights,uv).r);}
    void main(){vec2 p=extent.xy+position.xz*extent.zw;vec2 ll=anchor+vec2(p.x/longitudeScale,-p.y/111.2);location=ll;float elevation=heightAt(ll);
-    gl_Position=projectionMatrix*modelViewMatrix*vec4(p.x,elevation*.0015,p.y,1.);
+    gl_Position=projectionMatrix*modelViewMatrix*vec4(p.x,elevation*elevationScale,p.y,1.);
    }`,fragmentShader:`
-   uniform vec3 colours[6],sea;uniform sampler2D heights;varying vec2 location;
+   uniform float elevationScale;uniform vec3 colours[6],sea;uniform sampler2D heights;varying vec2 location;
    float heightAt(vec2 ll){vec2 uv=vec2(fract((ll.x+180.)/360.),clamp((90.-ll.y)/180.,0.,1.));uv=(uv*vec2(4320.,2160.)+.5)/vec2(4321.,2161.);return texture2D(heights,uv).r;}
    void main(){if(abs(location.y)>90.)discard;
     float elevation=heightAt(location),dx=max(1.,9.267*cos(radians(location.y))),dy=9.267;
-    vec3 normal=normalize(vec3(-(heightAt(location+vec2(1./12.,0.))-heightAt(location-vec2(1./12.,0.)))*.0015/(2.*dx),1.,(heightAt(location+vec2(0.,1./12.))-heightAt(location-vec2(0.,1./12.)))*.0015/(2.*dy)));
+    vec3 normal=normalize(vec3(-(heightAt(location+vec2(1./12.,0.))-heightAt(location-vec2(1./12.,0.)))*elevationScale/(2.*dx),1.,(heightAt(location+vec2(0.,1./12.))-heightAt(location-vec2(0.,1./12.)))*elevationScale/(2.*dy)));
     float shade=.6+.6*max(0.,dot(normal,normalize(vec3(-.4,1.,-.3))));
     vec3 c=colours[0];
     c=mix(c,colours[1],clamp(elevation/200.,0.,1.));c=mix(c,colours[2],clamp((elevation-200.)/500.,0.,1.));
@@ -56,5 +58,5 @@ export class GlobalRelief{
   this.uniforms.anchor.value.set(anchor.lon,anchor.lat);this.uniforms.longitudeScale.value=scale;
   this.uniforms.extent.value.set((west+east)/2,(north+south)/2,east-west,south-north);
  }
- height(lat,lon){return this.heights?reliefHeight(this.heights,lat,lon)*.0015:0;}
+ height(lat,lon){return this.heights?reliefHeight(this.heights,lat,lon)*.001*this.scale:0;}
 }

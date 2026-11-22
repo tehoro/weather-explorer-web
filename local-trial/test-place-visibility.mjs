@@ -22,3 +22,6 @@ const rows=Array.from({length:10},(_,i)=>({id:i,population:1e8/2**i,x:i*80,y:20,
 const selected=selectPlaces(rows,[],new Set(),5,p=>p.id>=5);
 assert.equal(selected.length,5);assert(selected.every(p=>p.id>=5));
 console.log('Place visibility: narrow ridges, near-town blocking, reversed view, top-down visibility, mesh triangles and replacement selection passed.');
+
+mesh.scale.y=4/1.5;
+assert.equal(meshSightGrid(mesh).height(4,4.5),4/1.5,'Sight lines follow displayed terrain exaggeration');

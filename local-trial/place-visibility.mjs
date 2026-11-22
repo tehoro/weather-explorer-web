@@ -27,7 +27,7 @@ export function meshSightGrid(mesh){
   const fx=Math.max(0,Math.min(n-1,(x-left)/g.stepX)),fz=Math.max(0,Math.min(n-1,(z-top)/g.stepZ));
   const i=Math.min(n-2,Math.floor(fx)),j=Math.min(n-2,Math.floor(fz)),u=fx-i,w=fz-j,k=j*n+i;
   const a=v[k*3+1],b=v[(k+1)*3+1],c=v[(k+n)*3+1],d=v[(k+n+1)*3+1];
-  return (u+w<=1?a+(b-a)*u+(c-a)*w:d+(c-d)*(1-u)+(b-d)*(1-w))+mesh.position.y;
+  return (u+w<=1?a+(b-a)*u+(c-a)*w:d+(c-d)*(1-u)+(b-d)*(1-w))*(mesh.scale.y??1)+mesh.position.y;
  };
  return g;
 }

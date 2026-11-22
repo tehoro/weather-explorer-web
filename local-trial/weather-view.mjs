@@ -1,6 +1,6 @@
 import {typeShader} from './precipitation-type.mjs';
 import {replayFrame} from './playback-loop.mjs';
-import {updateCloudTerrain} from './cloud-terrain.mjs';
+import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261122ai';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
@@ -10,7 +10,7 @@ import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122ah';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122ai';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 
@@ -113,19 +113,22 @@ export class WeatherView{
   const typeTexture=g=>{const t=this.texture(g,['rain','snow','ptype']);t.minFilter=t.magFilter=THREE.NearestFilter;this.textures.push(t);return t;};
   this.uniforms={ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
   const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.userData.terrainRevision=context.terrainRevision;g.computeBoundingSphere();return g;};
-  const vertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
+  const vertex=`varying vec2 vUv;varying vec3 cloudPosition;void main(){vUv=uv;cloudPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
   this.surfaceUniforms??={};
   for(const [key,uniform]of Object.entries(this.uniforms)){this.surfaceUniforms[key]??={value:uniform.value};this.surfaceUniforms[key].value=uniform.value;}
   this.surfaceUniforms.weatherBounds??={value:new THREE.Vector4()};this.surfaceUniforms.weatherBounds.value.set(west,north,w,h);
   this.attachSurfaces();
   this.clouds=[];
-  // Smooth forecast coverage: synthetic fine noise stretched into horizontal
-  // streaks in oblique views. Schematic heights are not forecast cloud bases.
+  // Broad, derivative-filtered texture avoids fine streaks at grazing angles.
+  // Schematic heights and thickness are not forecast cloud bases or tops.
   for(let layer=0;layer<3;layer++)for(let slab=0;slab<3;slab++){
    const uniforms={...this.uniforms,layer:{value:layer},slab:{value:slab},opacity:{value:layer===2?.12:.23}};
-   const mesh=new THREE.Mesh(geometry([1.2,4,8][layer]+slab*[.3,.5,.35][layer]),new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms,vertexShader:vertex,fragmentShader:`varying vec2 vUv;uniform sampler2D cloudA,cloudB;uniform float blend,layer,slab,clock,opacity;uniform vec2 extent;
-void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float cover=layer<.5?c.r:layer<1.5?c.g:c.b;float edge=smoothstep(0.,.025,vUv.x)*smoothstep(0.,.025,vUv.y)*smoothstep(0.,.025,1.-vUv.x)*smoothstep(0.,.025,1.-vUv.y);float a=smoothstep(.02,.85,cover)*cover*opacity*edge;gl_FragColor=vec4(vec3(.84,.88,.92),a);\n#include <colorspace_fragment>\n}`}));
-   mesh.userData.layer=layer;this.clouds.push(mesh);this.meshes.push(mesh);this.group.add(mesh);
+   const baseAlt=[1.2,4,8][layer]+slab*[.6,.8,.6][layer];
+   const mesh=new THREE.Mesh(geometry(baseAlt*(context.cloudScale||1)),new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms,vertexShader:vertex,fragmentShader:`varying vec3 cloudPosition;varying vec2 vUv;uniform sampler2D cloudA,cloudB;uniform float blend,layer,slab,clock,opacity;uniform vec2 extent;
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
+void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint=max(length(dFdx(q)),length(dFdy(q)));float textureFade=1.-smoothstep(.15,.8,footprint);float puff=mix(.5,noise(q)*.7+noise(q*2.)*.3,textureFade);vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float cover=layer<.5?c.r:layer<1.5?c.g:c.b;float edge=smoothstep(0.,.025,vUv.x)*smoothstep(0.,.025,vUv.y)*smoothstep(0.,.025,1.-vUv.x)*smoothstep(0.,.025,1.-vUv.y);float a=smoothstep(.02,.85,cover)*cover*opacity*edge*(.7+.6*puff);gl_FragColor=vec4(vec3(.84,.88,.92)*(.94+.12*puff),a);\n#include <colorspace_fragment>\n}`}));
+   mesh.geometry.userData.baseAlt=baseAlt;mesh.userData.layer=layer;this.clouds.push(mesh);this.meshes.push(mesh);this.group.add(mesh);
   }
   if(!this.wind)this.makeWind();if(!this.drops)this.makeRain();
   if(moved)this.streaks?.reset();
@@ -146,7 +149,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
     // Coarse relief displaces its vertices in its own shader rather than the
     // standard material chunks. Sample weather at those same world positions.
     if(material.userData.coarseRelief){
-     shader.vertexShader=shader.vertexShader.replace('gl_Position=projectionMatrix*modelViewMatrix*vec4(p.x,elevation*.0015,p.y,1.);','weatherPosition=vec3(p.x,elevation*.0015,p.y);gl_Position=projectionMatrix*modelViewMatrix*vec4(weatherPosition,1.);');
+     shader.vertexShader=shader.vertexShader.replace('gl_Position=projectionMatrix*modelViewMatrix*vec4(p.x,elevation*elevationScale,p.y,1.);','weatherPosition=vec3(p.x,elevation*elevationScale,p.y);gl_Position=projectionMatrix*modelViewMatrix*vec4(weatherPosition,1.);');
      shader.fragmentShader=shader.fragmentShader.replace('gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);','vec4 diffuseColor=vec4(elevation<.1?sea:c*shade,1.);\n#include <color_fragment>\ngl_FragColor=diffuseColor;');
     }
     shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>','weatherPosition=(modelMatrix*vec4(transformed,1.)).xyz;\n#include <project_vertex>');
@@ -209,7 +212,8 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
   this.readClock=(this.readClock||0)+dt;if(this.readClock>.4){this.readClock=0;this.readout();}
   this.terrainClock=(this.terrainClock||0)+dt;
   if(this.terrainClock>2){this.terrainClock=0;this.attachSurfaces();}
-  updateCloudTerrain(this.meshes,this.ground,this.liveContext.terrainRevision);
+  for(const mesh of this.clouds)mesh.geometry.userData.alt=mesh.geometry.userData.baseAlt*(this.liveContext.cloudScale||1);
+  updateCloudTerrain(this.meshes,this.ground,this.liveContext.terrainRevision+"/"+this.liveContext.cloudScale);
   this.wind.material.uniforms.viewport.value.set(innerWidth,innerHeight);
   // Fixed-rate histories avoid display refresh rate changing trail length.
   this.accumulator=(this.accumulator||0)+dt;if(this.accumulator<1/30)return;const step=Math.min(.1,this.accumulator);this.accumulator=0;
