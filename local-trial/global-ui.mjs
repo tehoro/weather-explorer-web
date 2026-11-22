@@ -20,7 +20,7 @@ export function setupUI(){
  const retryBuffer=document.createElement('button');retryBuffer.id='retryBuffer';retryBuffer.textContent='Retry loading this view';retryBuffer.hidden=true;weather.append(retryBuffer);
  const location=document.createElement('details');location.open=true;location.innerHTML='<summary>Location</summary>';
  const weatherDetail=document.createElement('p');weatherDetail.id='weatherDetailStatus';weatherDetail.textContent='Preparing global weather preview…';$('weatherControls').append(weatherDetail);
- const view=document.createElement('details');view.innerHTML='<summary>View &amp; terrain</summary><label for="viewAngle">View angle</label><select id="viewAngle"><option value="slanted">Slanted</option><option value="top">Top-down</option></select><label><input type="checkbox" id="placeNames" checked>Place names</label><p id="placesStatus"><small>Loading global place names…</small></p>';
+ const view=document.createElement('details');view.innerHTML='<summary>View &amp; terrain</summary><label for="viewAngle">View angle</label><select id="viewAngle"><option value="slanted">Slanted</option><option value="top">Top-down</option><option value="low">Near ground · about 500 m</option></select><label><input type="checkbox" id="placeNames" checked>Place names</label><p id="placesStatus"><small>Loading global place names…</small></p>';
  const diagnostics=document.createElement('details');diagnostics.innerHTML='<summary>Loading details</summary>';
  $('weather').remove();
  const help=document.createElement('dialog');help.id='helpDialog';help.className='glass';help.innerHTML='<div class="panelHeading"><h2>Explore the local forecast</h2><button id="helpClose" aria-label="Close help">×</button></div><p>Drag to rotate and tilt; Shift-drag or right-drag to pan. Scroll to zoom. On touchscreens, one finger rotates and two fingers pan or pinch.</p><p>The clock and timeline use the time zone at the centre of the view, including daylight saving at the forecast date. Geographic time-zone boundaries are approximate. The model-run time remains in UTC.</p>';document.body.append(help);
@@ -41,7 +41,7 @@ export function setupUI(){
  footer.innerHTML='Data: © 2026 ECMWF · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · <button id="creditsOpen" aria-haspopup="dialog" aria-controls="helpDialog">Data credits</button>';
  $('creditsOpen').onclick=()=>{help.showModal();credits.focus();credits.scrollIntoView({block:'start'});};
  aside.replaceChildren();const panelHeader=document.createElement('div');panelHeader.className='panelHeading';panelHeader.innerHTML='<h2>Settings</h2><button id="closeSettings" aria-label="Close settings">×</button>';aside.append(panelHeader);
- const hint=document.createElement('p');hint.id='pointHint';hint.className='glass';hint.textContent='Click the landscape or a town for its forecast';document.body.append(hint);
+ const hint=document.createElement('p');hint.id='pointHint';hint.className='glass';hint.textContent='Click for a forecast · double-click the landscape or click a town to centre';document.body.append(hint);
  const body=document.createElement('div');body.className='panelBody';body.append(location,weather,view,advanced,diagnostics);aside.append(body);
  function panel(open){aside.hidden=!open;document.body.classList.toggle('panelClosed',!open);$('settingsToggle').setAttribute('aria-expanded',String(open));}
  $('closeSettings').onclick=()=>panel(false);$('settingsToggle').onclick=()=>{document.body.classList.remove('clean');panel(aside.hidden);};

@@ -1,4 +1,4 @@
-import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ad';
+import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ae';
 import {displayPoint,snapForecast,windReadout} from './point-values.mjs';
 import {zoneAt,timeParts,forecastMoment} from './local-time.mjs';
 import {typeName} from './precipitation-type.mjs';
@@ -6,7 +6,7 @@ import {syncUnits} from './shared-units.mjs';
 export class PointForecast{
  constructor(weather,fly){
   this.weather=weather;this.fly=fly;this.token=0;this.rows=new Map();this.panel=document.createElement('section');this.panel.id='pointForecast';this.panel.className='glass';this.panel.hidden=true;
-  this.panel.innerHTML='<div class="panelHeading"><h2 id="pointTitle">Point forecast</h2><button id="pointClose" aria-label="Close point forecast">×</button></div><div id="pointCoordinates"></div><div id="pointTime"></div><div id="pointTotal"></div><div id="pointValues"></div><div class="pointActions"><button id="pointFly">Fly here</button><button id="pointExpand" aria-expanded="false">Show meteogram</button></div><div id="pointChart" hidden></div><p id="pointStatus"></p>';
+  this.panel.innerHTML='<div class="panelHeading"><h2 id="pointTitle">Point forecast</h2><button id="pointClose" aria-label="Close point forecast">×</button></div><div id="pointCoordinates"></div><div id="pointTime"></div><div id="pointTotal"></div><div id="pointValues"></div><div class="pointActions"><button id="pointFly">Centre here</button><button id="pointExpand" aria-expanded="false">Show meteogram</button></div><div id="pointChart" hidden></div><p id="pointStatus"></p>';
   document.body.append(this.panel);const $=id=>this.panel.querySelector('#'+id);
   $('pointClose').onclick=()=>{this.token++;this.location=null;this.panel.hidden=true;document.getElementById('pointHint').hidden=false;dispatchEvent(new Event('point-selection-change'));};
   $('pointFly').onclick=()=>this.fly(this.location);

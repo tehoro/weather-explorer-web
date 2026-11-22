@@ -831,3 +831,11 @@ wheel-zoom/orbit target, including when detailed elevation arrives. A deliberate
 pan releases that focus. Flights defer coordinate rebasing until arrival.
 Verified all four panels inside a 1280 × 720 viewport (no scroll overflow), and
 wheel zoom in/out retained the selected town within a fraction of a screen pixel.
+
+**Centre here** replaces Fly here. Clicking a town label or double-clicking the
+terrain selects its forecast and centres automatically; a single terrain click
+only opens its forecast. Search and globe arrivals initialise the orbit/zoom
+pivot at the destination's ground height, retaining it as detail arrives.
+Tilt now reaches near-horizontal views. **View & terrain → Near ground · about
+500 m** lowers the eye to that clearance above local terrain; the camera floor
+uses the same 1.5× vertical scale as the terrain (0.75 scene km).

@@ -10,7 +10,7 @@ import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122ad';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122ae';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 
