@@ -1,8 +1,9 @@
+import {snowCoverShader} from './snow-cover-shader.mjs?v=20261123c';
 import {advanceWindHistory} from './wind-history.mjs';
 import {frameAtTime,timeAtFrame} from './forecast-position.mjs';
-import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261123b';
+import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261123c';
 import {replayFrame} from './playback-loop.mjs';
-import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261123b';
+import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261123c';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
@@ -12,7 +13,7 @@ import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261123b';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261123c';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 
@@ -125,7 +126,8 @@ export class WeatherView{
   const {west,east,north,south}=this.bounds,w=east-west,h=south-north;
   const typeTexture=g=>{const t=this.texture(g,['rain','snow','ptype']);t.minFilter=t.magFilter=THREE.NearestFilter;this.textures.push(t);return t;};
   const coverTexture=g=>{const t=this.texture(g,['snowCover','seaIce','snowlineWeighted','snowlineWeight']);t.minFilter=t.magFilter=THREE.LinearFilter;this.textures.push(t);return t;};
-  this.uniforms={coverTerrainScale:{value:Number($('terrainScale').value)},coverEnabled:{value:1},coverA:{value:coverTexture(this.previous)},coverB:{value:coverTexture(this.current)},ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
+  const regionalTexture=g=>{const t=this.texture(g,['snowlineRegionalWeighted','snowlineRegionalWeight','snowlineModelHeight']);t.minFilter=t.magFilter=THREE.LinearFilter;this.textures.push(t);return t;};
+  this.uniforms={regionalA:{value:regionalTexture(this.previous)},regionalB:{value:regionalTexture(this.current)},coverTerrainScale:{value:Number($('terrainScale').value)},coverEnabled:{value:1},coverA:{value:coverTexture(this.previous)},coverB:{value:coverTexture(this.current)},ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
   const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.userData.terrainRevision=context.terrainRevision;g.computeBoundingSphere();return g;};
   const vertex=`varying vec2 vUv;varying vec3 cloudPosition;void main(){vUv=uv;cloudPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
   this.surfaceUniforms??={};
@@ -163,7 +165,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
     beforeCompile.call(material,shader);
     // Only attach weather inputs. The coarse terrain owns an `extent` vec4;
     // copying all view uniforms replaced it with the weather extent vec2.
-    for(const key of ['coverTerrainScale','coverEnabled','coverA','coverB','ptypeA','ptypeB','surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
+    for(const key of ['regionalA','regionalB','coverTerrainScale','coverEnabled','coverA','coverB','ptypeA','ptypeB','surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
     shader.vertexShader='varying vec3 weatherPosition;\n'+shader.vertexShader;
     // Coarse relief displaces its vertices in its own shader rather than the
     // standard material chunks. Sample weather at those same world positions.
@@ -172,8 +174,8 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
      shader.fragmentShader=shader.fragmentShader.replace('gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);','vec4 diffuseColor=vec4(elevation<.1?sea:c*shade,1.);\n#include <color_fragment>\ngl_FragColor=diffuseColor;');
     }
     shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>','weatherPosition=(modelMatrix*vec4(transformed,1.)).xyz;\n#include <project_vertex>');
-    shader.fragmentShader='varying vec3 weatherPosition; uniform sampler2D coverA,coverB,ptypeA,ptypeB,surfaceA,surfaceB,cloudA,cloudB; uniform float coverTerrainScale,coverEnabled,blend,mode,isobars,isobarStep,weatherGridSize; uniform vec4 weatherBounds;\n'+shader.fragmentShader;
-    shader.fragmentShader=typeShader+'\n'+shader.fragmentShader;
+    shader.fragmentShader='varying vec3 weatherPosition; uniform sampler2D regionalA,regionalB,coverA,coverB,ptypeA,ptypeB,surfaceA,surfaceB,cloudA,cloudB; uniform float coverTerrainScale,coverEnabled,blend,mode,isobars,isobarStep,weatherGridSize; uniform vec4 weatherBounds;\n'+shader.fragmentShader;
+    shader.fragmentShader=snowCoverShader+typeShader+'\n'+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
      vec2 weatherUV=(weatherPosition.xz-weatherBounds.xy)/weatherBounds.zw;
      if(all(greaterThanEqual(weatherUV,vec2(0)))&&all(lessThanEqual(weatherUV,vec2(1)))){
@@ -182,9 +184,8 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
       float rain=mix(texture2D(cloudA,sampleUV).a,texture2D(cloudB,sampleUV).a,blend);
       vec4 cover=mix(max(texture2D(coverA,sampleUV),vec4(0.)),max(texture2D(coverB,sampleUV),vec4(0.)),blend);
       float terrainKm=weatherPosition.y/coverTerrainScale;
-      float line=cover.b/max(cover.a,.0001);
-      float mountainSnow=smoothstep(line-.15,line+.15,terrainKm)*max(cover.r,.65);
-      cover.r=mix(cover.r,mountainSnow,cover.a);
+      vec3 regional=mix(texture2D(regionalA,sampleUV).rgb,texture2D(regionalB,sampleUV).rgb,blend);
+      cover.r=terrainSnow(cover,regional,terrainKm);
       cover.r*=${material.userData.coarseRelief?'step(.0001,weatherPosition.y)':'diffuseColor.a'};cover.g*=1.-step(.001,weatherPosition.y);
       float whiten=max(cover.r,cover.g)*coverEnabled;
       vec2 iceUV=weatherPosition.xz/8.;

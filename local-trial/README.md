@@ -865,7 +865,7 @@ Tests cover retention against a stronger challenger and replacement on occlusion
 
 ### Forecast snow and sea ice
 
-The optional `surface-cover-v3` package uses indexed IFS Open Data `sd`, `sithick`,
+The optional `surface-cover-v4` package uses indexed IFS Open Data `sd`, `sithick`,
 `lsm` and surface `z` at **step 0**. Model terrain height is `z / 9.80665` metres;
 no temperature/pressure estimate is used. Positive valid ice thickness denotes
 ice presence, not concentration. Snow whitening saturates at 20 mm SWE (a display
@@ -882,8 +882,9 @@ The calculation uses real terrain heights, unaffected by display exaggeration.
 This is an illustrative terrain adjustment, not an observed snowline or a
 high-resolution forecast. It is disabled beyond 85 degrees latitude.
 
-The background builder prepares four uint16 arrays (snow, ice, weighted snowline
-in km, evidence weight), 0.1° tiles and a 1° global preview. It publishes the
+The background builder prepares seven uint16 arrays (snow, ice, weighted local snowline
+in km, local evidence weight, weighted regional snowline, regional evidence weight,
+and actual model terrain height in km), 0.1° tiles and a 1° global preview. It publishes the
 manifest only when every frame is ready. HTTP requests only serve static files.
 The decoder still accepts v1 and packages without cover. Both views interpolate
 with forecast time; the globe matches absolute cloud time and hides unavailable
@@ -915,3 +916,25 @@ The texture loads in the background, is cached on disk, and preserves hill shadi
 Source: https://esa-worldcover.org/en/data-access · © ESA WorldCover project 2021 /
 Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover
 consortium; CC BY 4.0. The packaged raster is resampled for display.
+
+### Regional snowline fallback (23 November)
+
+Where the local boundary is weak, a fallback searches supported half-degree donor
+locations within 150 km, then 300 km (great-circle distance, including the date line).
+At least three donors with local confidence >= 0.5 must agree: their distance-weighted
+snowline standard deviation must not exceed 200 m. Distance, donor support and agreement
+reduce confidence, capped at 0.7 for the near search and 0.5 for the wider search.
+Latitude alone never supplies a snowline, and no inference is made beyond 85 degrees.
+This does not establish that neighbouring slopes share the same exposure or snow history.
+
+Both renderers use the same shader. Regional snow only adds whitening to ground
+300–600 m above the actual IFS model terrain, fading in with height. Strong local
+evidence takes priority; the fallback cannot remove existing model snow. This
+per-pixel height gate avoids preloading detailed terrain merely to decide eligibility.
+The globe has the same rule but cannot resolve peaks absent from its coarse DEM.
+
+Both local and regional estimates are recomputed from each forecast step's `sd`,
+then interpolated in time. Orography is static. Where no nearby boundary is supported,
+including isolated NZ summits in some frames, broad cover and WorldCover remain.
+No latitude climatology, invented summit snow, or temperature-only accumulation is used.
+Seven fields use format 3 (14 bytes/point); older packages remain readable.

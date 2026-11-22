@@ -16,3 +16,12 @@ assert.equal(sampleField('seaIce',new Float32Array([0,1,0,1]),2,.5,.5),.5);
 assert.equal(sampleField('seaIce',new Float32Array([-1,1,-1,1]),2,.5,.5),1);
 assert.equal(sampleField('seaIce',new Float32Array(4).fill(-1),2,.5,.5),-1);
 assert.equal(sampleField('snowlineWeight',undefined,2,.5,.5),0);
+
+// V3 adds regional evidence and actual model height, retaining old formats.
+data.meta.surface_cover.format=3;
+data.bytes=async()=>new Uint16Array([...packed,7500,0,32767,0,6000,0]).buffer;
+fields=await data.surfaceCover(0,'test',2);
+assert.equal(fields.snowlineRegionalWeighted[0],1.5);
+assert.equal(fields.snowlineRegionalWeight[0],.5);
+assert.ok(Math.abs(fields.snowlineModelHeight[0]-1.2)<1e-6);
+assert.equal(sampleField('snowlineRegionalWeight',undefined,2,.5,.5),0);

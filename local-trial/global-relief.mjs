@@ -47,7 +47,7 @@ export class GlobalRelief{
     gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);
     #include <colorspace_fragment>
    }`});
-  void import('./global-landcover.mjs?v=20261123b').then(m=>m.globalLandCover()).then(texture=>{this.uniforms.landCover.value=texture;blank.dispose();}).catch(()=>{});
+  void import('./global-landcover.mjs?v=20261123c').then(m=>m.globalLandCover()).then(texture=>{this.uniforms.landCover.value=texture;blank.dispose();}).catch(()=>{});
   material.userData.coarseRelief=true;
   if(spherical){
    material.depthWrite=true;material.depthTest=true;

@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from prepare_surface_cover import cover,snowline,neighbourhood
+from prepare_surface_cover import cover,snowline,neighbourhood,regional_snowline
 class SurfaceCover(unittest.TestCase):
  def test_masks_missing_and_positive_ice(self):
   snow,ice=cover(np.array([0,.02,.005,np.nan,0,0]),np.array([0,0,0,0,.001,np.nan]),np.array([1,1,1,1,0,0]))
@@ -17,6 +17,22 @@ class SurfaceCover(unittest.TestCase):
   self.assertAlmostEqual(line[20,20]/weight[20,20],1.5,delta=.2)
   for snow,height in [(np.ones_like(z)*.02,z),(np.zeros_like(z),z),(sd,np.ones_like(z)*100),(sd,3000-z)]:
    _,w=snowline(snow,land,height);self.assertEqual(w.max(),0)
+ def test_regional_requires_several_agreeing_donors_and_tracks_change(self):
+  # Half-degree synthetic world: donors around the equator and dateline.
+  w=np.zeros((361,720));line=np.zeros_like(w);land=np.ones_like(w)
+  for y,x in [(179,719),(180,0),(181,1)]:w[y,x]=1;line[y,x]=1.5
+  result,weight=regional_snowline(line,w,land,stride=1)
+  self.assertGreater(weight[180,719],0)
+  self.assertAlmostEqual(result[180,719]/weight[180,719],1.5)
+  self.assertEqual(weight[180,30],0) # Outside the 300 km search.
+  fresh,_=regional_snowline(line*.6,w,land,stride=1)
+  self.assertAlmostEqual(fresh[180,719]/weight[180,719],.9)
+  line[181,1]=3.5
+  _,conflict=regional_snowline(line,w,land,stride=1)
+  self.assertEqual(conflict[180,719],0)
+  w[181,1]=0
+  _,sparse=regional_snowline(line,w,land,stride=1)
+  self.assertEqual(sparse.max(),0)
  def test_neighbourhood_wraps_dateline(self):
   a=np.zeros((41,80));a[:,0]=1
   b=neighbourhood(a)

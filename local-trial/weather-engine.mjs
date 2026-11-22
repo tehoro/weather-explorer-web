@@ -1,7 +1,7 @@
 import {forecastOrder} from './forecast-order.mjs';
 import {TerrainCache} from './terrain-cache.mjs';
 // Static IFS tiles: decode to physical units before spatial interpolation.
-export const FIELDS=['u','v','temperature','pressure','rain','snow','low','middle','high','ptype','snowCover','seaIce','snowlineWeighted','snowlineWeight'];
+export const FIELDS=['u','v','temperature','pressure','rain','snow','low','middle','high','ptype','snowCover','seaIce','snowlineWeighted','snowlineWeight','snowlineRegionalWeighted','snowlineRegionalWeight','snowlineModelHeight'];
 const NEAREST=new Set(['ptype']);
 export const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 export function tilePoint(lat,lon){
@@ -40,14 +40,14 @@ export class WeatherData{
  async json(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error('IFS manifest unavailable');return r.json();}
  async surfaceCover(frame,name,count){
   const m=this.meta,info=m.surface_cover;
-  const result={snowCover:new Float32Array(count).fill(-1),seaIce:new Float32Array(count).fill(-1),snowlineWeighted:new Float32Array(count),snowlineWeight:new Float32Array(count)};
+  const result={snowCover:new Float32Array(count).fill(-1),seaIce:new Float32Array(count).fill(-1),snowlineWeighted:new Float32Array(count),snowlineWeight:new Float32Array(count),snowlineRegionalWeighted:new Float32Array(count),snowlineRegionalWeight:new Float32Array(count),snowlineModelHeight:new Float32Array(count)};
   if(!info)return result;
   const bytes=await this.bytes(`/global-data/${m.run}/${info.path}/${String(m.steps[frame]).padStart(3,'0')}/${name}`);
-  if(info.format===2){
-   if(bytes.byteLength!==count*8)throw Error('Invalid surface cover data');
+  if(info.format===2||info.format===3){
+   if(bytes.byteLength!==count*(info.format===3?14:8))throw Error('Invalid surface cover data');
    const view=new DataView(bytes);
-   for(const [j,key]of Object.keys(result).entries())for(let i=0;i<count;i++){
-    const v=view.getUint16((j*count+i)*2,true);result[key][i]=j<2&&v===65535?-1:v*(j===2?.0002:1/65534);
+   for(const [j,key]of Object.keys(result).slice(0,info.format===3?7:4).entries())for(let i=0;i<count;i++){
+    const v=view.getUint16((j*count+i)*2,true);result[key][i]=j<2&&v===65535?-1:v*([2,4,6].includes(j)?.0002:1/65534);
    }
   }else{
    if(bytes.byteLength!==count*2)throw Error('Invalid surface cover data');

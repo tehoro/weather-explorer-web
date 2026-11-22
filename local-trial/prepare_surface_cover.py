@@ -6,8 +6,8 @@ import numpy as np
 import eccodes
 from global_weather import OUTPUT,fetch_fields,index
 from prepare import write
-PATH='surface-cover-v3'
-FIELDS=[{'name':n,'dtype':'<u2','scale':s} for n,s in [('snowCover',1/65534),('seaIce',1/65534),('snowlineWeighted',.0002),('snowlineWeight',1/65534)]]
+PATH='surface-cover-v4'
+FIELDS=[{'name':n,'dtype':'<u2','scale':s} for n,s in [('snowCover',1/65534),('seaIce',1/65534),('snowlineWeighted',.0002),('snowlineWeight',1/65534),('snowlineRegionalWeighted',.0002),('snowlineRegionalWeight',1/65534),('snowlineModelHeight',.0002)]]
 def read(path):
     g=eccodes.codes_new_from_message(path.read_bytes())
     try:
@@ -59,9 +59,54 @@ def snowline(sd,land,z):
     strength=np.clip(weight/.5,0,1)*valid
     return np.where(weight>0,line/np.maximum(weight,1e-9)*strength,0),strength
 
-def pack_v2(sd,ice,land,z):
+def regional_snowline(line, strength, land, stride=5):
+    """Borrow agreeing local boundaries, never infer one from latitude alone.
+
+    Half-degree donors prevent many correlated native cells masquerading as
+    independent evidence. Great-circle distance handles poles and the dateline.
+    Returns a coarse grid; interpolation of premultiplied values fades its edges.
+    """
+    ny,nx=line.shape
+    yy=np.arange(0,ny,stride);xx=np.arange(0,nx,stride)
+    lat=np.linspace(90,-90,ny)[yy];lon=xx*360/nx
+    w=strength[np.ix_(yy,xx)];h=line[np.ix_(yy,xx)]/np.maximum(w,1e-9)
+    donors=w>=.5
+    dy,dx=np.nonzero(donors)
+    dl=np.deg2rad(lat[dy]);do=np.deg2rad(lon[dx]);dh=h[dy,dx]
+    output=np.zeros_like(w);confidence=np.zeros_like(w)
+    target=land[np.ix_(yy,xx)]>=.5
+    for row,latitude in enumerate(lat):
+        if abs(latitude)>=85:continue
+        candidates=np.abs(lat[dy]-latitude)<=2.71
+        if not candidates.any():continue
+        a=dl[candidates];b=do[candidates];heights=dh[candidates]
+        columns=np.flatnonzero(target[row])
+        phi=np.deg2rad(latitude);lam=np.deg2rad(lon[columns])[:,None]
+        hav=np.sin((a-phi)/2)**2+np.cos(phi)*np.cos(a)*np.sin((b-lam)/2)**2
+        distance=12742*np.arcsin(np.sqrt(np.clip(hav,0,1)))
+        for radius,maximum in [(150,.7),(300,.5)]:
+            inside=distance<=radius
+            weights=inside*np.exp(-(distance/radius)**2*2)
+            total=weights.sum(axis=1)
+            mean=(weights@heights)/np.maximum(total,1e-9)
+            variance=(weights@(heights*heights))/np.maximum(total,1e-9)-mean*mean
+            # A 200 m standard deviation is roughly a 400 m central spread.
+            good=(inside.sum(axis=1)>=3)&(variance<=.2**2)&(confidence[row,columns]==0)
+            quality=maximum*np.clip(total/3,0,1)*np.clip(1-np.maximum(variance,0)/.08,.5,1)
+            chosen=columns[good]
+            confidence[row,chosen]=quality[good];output[row,chosen]=mean[good]*quality[good]
+    # Interpolate back to native rows and wrapped longitude, without scipy.
+    def expand(a):
+        horizontal=np.array([np.interp(np.arange(nx),np.r_[xx,nx],np.r_[r,r[0]]) for r in a])
+        lo=np.minimum(np.arange(ny)//stride,len(yy)-1);hi=np.minimum(lo+1,len(yy)-1)
+        blend=(np.arange(ny)-yy[lo])/stride
+        return horizontal[lo]*(1-blend[:,None])+horizontal[hi]*blend[:,None]
+    return expand(output),expand(confidence)
+
+def pack_cover(sd,ice,land,z):
     old=cover(sd,ice,land)
     line,strength=snowline(sd,land,z)
+    regional,regional_weight=regional_snowline(line,strength,np.where(np.isfinite(z)&np.isfinite(sd),land,0))
     arrays=[]
     for a in old:
         valid=a!=255
@@ -69,6 +114,7 @@ def pack_v2(sd,ice,land,z):
         smooth=neighbourhood(np.where(valid,a.astype(float)/254,0),1)/np.maximum(weight,1e-9)
         arrays.append(np.where(valid,np.rint(np.clip(smooth,0,1)*65534),65535).astype('<u2'))
     arrays.extend([np.rint(np.clip(line,0,13)*5000).astype('<u2'),np.rint(strength*65534).astype('<u2')])
+    arrays.extend([np.rint(np.clip(regional,0,13)*5000).astype('<u2'),np.rint(regional_weight*65534).astype('<u2'),np.rint(np.clip(np.nan_to_num(z)/1000,0,13)*5000).astype('<u2')])
     return arrays
 
 def build(run=None):
@@ -82,7 +128,7 @@ def build(run=None):
     def frame(step):
         out=root/PATH/f'{step:03}'
         if (out/'complete').exists():return
-        f={p:read(path) for p,path,_ in fetch_fields(run,step,['sd','sithick','lsm'])};arrays=pack_v2(f['sd'],f['sithick'],f['lsm'],z);out.mkdir(parents=True,exist_ok=True)
+        f={p:read(path) for p,path,_ in fetch_fields(run,step,['sd','sithick','lsm'])};arrays=pack_cover(f['sd'],f['sithick'],f['lsm'],z);out.mkdir(parents=True,exist_ok=True)
         def save(name,iy,ix,source=None):
             source=arrays if source is None else source
             blob=gzip.compress(b''.join(a[np.ix_(iy,ix)].tobytes() for a in source),compresslevel=4,mtime=0)
@@ -99,5 +145,5 @@ def build(run=None):
         save('global.bin.gz',np.arange(0,1801,10),np.arange(0,3601,10)%3600,preview)
         (out/'complete').touch();print(f'Snow and sea ice +{step:03} h ready',flush=True)
     with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(frame,meta['steps']))
-    meta['surface_cover']={'path':PATH,'fields':FIELDS,'format':2,'bytes_per_point':8,'missing':65535,'source':['sd','sithick','lsm','z (step 0)'],'snowline':'Illustrative elevation boundary from nearby snowy/bare points and actual model terrain heights; weak evidence retains broad cover'};write(root/'manifest.json',meta)
+    meta['surface_cover']={'path':PATH,'fields':FIELDS,'format':3,'bytes_per_point':14,'missing':65535,'source':['sd','sithick','lsm','z (step 0)'],'snowline':'Illustrative elevation boundary from nearby snowy/bare points and actual model terrain heights; regional fallback uses agreeing boundaries within 150–300 km, gated by rendered terrain above model terrain'};write(root/'manifest.json',meta)
 if __name__=='__main__':build()

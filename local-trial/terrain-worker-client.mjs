@@ -1,6 +1,6 @@
 export class TerrainWorker{
  constructor(catalogue){
-  this.worker=new Worker(new URL('./terrain-worker.mjs?v=20261123b',import.meta.url),{type:'module'});this.jobs=new Map();this.next=0;this.saved={hits:0};
+  this.worker=new Worker(new URL('./terrain-worker.mjs?v=20261123c',import.meta.url),{type:'module'});this.jobs=new Map();this.next=0;this.saved={hits:0};
   this.worker.onmessage=({data:{id,value,error,hits}})=>{const job=this.jobs.get(id);if(!job)return;this.jobs.delete(id);if(hits!==undefined)this.saved.hits=hits;error?job.reject(Error(error)):job.resolve(value);};
   this.worker.onerror=e=>{this.error=Error(e.message||'Terrain worker failed');for(const job of this.jobs.values())job.reject(this.error);this.jobs.clear();};
   this.ready=this.call('init',[[...catalogue]]);
