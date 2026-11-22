@@ -1,12 +1,12 @@
 import {localPreviewReady} from './preview-readiness.mjs';
 import {ARRIVAL,ease,bezier,distanceKm,globeTravel} from './camera-travel.mjs';
 import {orbitStep,orbitOffset} from './camera-orbit.mjs';
-import {PointForecast} from './point-forecast.mjs?v=20261122ap';
+import {PointForecast} from './point-forecast.mjs?v=20261122ar';
 import {TerrainIndex} from './terrain-index.mjs';
 import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
-import {GlobalRelief} from './global-relief.mjs?v=20261122ap';
+import {GlobalRelief} from './global-relief.mjs?v=20261122ar';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
@@ -14,9 +14,9 @@ import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {sample} from './terrain-raster.mjs?v=20261122l';
 import {TerrainWorker} from './terrain-worker-client.mjs';
-import {WeatherView} from './weather-view.mjs?v=20261122ap';
-import {setupUI} from './global-ui.mjs?v=20261122ap';
-import {PlaceLabels} from './place-labels.mjs?v=20261122ap';
+import {WeatherView} from './weather-view.mjs?v=20261122ar';
+import {setupUI} from './global-ui.mjs?v=20261122ar';
+import {PlaceLabels} from './place-labels.mjs?v=20261122ar';
 setupUI();
 const terrainScale=()=>Number(document.getElementById("terrainScale").value);
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
@@ -189,7 +189,7 @@ function groundHeight(x,z){
  const {p,mesh,dx,dy}=best;return sample(mesh.userData.a,p.cells+3,p.cells+3,1+dx/p.span*p.cells,1+dy/p.span*p.cells)*.001*terrainScale();
 }
 function weatherContext(){
- const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=points.map(p=>p[0]),zs=points.map(p=>p[1]),scale=111.2*cos();
+ const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=orbit?[-orbit.coverage,orbit.coverage]:points.map(p=>p[0]),zs=orbit?[-orbit.coverage,orbit.coverage]:points.map(p=>p[1]),scale=111.2*cos();
  const west=Math.floor((c.lon+Math.max(-2400,Math.min(...xs))/scale)*4)/4,north=Math.min(90,Math.ceil((c.lat-Math.max(-2400,Math.min(...zs))/111.2)*4)/4);
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
  const coarseSightGrid={left:-180*scale-anchor.lon*scale,right:180*scale-anchor.lon*scale,top:(anchor.lat-90)*111.2,bottom:(anchor.lat+90)*111.2,stepX:scale/12,stepZ:111.2/12,
@@ -276,7 +276,8 @@ $('orbitToggle').onclick=()=>{
  const radius=Math.hypot(offset.x,offset.z),bearing=Math.atan2(offset.x,offset.z);let altitude=camera.position.y;
  // Check the complete circuit once. Climb before rotating, then hold MSL height.
  for(let i=0;i<180;i++){const p=orbitOffset(radius,0,i*Math.PI/90);altitude=Math.max(altitude,groundHeight(controls.target.x+p.x,controls.target.z+p.z)+.5*terrainScale());}
- orbit={radius,bearing,altitude,fromAltitude:camera.position.y,start:performance.now(),last:performance.now()};
+ const coverage=Math.min(2400,Math.max(...cameraFootprint().map(p=>Math.hypot(...p))));
+ orbit={coverage,radius,bearing,altitude,fromAltitude:camera.position.y,start:performance.now(),last:performance.now()};
  $('orbitToggle').textContent='Stop orbit';$('orbitToggle').setAttribute('aria-pressed','true');lastOrbitRefresh=0;clearTimeout(timer);
 };
 function tickOrbit(now){

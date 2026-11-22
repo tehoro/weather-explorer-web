@@ -143,8 +143,13 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
    mesh.geometry.userData.baseAlt=baseAlt;mesh.userData.layer=layer;this.clouds.push(mesh);this.meshes.push(mesh);this.group.add(mesh);
   }
   if(!this.wind)this.makeWind();if(!this.drops)this.makeRain();
-  if(moved)this.streaks?.reset();
-  if(moved||!this.particles.length){this.particles=Array.from({length:N},()=>this.spawn());this.rain=Array.from({length:900},()=>this.spawnRain());}
+  // Region refreshes do not move particles in world space. Only a geographic
+  // rebase changes that coordinate frame and requires restarting the histories.
+  const oldBounds=this.particleRegion&&context.bounds(this.particleRegion),old=this.particleBounds;
+  const rebased=old&&oldBounds&&['west','east','north','south'].some(k=>Math.abs(oldBounds[k]-old[k])>.00001);
+  this.particleRegion=r;this.particleBounds={...this.bounds};
+  if(rebased)this.streaks?.reset();
+  if(rebased||!this.particles.length){this.particles=Array.from({length:N},()=>this.spawn());this.rain=Array.from({length:900},()=>this.spawnRain());}
   $('precipitationLegend')?.remove();const legend=document.createElement('p');legend.id='precipitationLegend';legend.innerHTML='<small>'+typeLegend()+'<br>Colour shows type; stronger shading means a higher total precipitation rate (water equivalent). '+(this.data.meta.ptype_path?'IFS surface precipitation type.':'Type estimated from rain/snow amounts; detailed categories unavailable.')+'</small>';$('surfaceField').after(legend);
   this.isobarLines??=new IsobarLines(this.group);this.isobarLines.key='';this.isobarLines.elapsed=2;this.options();
  }
