@@ -212,7 +212,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
  spawn(){const b=this.bounds,c=this.liveContext||this.context(),distance=c.distance,r=Math.min(distance*.9,Math.max(b.east-b.west,b.south-b.north)/2);let x,z;
   // Most particles stay near the camera target; a quarter cover the whole footprint.
   if(Math.random()<.75){x=clamp(c.target.x+(Math.random()-.5)*r*2,b.west,b.east);z=clamp(c.target.z+(Math.random()-.5)*r*2,b.north,b.south);}else{x=b.west+Math.random()*(b.east-b.west);z=b.north+Math.random()*(b.south-b.north);}
-  return {x,z,age:Math.random()*12,history:Array.from({length:L},()=>[x,Math.max(0,this.ground(x,z))+.15,z])};
+  return {x,z,age:Math.random()*12,history:Array.from({length:L},()=>[x,Math.max(0,this.ground(x,z))+.01,z])};
  }
  makeWind(){
   // Weather3D's screen-space ribbon technique keeps trails legible at any zoom.
@@ -260,7 +260,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
   if(this.wind.visible)for(let i=0;i<windCount;i++){
    let p=this.particles[i],u=this.sample('u',p.x,p.z),v=this.sample('v',p.x,p.z);p.x+=u*step*speed;p.z-=v*step*speed;p.age+=step;
    if(p.age>18||p.x<b.west||p.x>b.east||p.z<b.north||p.z>b.south)p=this.particles[i]=this.spawn();
-   advanceWindHistory(p,step,firstSample,(x,z)=>Math.max(0,this.ground(x,z))+.15);
+   advanceWindHistory(p,step,firstSample,(x,z)=>Math.max(0,this.ground(x,z))+.01);
    const strength=clamp(Math.hypot(u,v)/25,0,1),colour=new THREE.Color().setRGB(1,1-strength*.35,.85-strength*.8);
    for(let j=0;j<L-1;j++){const k=i*(L-1)+j;attrs.start.setXYZ(k,...p.history[j]);attrs.end.setXYZ(k,...p.history[j+1]);attrs.tint.setXYZ(k,colour.r,colour.g,colour.b);attrs.width.setX(k,1+strength*2);attrs.fade.setX(k,(1-j/L)*.9);}
   }
