@@ -30,3 +30,15 @@ footer button{pointer-events:auto;border:0;border-radius:0;background:none;color
 #pointChart{margin-top:20px}#pointChart p{color:var(--muted);line-height:1.6}
 #pointForecast.expanded .pointActions::after{content:'Drag heading to move · drag bottom corner to resize';font-size:11px;color:var(--muted);align-self:center}
 @media(max-width:700px){#pointForecast.expanded{width:calc(100vw - 20px);min-width:0;max-height:calc(100dvh - 100px)}#pointForecast.expanded .pointActions::after{display:none}}
+
+/* Divide the available panel height equally between all four charts. */
+#pointForecast.expanded{display:flex;flex-direction:column;top:20px;height:calc(100dvh - 40px);max-height:calc(100dvh - 40px);overflow:hidden;min-height:400px}
+#pointForecast[hidden]{display:none}
+#pointForecast.expanded .panelHeading{margin-bottom:0;padding-bottom:2px;flex-shrink:0}
+#pointForecast.expanded #pointCoordinates{margin:2px 0}
+#pointForecast.expanded #pointTotal{margin:4px 0;font-size:12px}
+#pointForecast.expanded .pointActions button{padding:6px 10px}
+#pointForecast.expanded #pointChart{flex:1;min-height:0;margin-top:8px;display:grid;grid-template-rows:repeat(4,minmax(0,1fr)) 32px}
+#pointForecast.expanded #pointChart svg{width:100%;height:100%;min-height:0}
+#pointForecast.expanded #pointChart p{margin:4px 0;font-size:10px}
+#pointForecast.expanded #pointStatus{margin:3px 0;font-size:10px}

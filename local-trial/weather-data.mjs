@@ -1,11 +1,11 @@
 // The worker owns decoded global previews, detail tiles and disk-cache access.
-import {WeatherData as Engine} from './weather-engine.mjs?v=20261122ac';
-export {FIELDS,clamp,tilePoint,decodeTile,decodePressure,bilinear} from './weather-engine.mjs?v=20261122ac';
+import {WeatherData as Engine} from './weather-engine.mjs?v=20261122ad';
+export {FIELDS,clamp,tilePoint,decodeTile,decodePressure,bilinear} from './weather-engine.mjs?v=20261122ad';
 export class WeatherData extends Engine{
  constructor(){
   super();this.serial=0;this.requests=new Map();
   if(typeof Worker!=='undefined'){
-   this.worker=new Worker(new URL('./weather-worker.mjs?v=20261122ac',import.meta.url),{type:'module'});
+   this.worker=new Worker(new URL('./weather-worker.mjs?v=20261122ad',import.meta.url),{type:'module'});
    this.worker.onmessage=({data})=>{if(data.progress){this.preloadProgress=data.progress;return;}const p=this.requests.get(data.id);if(!p)return;this.requests.delete(data.id);data.error?p.reject(Error(data.error)):p.resolve(data.value);};
    this.worker.onerror=()=>{this.workerFailed=true;for(const p of this.requests.values())p.reject(Error('Weather worker failed; reload to retry.'));this.requests.clear();};
   }

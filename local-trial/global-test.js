@@ -1,4 +1,4 @@
-import {PointForecast} from './point-forecast.mjs?v=20261122ac';
+import {PointForecast} from './point-forecast.mjs?v=20261122ad';
 import {TerrainIndex} from './terrain-index.mjs';
 import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
@@ -11,26 +11,26 @@ import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {sample} from './terrain-raster.mjs?v=20261122l';
 import {TerrainWorker} from './terrain-worker-client.mjs';
-import {WeatherView} from './weather-view.mjs?v=20261122ac';
-import {setupUI} from './global-ui.mjs?v=20261122ac';
-import {PlaceLabels} from './place-labels.mjs?v=20261122ac';
+import {WeatherView} from './weather-view.mjs?v=20261122ad';
+import {setupUI} from './global-ui.mjs?v=20261122ad';
+import {PlaceLabels} from './place-labels.mjs?v=20261122ad';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
 const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,12000),controls=new OrbitControls(camera,renderer.domElement);
 controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
-controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=3200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
+controls.zoomToCursor=false;controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=3200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
 scene.add(new THREE.HemisphereLight(0xc2eaff,0x293a22,2.2));const sun=new THREE.DirectionalLight(0xffefd8,2.6);sun.position.set(-200,400,-150);scene.add(sun);
 let anchor={lat:-41.1,lon:174.8},serial=0,catalogue,active=0,timer,rebasing=false,lastWeather='',failures=new Map();
 const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader,terrainKey='',terrainRevision=0;
 const waterMissing=new Set(),waterSize=512,globalRelief=new GlobalRelief();
 globalRelief.load(scene).then(()=>{terrainRevision++;}).catch(e=>console.warn(e.message));
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;centreViewport();camera.updateProjectionMatrix();queueMicrotask(update);}resize();addEventListener('resize',resize);
-let pointForecast,flight=null;
+let pointForecast,flight=null,zoomFocus=null,focusRevision=-1;
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
-renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);weatherView?.tick(dt);pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&needed.size&&backdrop){const near=[...needed.values()].filter(p=>!p.background).sort((a,b)=>a.distance-b.distance),central=near.slice(0,3),waited=now-approachLoadStart;if((central.length&&central.every(p=>tiles.has(p.key)))||(waited>12000&&near.some(p=>tiles.has(p.key)))){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}}
+renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus();weatherView?.tick(dt);pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&needed.size&&backdrop){const near=[...needed.values()].filter(p=>!p.background).sort((a,b)=>a.distance-b.distance),central=near.slice(0,3),waited=now-approachLoadStart;if((central.length&&central.every(p=>tiles.has(p.key)))||(waited>12000&&near.some(p=>tiles.has(p.key)))){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(150-240)*e;camera.position.set(0,d*(1-e*.43),d*e*.82);controls.update();if(t===1){approachStart=null;update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
@@ -77,7 +77,7 @@ function cameraFootprint(){
 }
 function dispose(mesh){mesh.userData.disposed=true;colourQueue.delete(mesh);scene.remove(mesh);mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose();}
 function rebase(){
- if(controls.target.length()<30)return;
+ if(flight||controls.target.length()<30)return;
  const c=centre(),shift=new THREE.Vector3(controls.target.x,0,controls.target.z);anchor=c;
  rebasing=true;camera.position.sub(shift);controls.target.sub(shift);controls.update();rebasing=false;
  for(const {mesh,p}of tiles.values())position(mesh,p);positionBackdrop();if(weatherView)weatherView.regionKey=null;
@@ -159,7 +159,7 @@ function update(){
  weatherView?.refresh();placeLabels?.refresh();
 }
 controls.addEventListener('change',()=>{$('viewAngle').value=controls.getPolarAngle()<.08?'top':'slanted';if(rebasing)return;clearTimeout(timer);timer=setTimeout(update,180);});
-function go(lat=anchor.lat,lon=anchor.lon){if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>89.85){$('status').textContent='Use a latitude between −89.85 and 89.85 and a finite longitude.';return;}
+function go(lat=anchor.lat,lon=anchor.lon){zoomFocus=null;flight=null;if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>89.85){$('status').textContent='Use a latitude between −89.85 and 89.85 and a finite longitude.';return;}
  anchor={lat,lon:wrap(lon)};positionBackdrop();if(weatherView)weatherView.regionKey=null;lastWeather='';serial++;for(const {mesh}of tiles.values())dispose(mesh);tiles.clear();terrainRevision++;needed.clear();failures.clear();queue=[];
  rebasing=true;controls.target.set(0,0,0);camera.position.set(0,approaching&&!readySent?240:38,approaching&&!readySent?0:55);controls.update();rebasing=false;update();}
 setupSearch($('search'),$('matches'),(lat,lon,name)=>{go(lat,lon);pointForecast.select(lat,lon,name);});
@@ -175,7 +175,7 @@ scheduleRetry();
 $('surfaceStyle').onchange=()=>{for(const {mesh}of tiles.values())paint(mesh);styleNote();};
 function styleNote(){$('styleNote').textContent=$('surfaceStyle').value==='relief'?'Weather3D elevation colours. Pale high ground is a colour convention, not current snow cover.':($('surfaceStyle').value==='hybrid'?'90% relief · 10% land cover. ':'')+'WorldCover 2021; static snow/ice is not a current snow forecast.';}$('north').onclick=()=>{const d=camera.position.distanceTo(controls.target);camera.position.copy(controls.target).add(new THREE.Vector3(0,d*.57,d*.82));controls.update();};
 $('in').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(.55).add(controls.target);controls.update();};$('out').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(1.8).add(controls.target);controls.update();};
-for(const b of document.querySelectorAll('[data-pan]'))b.onclick=()=>{const [x,z]=b.dataset.pan.split(',').map(Number),d=camera.position.distanceTo(controls.target)*.6,shift=new THREE.Vector3(x*d,0,z*d);camera.position.add(shift);controls.target.add(shift);controls.update();update();};
+for(const b of document.querySelectorAll('[data-pan]'))b.onclick=()=>{zoomFocus=null;const [x,z]=b.dataset.pan.split(',').map(Number),d=camera.position.distanceTo(controls.target)*.6,shift=new THREE.Vector3(x*d,0,z*d);camera.position.add(shift);controls.target.add(shift);controls.update();update();};
 const terrainIndex=new TerrainIndex();let indexedRevision=-1;
 function groundHeight(x,z){
  if(indexedRevision!==terrainRevision){terrainIndex.rebuild(tiles.values());indexedRevision=terrainRevision;}
@@ -220,7 +220,7 @@ renderer.domElement.addEventListener('pointerup',e=>{
 });
 controls.addEventListener('start',()=>{flight=null;});
 function flyToPoint(p){
- if(!p)return;const q=weatherContext().projectPlace(p.lat,p.lon),target=new THREE.Vector3(q.x,groundHeight(q.x,q.z),q.z),offset=camera.position.clone().sub(controls.target);
+ if(!p)return;zoomFocus={lat:p.lat,lon:p.lon};focusRevision=-1;const q=weatherContext().projectPlace(p.lat,p.lon),target=new THREE.Vector3(q.x,groundHeight(q.x,q.z),q.z),offset=camera.position.clone().sub(controls.target);
  const end=target.clone().add(offset),start=camera.position.clone();let lift=0;
  for(let i=0;i<=64;i++){const t=i/64,v=start.clone().lerp(end,t);lift=Math.max(lift,groundHeight(v.x,v.z)+.3-v.y);}
  flight={start:performance.now(),from:controls.target.clone(),to:target,eye:start,end,lift:Math.max(0,lift)+.2};
@@ -236,8 +236,20 @@ function tickFlight(now){
  if(!flight)return;const f=flight,t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-f.start)/2400),u=t*t*(3-2*t);
  controls.target.copy(f.from).lerp(f.to,u);camera.position.copy(f.eye).lerp(f.end,u);camera.position.y+=Math.sin(Math.PI*u)*f.lift;
  camera.position.y=Math.max(camera.position.y,groundHeight(camera.position.x,camera.position.z)+.3);controls.update();
- if(t===1){const dy=groundHeight(f.to.x,f.to.z)-controls.target.y;controls.target.y+=dy;camera.position.y+=dy;controls.update();flight=null;update();}
+ if(t===1){const dy=groundHeight(f.to.x,f.to.z)-controls.target.y;controls.target.y+=dy;camera.position.y+=dy;controls.update();flight=null;focusRevision=-1;syncZoomFocus();update();}
 }
+
+// Zoom and orbit share the selected ground point. Update its height when finer
+// terrain arrives, moving the camera by the same amount to preserve the view.
+function syncZoomFocus(){
+ if(!zoomFocus||flight||focusRevision===terrainRevision)return;
+ const q=weatherContext().projectPlace(zoomFocus.lat,zoomFocus.lon),target=new THREE.Vector3(q.x,groundHeight(q.x,q.z),q.z),shift=target.clone().sub(controls.target);
+ camera.position.add(shift);controls.target.copy(target);focusRevision=terrainRevision;controls.update();
+}
+renderer.domElement.addEventListener('wheel',()=>{if(flight)tickFlight(flight.start+2400);syncZoomFocus();},{capture:true,passive:true});
+// A deliberate pan chooses a new focus; ordinary wheel zoom and rotation do not.
+renderer.domElement.addEventListener('pointerdown',e=>{if(e.button===2)zoomFocus=null;},{capture:true});
+renderer.domElement.addEventListener('touchstart',e=>{if(e.touches.length>1)zoomFocus=null;},{capture:true,passive:true});
 
 const params=new URLSearchParams(location.search);if(params.has('lat')&&params.has('lon')&&Number.isFinite(Number(params.get('lat')))&&Math.abs(Number(params.get('lat')))<=89.85&&Number.isFinite(Number(params.get('lon'))))anchor={lat:Number(params.get('lat')),lon:wrap(Number(params.get('lon')))};
 fetch('/dem/tileList.txt').then(r=>{if(!r.ok)throw Error('Terrain catalogue unavailable');return r.text();}).then(text=>{catalogue=new Set(text.split(/\s+/).map(s=>s.replace(/\/$/,'')));reader=new TerrainWorker(catalogue);reader.ready.then(()=>{styleNote();go();}).catch(e=>$('status').textContent=e.message);}).catch(e=>$('status').textContent=e.message);

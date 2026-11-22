@@ -6,3 +6,8 @@ export function displayPoint(row){
  return out;
 }
 export function snapForecast(fraction,count){return Math.max(0,Math.min(count-1,Math.round(fraction*count-1)));}
+
+export function windReadout(u,v,gust,units,direction){
+ const speed=Math.round(units.convert(Math.hypot(u,v),'m/s'));
+ return 'Wind: '+direction+' '+speed+(Number.isFinite(gust)?' g '+Math.round(units.convert(Math.max(gust,Math.hypot(u,v)),'m/s')):'')+' '+units.unit('m/s');
+}

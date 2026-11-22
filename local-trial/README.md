@@ -822,3 +822,12 @@ controls are under Advanced settings.
 Checks: `test-meteogram.mjs`, `test-point-values.mjs`,
 `test-precipitation-type.mjs`, weather/grid tests and `test_refresh.py`;
 browser checks cover point selection, flight, chart time selection and cursors.
+
+The expanded meteogram now divides the available window height between all four
+plots, with compact headings and an adaptive plot area; it needs no panel scroll.
+Point wind readouts use whole selected units on a separate line, for example
+`Wind: E 15 g 33 km/h`. After **Fly here**, the town's ground point remains the
+wheel-zoom/orbit target, including when detailed elevation arrives. A deliberate
+pan releases that focus. Flights defer coordinate rebasing until arrival.
+Verified all four panels inside a 1280 × 720 viewport (no scroll overflow), and
+wheel zoom in/out retained the selected town within a fraction of a screen pixel.

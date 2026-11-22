@@ -1,5 +1,5 @@
-import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ac';
-import {displayPoint,snapForecast} from './point-values.mjs';
+import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ad';
+import {displayPoint,snapForecast,windReadout} from './point-values.mjs';
 import {zoneAt,timeParts,forecastMoment} from './local-time.mjs';
 import {typeName} from './precipitation-type.mjs';
 import {syncUnits} from './shared-units.mjs';
@@ -10,12 +10,13 @@ export class PointForecast{
   document.body.append(this.panel);const $=id=>this.panel.querySelector('#'+id);
   $('pointClose').onclick=()=>{this.token++;this.location=null;this.panel.hidden=true;document.getElementById('pointHint').hidden=false;dispatchEvent(new Event('point-selection-change'));};
   $('pointFly').onclick=()=>this.fly(this.location);
-  $('pointExpand').onclick=()=>{const open=$('pointChart').hidden;$('pointChart').hidden=!open;this.panel.classList.toggle('expanded',open);$('pointExpand').textContent=open?'Hide meteogram':'Show meteogram';$('pointExpand').setAttribute('aria-expanded',String(open));if(!open){this.panel.style.width='';this.panel.style.height='';}this.chart();};
+  $('pointExpand').onclick=()=>{const open=$('pointChart').hidden;$('pointChart').hidden=!open;this.panel.classList.toggle('expanded',open);$('pointExpand').textContent=open?'Hide meteogram':'Show meteogram';$('pointExpand').setAttribute('aria-expanded',String(open));if(open){this.panel.style.top='20px';}else{this.panel.style.width='';this.panel.style.height='';}this.chart();};
   $('pointChart').onclick=e=>{const svg=e.target.closest('svg');if(!svg)return;const b=svg.getBoundingClientRect(),f=Math.max(0,Math.min(1,((e.clientX-b.left)/b.width*chartLayout.width-chartLayout.left)/chartLayout.span));const w=this.weather;w.playing=false;w.playLabel();w.load(snapForecast(f,w.data.meta.times.length));};
   const heading=this.panel.querySelector('.panelHeading');let drag=null;
   heading.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('button'))return;const b=this.panel.getBoundingClientRect();drag={x:e.clientX,y:e.clientY,left:b.left,top:b.top};heading.setPointerCapture(e.pointerId);e.preventDefault();});
-  heading.addEventListener('pointermove',e=>{if(!drag)return;const b=this.panel.getBoundingClientRect();this.panel.style.left=Math.max(0,Math.min(innerWidth-b.width,drag.left+e.clientX-drag.x))+'px';this.panel.style.top=Math.max(0,Math.min(innerHeight-50,drag.top+e.clientY-drag.y))+'px';});
+  heading.addEventListener('pointermove',e=>{if(!drag)return;const b=this.panel.getBoundingClientRect();this.panel.style.left=Math.max(0,Math.min(innerWidth-b.width,drag.left+e.clientX-drag.x))+'px';this.panel.style.top=Math.max(0,Math.min(innerHeight-b.height,drag.top+e.clientY-drag.y))+'px';});
   for(const event of ['pointerup','pointercancel','lostpointercapture'])heading.addEventListener(event,()=>{drag=null;});
+  this.chartResize=new ResizeObserver(()=>{if(!this.panel.hidden&&this.panel.classList.contains('expanded'))this.chart();});this.chartResize.observe($('pointChart'));
   addEventListener('local-units-change',()=>{this.key=null;this.update();this.chart();});syncUnits();
  }
  select(lat,lon,name){
@@ -42,7 +43,7 @@ export class PointForecast{
   if(!A||!B){el.textContent='Loading weather at this point…';return;}
   const v=k=>A[k]*(1-t)+B[k]*t,u=v('u'),north=v('v');
   const kind=typeName(t<.5?A.ptype:B.ptype,v('rain'),v('snow'));
-  el.textContent=Units.format(v('temperature'),'°C')+(Number.isFinite(v('dewpoint'))?' · Dew point '+Units.format(v('dewpoint'),'°C'):'')+' · Wind '+Units.format(Math.hypot(u,north),'m/s')+' from '+compassDirection(u,north)+(Number.isFinite(v('gust'))?' · Gust '+Units.format(v('gust'),'m/s'):'')+'\n'+kind+' · '+Units.format(v('rain'),'mm/h')+' total · '+Units.format(v('snow'),'mm/h')+' snow water equivalent\nPressure '+Units.format(v('pressure'),'hPa')+' · '+(Number.isFinite(v('totalCloud'))?'Total cloud '+Math.round(v('totalCloud')*100)+'%':'Cloud low / middle / high '+['low','middle','high'].map(k=>Math.round(v(k)*100)+'%').join(' / '));
+  el.textContent=Units.format(v('temperature'),'°C')+(Number.isFinite(v('dewpoint'))?' · Dew point '+Units.format(v('dewpoint'),'°C'):'')+'\n'+windReadout(u,north,v('gust'),Units,compassDirection(u,north))+'\n'+kind+' · '+Units.format(v('rain'),'mm/h')+' total · '+Units.format(v('snow'),'mm/h')+' snow water equivalent\nPressure '+Units.format(v('pressure'),'hPa')+' · '+(Number.isFinite(v('totalCloud'))?'Total cloud '+Math.round(v('totalCloud')*100)+'%':'Cloud low / middle / high '+['low','middle','high'].map(k=>Math.round(v(k)*100)+'%').join(' / '));
   this.panel.querySelector('#pointStatus').textContent=this.rows.size+'/'+w.data.meta.times.length+' three-hourly times · IFS model values; terrain does not downscale this forecast.';
   this.panel.querySelectorAll('.timeCursor').forEach(line=>{line.setAttribute('x1',chartLayout.left+(frame+1)/w.data.meta.times.length*chartLayout.span);line.setAttribute('x2',chartLayout.left+(frame+1)/w.data.meta.times.length*chartLayout.span);});
  }
@@ -50,6 +51,7 @@ export class PointForecast{
   const host=this.panel.querySelector('#pointChart');if(host.hidden||!this.location||!this.data?.meta)return;
   const times=this.data.meta.times,zone=zoneAt(this.location.lat,this.location.lon);
   const periods=[...new Set((this.data.meta.point_fields?.gust_period_hours||[]).filter(Number.isFinite))],gustNote=periods.length===1?'Gusts are maxima in the preceding '+periods[0]+' '+(periods[0]===1?'hour':'hours')+'.':'Gusts use the model accumulation period at each time.';
-  host.innerHTML=meteogram({times,rows:this.rows,zone,location:this.location,frame:this.weather.displayFrame??this.weather.frame,units:Units})+'<p>Three-hourly spot values joined by straight lines. Click a chart to select a forecast time. Precipitation bars cover the preceding 3 hours; colours show precipitation type. Purple bars alongside show snow water equivalent, already included in the total. '+gustNote+' Grey shading shows approximate night-time.</p>';
+  const box=host.getBoundingClientRect(),height=Math.max(100,(box.height-32)/4*880/Math.max(1,box.width));
+  host.innerHTML=meteogram({height,times,rows:this.rows,zone,location:this.location,frame:this.weather.displayFrame??this.weather.frame,units:Units})+'<p title="Three-hourly spot values joined by straight lines. Click a chart to select a forecast time. Precipitation bars cover the preceding 3 hours; colours show precipitation type. Purple bars alongside show snow water equivalent, already included in the total. '+gustNote+' Grey shading shows approximate night-time.">3-hourly values · precipitation: previous 3 h · click a chart to change time. '+gustNote+'</p>';
  }
 }
