@@ -6,7 +6,7 @@ import numpy as np
 import eccodes
 from global_weather import OUTPUT,fetch_fields,index
 from prepare import write
-PATH='surface-cover-v4'
+PATH='surface-cover-v5'
 FIELDS=[{'name':n,'dtype':'<u2','scale':s} for n,s in [('snowCover',1/65534),('seaIce',1/65534),('snowlineWeighted',.0002),('snowlineWeight',1/65534),('snowlineRegionalWeighted',.0002),('snowlineRegionalWeight',1/65534),('snowlineModelHeight',.0002)]]
 def read(path):
     g=eccodes.codes_new_from_message(path.read_bytes())
@@ -103,10 +103,52 @@ def regional_snowline(line, strength, land, stride=5):
         return horizontal[lo]*(1-blend[:,None])+horizontal[hi]*blend[:,None]
     return expand(output),expand(confidence)
 
-def pack_cover(sd,ice,land,z):
+def nz_reference(line,strength):
+    """Upper-quartile Southern Alps boundary, normalised to 44 S, in km.
+
+    150 m per degree is an illustrative NZ tuning choice, not a measured law.
+    Require support in at least three separate half-degree geographic bins.
+    """
+    ny,nx=line.shape
+    lat=np.linspace(90,-90,ny)[:,None];lon=np.arange(nx)[None,:]*360/nx
+    mask=(lat>=-46)&(lat<=-42.5)&(lon>=167)&(lon<=172.5)&(strength>=.5)
+    y,x=np.nonzero(mask)
+    if len(y)<3:return None
+    bins=np.stack((np.floor(lat[y,0]*2),np.floor(lon[0,x]*2)),axis=1)
+    values=line[y,x]/strength[y,x]-.15*(lat[y,0]+44)
+    # One median per bin prevents densely sampled patches dominating the reference.
+    _,groups=np.unique(bins,axis=0,return_inverse=True)
+    estimates=np.array([np.median(values[groups==g]) for g in np.unique(groups)])
+    if len(estimates)<3 or np.std(estimates)>.3:return None
+    return float(np.quantile(estimates,.75))
+
+def smooth_nz_references(raw,steps):
+    result=[];previous=None;previous_step=None
+    for value,step in zip(raw,steps):
+        if value is None:
+            result.append(None);previous=None;continue
+        if previous is not None:
+            hours=step-previous_step
+            value=previous+np.clip((value-previous)*(1-np.exp(-hours/6)), -.1*hours/3,.1*hours/3)
+        result.append(float(value));previous=value;previous_step=step
+    return result
+
+def apply_nz_fallback(regional,weight,land,z,sd,reference):
+    if reference is None:return regional,weight
+    ny,nx=land.shape
+    lat=np.linspace(90,-90,ny)[:,None];lon=np.arange(nx)[None,:]*360/nx
+    # Feather the NZ envelope, including the North Island and Kaikoura ranges.
+    area=np.clip(np.minimum(lat+47,-33-lat)/.5,0,1)*np.clip(np.minimum(lon-165,180-lon)/.5,0,1)
+    extra=.45*area*(1-np.clip(weight/.5,0,1))*(land>=.5)*np.isfinite(z)*np.isfinite(sd)
+    # Place the soft transition above the inferred boundary, keeping caps modest.
+    boundary=np.clip(reference+.15*(lat+44)+.15,0,6)
+    return regional+boundary*extra,weight+extra
+
+def pack_cover(sd,ice,land,z,nz=None):
     old=cover(sd,ice,land)
     line,strength=snowline(sd,land,z)
     regional,regional_weight=regional_snowline(line,strength,np.where(np.isfinite(z)&np.isfinite(sd),land,0))
+    regional,regional_weight=apply_nz_fallback(regional,regional_weight,land,z,sd,nz)
     arrays=[]
     for a in old:
         valid=a!=255
@@ -125,10 +167,19 @@ def build(run=None):
     for step in meta['steps']:
         available={r['param'] for r in index(run,step)[1]}
         if not {'sd','sithick','lsm'}<=available:raise ValueError(f'Official surface cover fields unavailable at {step}')
+    # Each frame supplies its own snow evidence; only the borrowed NZ reference
+    # is damped in time, so an isolated southern snowfall cannot cause a jump.
+    raw=[]
+    for step in meta['steps']:
+        fields={p:read(path) for p,path,_ in fetch_fields(run,step,['sd','lsm'])}
+        line,strength=snowline(fields['sd'],fields['lsm'],z)
+        raw.append(nz_reference(line,strength))
+    references=dict(zip(meta['steps'],smooth_nz_references(raw,meta['steps'])))
+    print('NZ snowline references at 44 S (km): '+str(references),flush=True)
     def frame(step):
         out=root/PATH/f'{step:03}'
         if (out/'complete').exists():return
-        f={p:read(path) for p,path,_ in fetch_fields(run,step,['sd','sithick','lsm'])};arrays=pack_cover(f['sd'],f['sithick'],f['lsm'],z);out.mkdir(parents=True,exist_ok=True)
+        f={p:read(path) for p,path,_ in fetch_fields(run,step,['sd','sithick','lsm'])};arrays=pack_cover(f['sd'],f['sithick'],f['lsm'],z,references[step]);out.mkdir(parents=True,exist_ok=True)
         def save(name,iy,ix,source=None):
             source=arrays if source is None else source
             blob=gzip.compress(b''.join(a[np.ix_(iy,ix)].tobytes() for a in source),compresslevel=4,mtime=0)
@@ -145,5 +196,5 @@ def build(run=None):
         save('global.bin.gz',np.arange(0,1801,10),np.arange(0,3601,10)%3600,preview)
         (out/'complete').touch();print(f'Snow and sea ice +{step:03} h ready',flush=True)
     with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(frame,meta['steps']))
-    meta['surface_cover']={'path':PATH,'fields':FIELDS,'format':3,'bytes_per_point':14,'missing':65535,'source':['sd','sithick','lsm','z (step 0)'],'snowline':'Illustrative elevation boundary from nearby snowy/bare points and actual model terrain heights; regional fallback uses agreeing boundaries within 150–300 km, gated by rendered terrain above model terrain'};write(root/'manifest.json',meta)
+    meta['surface_cover']={'path':PATH,'fields':FIELDS,'format':3,'bytes_per_point':14,'missing':65535,'source':['sd','sithick','lsm','z (step 0)'],'nz_reference_km':references,'snowline':'NZ-only illustrative Southern Alps fallback adjusted 150 m per degree north, with local evidence taking priority. Illustrative elevation boundary from nearby snowy/bare points and actual model terrain heights; regional fallback uses agreeing boundaries within 150–300 km, gated by rendered terrain above model terrain'};write(root/'manifest.json',meta)
 if __name__=='__main__':build()

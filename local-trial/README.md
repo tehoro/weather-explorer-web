@@ -865,7 +865,7 @@ Tests cover retention against a stronger challenger and replacement on occlusion
 
 ### Forecast snow and sea ice
 
-The optional `surface-cover-v4` package uses indexed IFS Open Data `sd`, `sithick`,
+The optional `surface-cover-v5` package uses indexed IFS Open Data `sd`, `sithick`,
 `lsm` and surface `z` at **step 0**. Model terrain height is `z / 9.80665` metres;
 no temperature/pressure estimate is used. Positive valid ice thickness denotes
 ice presence, not concentration. Snow whitening saturates at 20 mm SWE (a display
@@ -938,3 +938,25 @@ then interpolated in time. Orography is static. Where no nearby boundary is supp
 including isolated NZ summits in some frames, broad cover and WorldCover remain.
 No latitude climatology, invented summit snow, or temperature-only accumulation is used.
 Seven fields use format 3 (14 bytes/point); older packages remain readable.
+
+### NZ illustrative snowline (23 November)
+
+A second fallback covers NZ only (165–180 E, 47–33 S, feathered by half a degree).
+It uses the upper quartile of Southern Alps boundaries between 42.5–46 S and
+167–172.5 E, normalised to 44 S. Each supported half-degree bin contributes one
+median; at least three bins must agree within a 300 m standard deviation.
+The assumed northward rise is 150 m per degree, a depiction tuning choice rather
+than an observed relationship. The soft transition is centred 150 m above that
+boundary, to keep inferred summit caps modest. Confidence is capped at 0.45.
+
+Supported nearby regional estimates take priority, and the shared shader still
+puts local evidence first and requires actual terrain 300–600 m above model
+terrain. No changes are made outside NZ. No source evidence means no borrowed
+snowline. The Southern Alps reference follows each forecast frame, damped with a
+six-hour exponential response and a maximum change of 100 m per three hours.
+Mapped permanent snow remains separate. The reference is recorded in the manifest
+for inspection; the satellite examples supplied by the owner are visual checks,
+not assimilated measurements or fixed snowline heights.
+
+The same prepared fields feed Local and the globe without additional browser
+computation. Narrow summit caps can remain unresolved by the globe's coarse DEM.

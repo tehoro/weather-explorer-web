@@ -43,4 +43,29 @@ class SurfaceCover(unittest.TestCase):
   b=neighbourhood(a,1)
   np.testing.assert_allclose(b,b[::-1],atol=1e-12)
   self.assertTrue(np.any((b>0)&(b<1)))
+
+class NzFallback(unittest.TestCase):
+ def test_nz_scope_priority_and_latitude(self):
+  from prepare_surface_cover import apply_nz_fallback
+  shape=(181,360);zero=np.zeros(shape);land=np.ones(shape)
+  result,w=apply_nz_fallback(zero,zero,land,zero,zero,1.4)
+  self.assertGreater(w[129,175],0)
+  self.assertAlmostEqual(result[129,175]/w[129,175],2.3)
+  self.assertAlmostEqual(result[132,173]/w[132,173],1.85)
+  self.assertEqual(w[44,8],0)
+  strong=np.ones(shape)*.7;prior=strong*1.8
+  r,ww=apply_nz_fallback(prior,strong,land,zero,zero,1.4)
+  np.testing.assert_array_equal(r,prior);np.testing.assert_array_equal(ww,strong)
+  r,ww=apply_nz_fallback(zero,zero,land,zero,zero,None)
+  self.assertEqual(ww.max(),0)
+ def test_reference_requires_separate_supported_areas(self):
+  from prepare_surface_cover import nz_reference,smooth_nz_references
+  w=np.zeros((361,720));line=np.zeros_like(w)
+  self.assertIsNone(nz_reference(line,w))
+  for y,x in [(269,337),(269,338),(270,338)]:w[y,x]=1;line[y,x]=1.5
+  self.assertIsNotNone(nz_reference(line,w))
+  smooth=smooth_nz_references([1,2,2,None,1.5],[3,6,9,12,15])
+  self.assertAlmostEqual(smooth[1],1.1);self.assertAlmostEqual(smooth[2],1.2)
+  self.assertIsNone(smooth[3]);self.assertEqual(smooth[4],1.5)
+
 if __name__=='__main__':unittest.main()
