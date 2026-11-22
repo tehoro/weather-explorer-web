@@ -13,3 +13,15 @@ assert.equal(windReadout(-4.2,0,9.2,kmh,'E'),'Wind: E 15 g 33 km/h');
 assert.equal(windReadout(4.2,0,undefined,kmh,'W'),'Wind: W 15 km/h');
 assert.equal(windReadout(-4.2,0,1,kmh,'E'),'Wind: E 15 g 15 km/h');
 console.log('Point winds use whole selected units and compact direction/speed/gust format.');
+// A fractional time retained after a search must not override a chart selection.
+const {readFileSync}=await import('node:fs');
+const source=readFileSync(new URL('./point-forecast.mjs',import.meta.url),'utf8');
+const handler=source.match(/\$\('pointChart'\)\.onclick=e=>\{(.*?)\};/s)[1];
+const weather={heldFrame:3.25,playing:true,elapsed:2,endHold:1,data:{meta:{times:Array(28)}},playLabel(){},load(frame){this.selected=frame;}};
+const click=new Function('e','snapForecast','chartLayout',handler).bind({weather});
+click({clientX:52+810*21/28,target:{closest:selector=>selector==='svg'?({getBoundingClientRect:()=>({left:0,width:880})}):null}},snapForecast,{width:880,left:52,span:810});
+assert.equal(weather.selected,20);assert.equal(weather.heldFrame,null);assert.equal(weather.playing,false);assert.equal(weather.elapsed,0);
+console.log('Meteogram clicks release held search time and select a paused forecast frame.');
+click({clientX:52+810*19.38/28,target:{closest:selector=>selector==='svg'?({getBoundingClientRect:()=>({left:0,width:880})}):({dataset:{forecastFrame:'19'}})}},snapForecast,{width:880,left:52,span:810});
+assert.equal(weather.selected,19);
+console.log('Precipitation bars select their own period end, not the preceding frame.');

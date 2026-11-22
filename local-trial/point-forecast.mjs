@@ -1,4 +1,4 @@
-import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ao';
+import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ap';
 import {displayPoint,snapForecast,windReadout} from './point-values.mjs';
 import {zoneAt,timeParts,forecastMoment} from './local-time.mjs';
 import {typeName,typeColour,typeLegend} from './precipitation-type.mjs?v=20261122ao';
@@ -11,7 +11,7 @@ export class PointForecast{
   $('pointClose').onclick=()=>{this.token++;this.location=null;this.panel.hidden=true;document.getElementById('pointHint').hidden=false;dispatchEvent(new Event('point-selection-change'));};
   $('pointFly').onclick=()=>this.fly(this.location);
   $('pointExpand').onclick=()=>{const open=$('pointChart').hidden;$('pointChart').hidden=!open;this.panel.classList.toggle('expanded',open);$('pointExpand').textContent=open?'Hide meteogram':'Show meteogram';$('pointExpand').setAttribute('aria-expanded',String(open));if(open){this.panel.style.top='20px';}else{this.panel.style.width='';this.panel.style.height='';}this.chart();};
-  $('pointChart').onclick=e=>{const svg=e.target.closest('svg');if(!svg)return;const b=svg.getBoundingClientRect(),f=Math.max(0,Math.min(1,((e.clientX-b.left)/b.width*chartLayout.width-chartLayout.left)/chartLayout.span));const w=this.weather;w.playing=false;w.playLabel();w.load(snapForecast(f,w.data.meta.times.length));};
+  $('pointChart').onclick=e=>{const svg=e.target.closest('svg');if(!svg)return;const b=svg.getBoundingClientRect(),f=Math.max(0,Math.min(1,((e.clientX-b.left)/b.width*chartLayout.width-chartLayout.left)/chartLayout.span));const w=this.weather;w.heldFrame=null;w.playing=false;w.elapsed=0;w.endHold=0;w.playLabel();const bar=e.target.closest('[data-forecast-frame]');w.load(bar?Number(bar.dataset.forecastFrame):snapForecast(f,w.data.meta.times.length));};
   const heading=this.panel.querySelector('.panelHeading');let drag=null;
   heading.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('button'))return;const b=this.panel.getBoundingClientRect();drag={x:e.clientX,y:e.clientY,left:b.left,top:b.top};heading.setPointerCapture(e.pointerId);e.preventDefault();});
   heading.addEventListener('pointermove',e=>{if(!drag)return;const b=this.panel.getBoundingClientRect();this.panel.style.left=Math.max(0,Math.min(innerWidth-b.width,drag.left+e.clientX-drag.x))+'px';this.panel.style.top=Math.max(0,Math.min(innerHeight-b.height,drag.top+e.clientY-drag.y))+'px';});
@@ -33,6 +33,8 @@ export class PointForecast{
  }
  update(){
   if(!this.location)return;const w=this.weather;if(!w.data.meta)return;
+  const centre=w.context().centre,dlon=((centre.lon-this.location.lon+540)%360)-180;
+  this.panel.querySelector('#pointFly').hidden=Math.abs(centre.lat-this.location.lat)<.0001&&Math.abs(dlon)<.0001;
   if(this.data!==w.data){void this.load();return;}
   const frame=w.displayFrame??w.frame,a=Math.floor(frame),b=Math.min(a+1,w.data.meta.times.length-1),t=frame-a,zone=zoneAt(this.location.lat,this.location.lon),moment=forecastMoment(w.data.meta,frame);
   const key=[Math.floor(moment.time/60000),this.rows.size,Units.choice('temperature'),Units.choice('wind'),Units.choice('rain')].join('/');

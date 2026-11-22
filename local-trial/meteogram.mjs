@@ -43,7 +43,7 @@ export function meteogram({times,rows,zone,location,frame,units,height=174}){
     const r=rows.get(i),value=r?units.convert(get(r),panel.unit):NaN;if(!Number.isFinite(value)){pen=false;continue;}
     const tip=escape(name+': '+units.format(get(r),panel.unit)+' · '+dateFmt.format(new Date(times[i]))+(panel.rain?' · preceding 3 hours · '+typeName(r.ptype,r.rain,r.snow):''));
     if(panel.rain){const total=name==='Total',width=810/n,fill=total?TYPES[precipitationType(r.ptype,r.rain,r.snow)][1]:colour;
-     svg+=`<rect x="${x(i)-width+width*(total?.06:.78)}" y="${y(value)}" width="${width*(total?.64:.18)}" height="${Math.max(0,bottom-y(value))}" fill="${fill}"><title>${tip}</title></rect>`;
+     svg+=`<rect data-forecast-frame="${i}" x="${x(i)-width+width*(total?.06:.78)}" y="${y(value)}" width="${width*(total?.64:.18)}" height="${Math.max(0,bottom-y(value))}" fill="${fill}"><title>${tip}</title></rect>`;
     }else{path+=(pen?'L':'M')+x(i)+','+y(value)+' ';pen=true;svg+=`<circle cx="${x(i)}" cy="${y(value)}" r="2" fill="${colour}"><title>${tip}</title></circle>`;}
    }
    if(!panel.rain)svg+=`<path d="${path}" fill="none" stroke="${colour}" stroke-width="2" pointer-events="none"/>`;
