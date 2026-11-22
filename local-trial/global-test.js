@@ -11,9 +11,9 @@ import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
-const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,6000),controls=new OrbitControls(camera,renderer.domElement);
+const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,12000),controls=new OrbitControls(camera,renderer.domElement);
 controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
-controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=1200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
+controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=3200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
 scene.add(new THREE.HemisphereLight(0xc2eaff,0x293a22,2.2));const sun=new THREE.DirectionalLight(0xffefd8,2.6);sun.position.set(-200,400,-150);scene.add(sun);
 let anchor={lat:-41.1,lon:174.8},serial=0,catalogue,active=0,timer,rebasing=false,lastWeather='',failures=new Map();
 const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader,terrainKey='';
@@ -58,7 +58,7 @@ function cameraFootprint(){
  camera.updateMatrixWorld();const ray=new THREE.Raycaster(),result=[];
  for(const [x,y]of [[-1,1],[1,1],[1,-1],[-1,-1]]){
   ray.setFromCamera(new THREE.Vector2(x,y),camera);const {origin,direction}=ray.ray;
-  const t=direction.y<-.0001?Math.min(4800,-origin.y/direction.y):4800;
+  const t=direction.y<-.0001?Math.min(9600,-origin.y/direction.y):9600;
   const point=origin.clone().addScaledVector(direction,t);
   result.push([point.x-controls.target.x,point.z-controls.target.z]);
  }

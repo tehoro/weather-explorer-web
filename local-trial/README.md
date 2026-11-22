@@ -617,3 +617,11 @@ a larger viewport was still loading terrain and forecast frames.
 `test-buffering.html` also checks waiting for both terrain and forecast data,
 reusing prepared frames during terrain-only refinement, preserving the paused/
 playing choice, and ignoring completion from superseded view requests.
+
+### Wider national overview (build D)
+
+The camera can now pull back to 3,200 km rather than 1,200 km. At the existing
+42° field of view, a top-down view covers about 2,457 km vertically, enough to
+fit the North, South and Stewart islands comfortably when centred on New Zealand.
+The far clipping plane and tilted-camera footprint limit increase alongside it.
+Terrain selection retains its bounded tile budget and global relief foundation.
