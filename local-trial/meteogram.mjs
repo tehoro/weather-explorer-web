@@ -17,7 +17,7 @@ export function meteogram({times,rows,zone,location,frame,units,height=174}){
  const available=k=>[...rows.values()].some(r=>Number.isFinite(r[k]));
  const specs=[
   {title:'Temperature (green) / dew point (orange)',unit:'°C',series:[['Temperature',r=>r.temperature,'#39c5a1'],...(available('dewpoint')?[['Dew point',r=>r.dewpoint,'#f18b43']]:[])]},
-  {title:'Precipitation · preceding 3 hours · water equivalent',unit:'mm',rain:true,series:[['Total',r=>r.rain*3,TYPES[1][1]],['Snow water (included)',r=>r.snow*3,TYPES[5][1]]]},
+  {title:'Precipitation · preceding 3 hours'+([...rows.values()].some(r=>r.snow>0)?' · water equivalent':''),unit:'mm',rain:true,series:[['Total',r=>r.rain*3,TYPES[1][1]],...([...rows.values()].some(r=>r.snow>0)?[['Snow water (included)',r=>r.snow>0?r.snow*3:NaN,TYPES[5][1]]]:[])]},
   {title:'Wind (gold) / gust (salmon) · arrows show flow (N ↑)',unit:'m/s',wind:true,series:[['Wind',r=>Math.hypot(r.u,r.v),'#f1c56c'],...(available('gust')?[['Gust',r=>r.gust,'#f69980']]:[])]},
   ...(available('totalCloud')?[{title:'Total cloud',unit:'%',cloud:true,series:[['Cloud',r=>r.totalCloud*100,'#c6d9ee']]}]:[])];
  return specs.map(panel=>{
