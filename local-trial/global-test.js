@@ -312,7 +312,7 @@ function syncZoomFocus(dt){
 }
 renderer.domElement.addEventListener('wheel',()=>{if(flight?.kind==='search'){flight=null;zoomFocus=null;}else if(flight)tickFlight(flight.start+(flight.duration||2400));syncZoomFocus();},{capture:true,passive:true});
 // A deliberate pan chooses a new focus; ordinary wheel zoom and rotation do not.
-renderer.domElement.addEventListener('pointerdown',e=>{if(e.button===2)zoomFocus=null;},{capture:true});
+renderer.domElement.addEventListener('pointerdown',e=>{if(e.button===2||(e.button===0&&(e.shiftKey||e.ctrlKey||e.metaKey)))zoomFocus=null;},{capture:true});
 renderer.domElement.addEventListener('touchstart',e=>{if(e.touches.length>1)zoomFocus=null;},{capture:true,passive:true});
 
 const params=new URLSearchParams(location.search);if(params.has('lat')&&params.has('lon')&&Number.isFinite(Number(params.get('lat')))&&Math.abs(Number(params.get('lat')))<=89.85&&Number.isFinite(Number(params.get('lon'))))anchor={lat:Number(params.get('lat')),lon:wrap(Number(params.get('lon')))};
