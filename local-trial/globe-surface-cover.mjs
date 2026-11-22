@@ -1,4 +1,4 @@
-import {snowCoverShader} from './snow-cover-shader.mjs?v=20261123c';
+import {snowCoverShader} from './snow-cover-shader.mjs?v=20261123f';
 import * as THREE from 'three';
 import {WeatherData} from './weather-engine.mjs?v=20261123c';
 import {frameAtTime} from './forecast-position.mjs';

@@ -1,5 +1,5 @@
 import {globeJourney} from './camera-travel.mjs';
-import {GlobeSurfaceCover} from './globe-surface-cover.mjs?v=20261123c';
+import {GlobeSurfaceCover} from './globe-surface-cover.mjs?v=20261123f';
 import {GlobeClouds} from './globe-clouds.mjs?v=20261123c';
 import {GlobePlaces} from './globe-places.mjs?v=20261120n';
 import {setupSearch} from './location-search.mjs?v=20261120j';

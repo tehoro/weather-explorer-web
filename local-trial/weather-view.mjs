@@ -1,4 +1,4 @@
-import {snowCoverShader} from './snow-cover-shader.mjs?v=20261123c';
+import {snowCoverShader} from './snow-cover-shader.mjs?v=20261123f';
 import {advanceWindHistory} from './wind-history.mjs';
 import {frameAtTime,timeAtFrame} from './forecast-position.mjs';
 import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261123c';

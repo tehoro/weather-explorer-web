@@ -14,7 +14,7 @@ import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {sample} from './terrain-raster.mjs?v=20261122l';
 import {TerrainWorker} from './terrain-worker-client.mjs?v=20261123c';
-import {WeatherView} from './weather-view.mjs?v=20261123e';
+import {WeatherView} from './weather-view.mjs?v=20261123f';
 import {setupUI} from './global-ui.mjs?v=20261123c';
 import {PlaceLabels} from './place-labels.mjs?v=20261123c';
 setupUI();
