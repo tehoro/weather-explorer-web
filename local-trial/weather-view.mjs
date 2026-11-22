@@ -139,7 +139,7 @@ export class WeatherView{
   // Schematic heights and thickness are not forecast cloud bases or tops.
   for(let layer=0;layer<3;layer++)for(let slab=0;slab<3;slab++){
    const uniforms={...this.uniforms,layer:{value:layer},slab:{value:slab},opacity:{value:layer===2?.12:.23}};
-   const baseAlt=[1.2,4,8][layer]+slab*[.6,.8,.6][layer];
+   const baseAlt=[.5,4,8][layer]+slab*[.6,.8,.6][layer];
    const mesh=new THREE.Mesh(geometry(baseAlt*(context.cloudScale||1)),new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms,vertexShader:vertex,fragmentShader:`varying vec3 cloudPosition;varying vec2 vUv;uniform sampler2D cloudA,cloudB;uniform float blend,layer,slab,clock,opacity;uniform vec2 extent;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
