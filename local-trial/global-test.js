@@ -252,12 +252,12 @@ function searchFlight(lat,lon,name){
  centreViewport();
 }
 function centreViewport(){
- if(document.body.classList.contains("clean"))return;
- const w=innerWidth,h=innerHeight,settings=$('settingsPanel'),point=$('pointForecast'),right=settings&&!settings.hidden?settings.getBoundingClientRect().left:w,left=point&&!point.hidden?point.getBoundingClientRect().right:0;
- const top=80,bottom=$('timeline').getBoundingClientRect().top;
- if(right-left>200)camera.setViewOffset(w,h,(w-left-right)/2,(h-top-bottom)/2,w,h);else camera.clearViewOffset();
+ // Panels overlay the scene; they must not move its geographic centre.
+ // Keep centring, zoom and orbit identical to Clean view.
+ camera.clearViewOffset();
  camera.updateProjectionMatrix();
 }
+
 function tickFlight(now){
  if(!flight)return;const f=flight,t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-f.start)/(f.duration||2400)),u=t*t*(3-2*t);
  controls.target.copy(f.from).lerp(f.to,u);
