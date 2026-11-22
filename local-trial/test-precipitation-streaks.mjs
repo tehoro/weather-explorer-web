@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as THREE from './assets/three.module.js';
 globalThis.matchMedia=()=>({matches:false});globalThis.devicePixelRatio=1;
-const source=(await readFile(new URL('./precipitation-streaks.mjs',import.meta.url),'utf8')).replace("'three'",JSON.stringify(new URL('./assets/three.module.js',import.meta.url).href));
+const source=(await readFile(new URL('./precipitation-streaks.mjs',import.meta.url),'utf8')).replace("'three'",JSON.stringify(new URL('./assets/three.module.js',import.meta.url).href)).replace("'./particle-budget.mjs'",JSON.stringify(new URL('./particle-budget.mjs',import.meta.url).href));
 const {PrecipitationStreaks}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const particles=new PrecipitationStreaks(new THREE.Group());particles.visible(true);
 let rain=8,snow=0;
@@ -13,6 +13,9 @@ for(let i=0;i<particles.snowGeometry.drawRange.count;i++)assert.ok(particles.sno
 // Identical particle falls more slowly as snow than rain.
 particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};snow=8;particles.update(view,.1);const snowY=particles.particles[0].y;
 particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};snow=0;particles.update(view,.1);assert.ok(snowY>particles.particles[0].y);
+// Snow wafts even in calm wind.
+particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};snow=8;
+particles.update(view,.1);assert.ok(Math.hypot(particles.particles[0].x,particles.particles[0].z)>0);
 // Both phases follow east/north wind; reversing wind reverses their drift.
 for(const amount of [0,8])for(const sign of [-1,1]){
  rain=8;snow=amount;particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};

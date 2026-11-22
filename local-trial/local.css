@@ -7,3 +7,7 @@
 /* Anchor the marker centre, rather than the text box corner, to the city. */
 #globePlaces button{padding-left:10px;translate:0 -50%}
 #globePlaces button::before{content:"";position:absolute;left:-5px;top:50%;width:10px;height:10px;border-radius:50%;background:currentColor;transform:translateY(-50%);box-shadow:0 1px 4px #000}
+
+/* Compact place names above markers; the dot remains at the ground coordinate. */
+#globePlaces button{font:600 13px/18px system-ui;padding:0;margin:0;translate:-50% calc(-100% - 7px);text-align:center}
+#globePlaces button::before{content:"";position:absolute;left:50%;top:calc(100% + 7px);width:5px;height:5px;margin:0;border-radius:50%;background:currentColor;transform:translate(-50%,-50%);box-shadow:0 1px 3px #07131f}

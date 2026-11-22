@@ -4,7 +4,7 @@ export class GlobePlaces{
  constructor(host,globe,camera,vector,choose){
   Object.assign(this,{host,globe,camera,vector,choose});this.rows=[];this.cache=new Map();this.selected=new Set();this.elapsed=0;this.region='';this.positions=new Map();
   this.layer=document.createElement('div');this.layer.id='globePlaces';host.append(this.layer);
-  this.measure=document.createElement('canvas').getContext('2d');this.measure.font='600 15px system-ui';
+  this.measure=document.createElement('canvas').getContext('2d');this.measure.font='600 13px system-ui';
   fetch('data/places/overview.json').then(r=>r.json()).then(r=>this.rows=r);
   fetch('data/places/manifest.json').then(r=>r.json()).then(m=>this.available=new Set(m.tiles));
  }
@@ -29,11 +29,11 @@ export class GlobePlaces{
   for(const [id,name,lat,lon,population,,capital]of rows.values()){
    const world=this.vector(lat,lon).applyQuaternion(this.globe.quaternion);
    if(world.dot(this.camera.position)<=1.03)continue;const p=world.project(this.camera);
-   const x=(p.x+1)*width/2,y=(1-p.y)*height/2,w=this.measure.measureText(name).width+24;
-   if(p.z>1||x<10||y<12||x+w>width-10||y>height-25)continue;
-   candidates.push({id,name,lat,lon,population:population*(this.selected.has(id)?8:1),capital,x,y,box:{left:x-5,right:x+w,top:y-12,bottom:y+14}});
+   const x=(p.x+1)*width/2,y=(1-p.y)*height/2,w=this.measure.measureText(name).width+4;
+   if(p.z>1||x-w/2<8||y<26||x+w/2>width-8||y>height-8)continue;
+   candidates.push({id,name,lat,lon,population:population*(this.selected.has(id)?8:1),capital,x,y,box:{left:x-w/2,right:x+w/2,top:y-26,bottom:y+4}});
   }
-  const selected=selectPlaces(candidates,blocked,this.selected,5);this.selected=new Set(selected.map(p=>p.id));
+  const selected=selectPlaces(candidates,blocked,this.selected,Math.max(7,Math.min(14,Math.round(width*height/65000))));this.selected=new Set(selected.map(p=>p.id));
   // Preserve buttons so rotation does not replace a focused/clicked element.
   const keep=new Set(selected.map(p=>String(p.id)));
   for(const el of [...this.layer.children])if(!keep.has(el.dataset.id)&&el!==document.activeElement)el.remove();
