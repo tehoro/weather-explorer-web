@@ -780,3 +780,15 @@ The optional `--public-cache` uses the smaller published 0.5-degree preview.
 The cloud shader reads dimensions from metadata and supports both; mipmaps
 reduce shimmer when zoomed out, and the displayed time follows interpolation.
 The public site's builder still defaults to 0.5 degrees.
+
+### Town sight lines (22 November)
+
+Place visibility now tests the town's rendered ground position, independently of
+the text offset or GeoNames elevation. It checks every crossed terrain grid edge
+and triangle diagonal, following the approach in the Weather3D viewer. Local's
+coarse relief supplies the fallback outside streamed tiles. Hidden candidates
+are rejected during selection, so visible alternatives can fill all five slots.
+The existing camera/terrain revision cache avoids repeat checks while stationary.
+
+Checked with synthetic narrow-ridge, near-town, reversed-view and replacement
+tests, plus low-angle Geneva views and rotation in the browser.

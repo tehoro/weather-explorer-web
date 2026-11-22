@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import {placeTiles,selectPlaces} from './place-selection.mjs?v=20261120f';
+import {placeTiles,selectPlaces} from './place-selection.mjs?v=20261122aa';
+import {meshSightGrid,terrainBlocksSight} from './place-visibility.mjs?v=20261122aa';
 export class PlaceLabels{
  constructor(camera,context){
   this.camera=camera;this.context=context;this.cache=new Map();this.rows=[];this.selected=new Set();this.key='';this.token=0;this.elapsed=0;this.widths=new Map();
@@ -23,23 +24,21 @@ export class PlaceLabels{
   this.camera.updateMatrixWorld();
   const key=[...this.camera.matrixWorld.elements,...this.camera.projectionMatrix.elements,c.centre.lat,c.centre.lon,c.terrainRevision,width,height,...blocked.flatMap(r=>[r.left,r.top,r.right,r.bottom])].join('/');
   if(key===this.layoutKey)return;this.layoutKey=key;
+  const gridMap=new Map(c.terrainMeshes().filter(m=>m.visible&&m.userData.p).map(m=>[m,meshSightGrid(m)])),grids=[...gridMap.values()];
+  const groundAt=(x,z)=>{const g=gridMap.get(c.placeMesh(x,z));return g?g.height(x,z):c.ground(x,z);};
   const v=new THREE.Vector3(),candidates=[];
   for(const row of this.rows){const [id,name,lat,lon,population,elevation,capital]=row,position=c.projectPlace(lat,lon);
    // Cheap spatial rejection before projection or terrain sampling.
    if(Math.abs(position.x-c.target.x)>Math.max(950,c.distance*4)||Math.abs(position.z-c.target.z)>Math.max(950,c.distance*4))continue;
-   const ground=c.ground(position.x,position.z),y=Math.max(ground,Math.max(0,elevation)*.0015)+.15;
+   const ground=groundAt(position.x,position.z),y=ground+.015;
    v.set(position.x,y,position.z).project(this.camera);if(v.z<-1||v.z>1||Math.abs(v.x)>1||Math.abs(v.y)>1)continue;
    const x=(v.x+1)*width/2,screenY=(1-v.y)*height/2,labelWidth=this.widths.get(name)??(this.widths.set(name,this.measure.measureText(name).width+23),this.widths.get(name)),box={left:x-5,right:x+labelWidth,top:screenY-12,bottom:screenY+13};
    if(box.left<8||box.right>width-8||box.top<8||box.bottom>height-8)continue;
-   candidates.push({id,name,population,capital,x,y:screenY,box,world:new THREE.Vector3(position.x,y,position.z)});
+   candidates.push({id,name,population,capital,x,y:screenY,box,world:new THREE.Vector3(position.x,ground,position.z)});
   }
-  // Check the highest-ranked candidates against intervening terrain, not clouds.
-  let pool=candidates,chosen=[];
-  for(let pass=0;pass<3;pass++){
-   chosen=selectPlaces(pool,blocked,this.selected);const hidden=new Set();
-   for(const p of chosen){for(let i=1;i<16;i++){const t=i/16,x=this.camera.position.x+(p.world.x-this.camera.position.x)*t,z=this.camera.position.z+(p.world.z-this.camera.position.z)*t,y=this.camera.position.y+(p.world.y-this.camera.position.y)*t;if(c.ground(x,z)>y+.08){hidden.add(p.id);break;}}}
-   if(!hidden.size)break;pool=pool.filter(p=>!hidden.has(p.id));chosen=chosen.filter(p=>!hidden.has(p.id));
-  }
+  // Visibility ends at the actual town ground point, never the raised text.
+  const chosen=selectPlaces(candidates,blocked,this.selected,5,
+   p=>!terrainBlocksSight(this.camera.position,p.world,grids,c.coarseSightGrid));
   this.selected=new Set(chosen.map(p=>p.id));const existing=new Map([...this.layer.children].map(e=>[Number(e.dataset.id),e]));
   for(const p of chosen){let el=existing.get(p.id);if(!el){el=document.createElement('div');el.className='placeLabel';el.dataset.id=p.id;el.textContent=p.name;this.layer.append(el);}el.style.transform=`translate(${p.x}px,${p.y}px)`;existing.delete(p.id);}
   for(const el of existing.values())el.remove();

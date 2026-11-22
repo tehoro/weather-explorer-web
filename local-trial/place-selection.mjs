@@ -7,7 +7,7 @@ export function placeTiles(region,available){
 }
 export function overlaps(a,b,padding=0){return a.left<b.right+padding&&a.right>b.left-padding&&a.top<b.bottom+padding&&a.bottom>b.top-padding;}
 // Prefer population, spread names across the screen and retain close contenders.
-export function selectPlaces(candidates,blocked=[],previous=new Set(),limit=5){
+export function selectPlaces(candidates,blocked=[],previous=new Set(),limit=5,isVisible=()=>true){
  const remaining=candidates.filter(p=>!blocked.some(b=>overlaps(p.box,b,8))),chosen=[];
  while(remaining.length&&chosen.length<limit){
   let best=null,score=-Infinity;
@@ -17,6 +17,6 @@ export function selectPlaces(candidates,blocked=[],previous=new Set(),limit=5){
    const value=Math.log10(Math.max(500,p.population))+(p.capital?.35:0)+Math.min(1.4,separation/180)+(previous.has(p.id)?.3:0);
    if(value>score){best=p;score=value;}
   }
-  if(!best)break;chosen.push(best);remaining.splice(remaining.indexOf(best),1);
+  if(!best)break;remaining.splice(remaining.indexOf(best),1);if(isVisible(best))chosen.push(best);
  }return chosen;
 }
