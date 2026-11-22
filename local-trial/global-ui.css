@@ -42,3 +42,8 @@ footer button{pointer-events:auto;border:0;border-radius:0;background:none;color
 #pointForecast.expanded #pointChart svg{width:100%;height:100%;min-height:0}
 #pointForecast.expanded #pointChart p{margin:4px 0;font-size:10px}
 #pointForecast.expanded #pointStatus{margin:3px 0;font-size:10px}
+
+#orbitToggle[aria-pressed="true"]{background:#316b74;border-color:#85c5cf}#orbitPeriod{display:block;width:110px;margin:8px 0}
+@media(max-width:700px){#playback button{padding:9px 5px;font-size:11px}}
+
+#windDensity,#windSpeed{display:block;margin:8px 0 14px}

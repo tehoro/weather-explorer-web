@@ -1,4 +1,4 @@
-import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ae';
+import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122af';
 import {displayPoint,snapForecast,windReadout} from './point-values.mjs';
 import {zoneAt,timeParts,forecastMoment} from './local-time.mjs';
 import {typeName} from './precipitation-type.mjs';

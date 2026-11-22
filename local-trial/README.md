@@ -839,3 +839,15 @@ pivot at the destination's ground height, retaining it as detail arrives.
 Tilt now reaches near-horizontal views. **View & terrain → Near ground · about
 500 m** lowers the eye to that clearance above local terrain; the camera floor
 uses the same 1.5× vertical scale as the terrain (0.75 scene km).
+
+### Automatic orbit
+
+The playback ribbon's **Orbit** button starts/stops a circuit around the current
+camera target, preserving the chosen distance and tilt. Default: 120 seconds per
+turn. Advanced settings stores a custom period (10–3600 seconds). Orbit is
+independent of forecast playback and pauses for manual drag/zoom, camera presets
+or a new destination. It follows Weather3D's manual-takeover convention. Terrain
+clearance can lift the eye over rising ground. Streaming refreshes periodically
+during continuous rotation rather than waiting for camera motion to stop.
+`test-camera-orbit.mjs` checks period, refresh-rate independence and geometry;
+browser checks confirm the centred marker stays fixed and wheel input pauses.
