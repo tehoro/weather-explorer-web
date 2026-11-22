@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {colourTile,terrainGeometry} from './terrain-preparation.mjs';
+const p={west:0,south:0,span:1,cells:4,background:true},a=new Float32Array(49).fill(200);
+const g=terrainGeometry(p,a,false);
+assert.equal(g.positions.length,g.normals.length);assert.equal(g.uvs.length,g.positions.length/3*2);
+assert.ok([...g.positions].every(Number.isFinite));assert.ok([...g.indices].every(i=>i<g.positions.length/3));
+const land=colourTile({p,a,ocean:false},'relief'),sea=colourTile({p,a:null,ocean:true},'relief');
+assert.equal(land.pixels[3],255);assert.equal(sea.pixels[3],0);
+assert.deepEqual([...sea.pixels.slice(0,3)],[18,56,78]);
+const water=new Float32Array(64*64).fill(80);
+assert.deepEqual(colourTile({p,a,water,ocean:false},'hybrid').pixels,sea.pixels);
+console.log('Worker preparation: geometry, indices, land/water masks and sea colour passed.');

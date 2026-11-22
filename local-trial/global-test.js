@@ -8,10 +8,11 @@ import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
-import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122l';
-import {WeatherView} from './weather-view.mjs?v=20261122w';
+import {sample} from './terrain-raster.mjs?v=20261122l';
+import {TerrainWorker} from './terrain-worker-client.mjs';
+import {WeatherView} from './weather-view.mjs?v=20261122y';
 import {setupUI} from './global-ui.mjs?v=20261122o';
-import {PlaceLabels} from './place-labels.mjs?v=20261120s';
+import {PlaceLabels} from './place-labels.mjs?v=20261122y';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
@@ -32,7 +33,7 @@ renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);last
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
  if(Math.abs(camera.near-near)>near*.01){camera.near=near;camera.updateProjectionMatrix();}
- globalRelief.update(anchor,controls.target,cameraFootprint());prepareSceneDepth(scene);renderer.render(scene,camera);});
+ globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);renderer.render(scene,camera);});
 const cos=()=>Math.max(.015,Math.cos(anchor.lat*Math.PI/180));
 function centre(){return {lat:Math.max(-89.85,Math.min(89.85,anchor.lat-controls.target.z/111.2)),lon:wrap(anchor.lon+controls.target.x/(111.2*cos()))};}
 function position(mesh,p){
@@ -72,7 +73,7 @@ function cameraFootprint(){
  }
  return result;
 }
-function dispose(mesh){scene.remove(mesh);mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose();}
+function dispose(mesh){mesh.userData.disposed=true;colourQueue.delete(mesh);scene.remove(mesh);mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose();}
 function rebase(){
  if(controls.target.length()<30)return;
  const c=centre(),shift=new THREE.Vector3(controls.target.x,0,controls.target.z);anchor=c;
@@ -85,45 +86,40 @@ function status(){const c=centre(),d=detail(camera.position.distanceTo(controls.
  $('retry').hidden=s.failed===0;
  if(reader)$('status').textContent+=`\n${reader.saved.hits} terrain/land-cover grids reused from browser storage.`;
 }
-const terrainStops=[[0,'#234e45'],[200,'#477353'],[700,'#7a8960'],[1400,'#9b9b80'],[2200,'#b3b3aa'],[3000,'#e7eff0']].map(([z,c])=>[z,new THREE.Color(c)]);
-const coverColours={10:'#315d3c',20:'#78834e',30:'#81985c',40:'#a0a56a',50:'#a49a90',60:'#a7a18e',70:'#e4ecee',90:'#547a67',95:'#315d50',100:'#989578'};
-const rgb=c=>{const v=new THREE.Color(c).convertLinearToSRGB();return [v.r*255,v.g*255,v.b*255];};
-const coverRGB=Object.fromEntries(Object.entries(coverColours).map(([k,c])=>[k,rgb(c)])),seaRGB=rgb('#12384e');
-const reliefRGB=Array.from({length:1801},(_,i)=>{const z=i*5;let c=terrainStops.at(-1)[1].clone();for(let j=1;j<terrainStops.length;j++)if(z<=terrainStops[j][0]){const [a,ca]=terrainStops[j-1],[b,cb]=terrainStops[j];c=ca.clone().lerp(cb,Math.max(0,(z-a)/(b-a)));break;}return rgb(c);});
-function paint(mesh){
- const {p,a,water,ocean}=mesh.userData,n=p.cells+1,hn=n+2,size=p.background?64:waterSize,pixels=new Uint8Array(size*size*4),mode=$('surfaceStyle').value;
- for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-  const i=y*size+x,z=ocean?0:sample(a,hn,hn,1+(x+.5)/size*p.cells,1+(y+.5)/size*p.cells),code=water?.[i];
-  let c=reliefRGB[Math.min(1800,Math.max(0,Math.round(z/5)))];
-  const waterPixel=isWater(code??0,z,ocean);
-  if(waterPixel)c=seaRGB;
-  else if(mode!=='relief'&&coverRGB[code]){const cc=coverRGB[code];c=mode==='cover'?cc:c.map((v,j)=>v*.9+cc[j]*.1);}
-  pixels.set([Math.round(c[0]),Math.round(c[1]),Math.round(c[2]),waterPixel?0:255],i*4);
- }
- const texture=new THREE.DataTexture(pixels,size,size,THREE.RGBAFormat);texture.colorSpace=THREE.SRGBColorSpace;texture.magFilter=THREE.LinearFilter;texture.minFilter=THREE.LinearFilter;texture.needsUpdate=true;
- mesh.material.map?.dispose();mesh.material.map=texture;mesh.material.needsUpdate=true;
+const installations=[];
+function installTerrain(task){return new Promise((resolve,reject)=>installations.push(()=>{try{resolve(task());}catch(e){reject(e);}}));}
+function applyColour(mesh,{pixels,size}){
+ const texture=new THREE.DataTexture(pixels,size,size,THREE.RGBAFormat);texture.colorSpace=THREE.SRGBColorSpace;texture.magFilter=texture.minFilter=THREE.LinearFilter;texture.needsUpdate=true;
+ const first=!mesh.material.map;mesh.material.map?.dispose();mesh.material.map=texture;if(first)mesh.material.needsUpdate=true;
+ renderer.initTexture(texture);
 }
-function makeMesh(p,a,ocean){
- const n=p.cells+1,hn=n+2,width=p.span*111.2,step=width/p.cells,geometry=new THREE.PlaneGeometry(width,width,p.cells,p.cells);geometry.rotateX(-Math.PI/2);
- const v=geometry.attributes.position,uv=geometry.attributes.uv,normal=geometry.attributes.normal,vector=new THREE.Vector3();
- for(let y=0;y<n;y++)for(let x=0;x<n;x++){
-  const i=y*n+x,j=(y+1)*hn+x+1,height=ocean?0:a[j];if(!Number.isFinite(height)||height<-1000||height>10000)throw Error('Invalid elevation');
-  v.setY(i,height/1000*1.5);uv.setY(i,1-uv.getY(i));
-  // Shared halo samples produce identical normals at neighbouring patch edges.
-  vector.set(ocean?0:-(a[j+1]-a[j-1])*.0015/(2*step),1,ocean?0:-(a[j+hn]-a[j-hn])*.0015/(2*step)).normalize();normal.setXYZ(i,vector.x,vector.y,vector.z);
- }
- const edges=[];for(let i=0;i<n;i++)edges.push(i);for(let i=1;i<n;i++)edges.push(i*n+n-1);
- for(let i=n-2;i>=0;i--)edges.push((n-1)*n+i);for(let i=n-2;i>0;i--)edges.push(i*n);
- const positions=new Float32Array((n*n+edges.length)*3),uvs=new Float32Array((n*n+edges.length)*2),normals=new Float32Array(positions.length);
- positions.set(v.array);uvs.set(uv.array);normals.set(normal.array);const indices=Array.from(geometry.index.array);
- edges.forEach((src,i)=>{const dst=n*n+i;positions.set([v.getX(src),v.getY(src)-.15,v.getZ(src)],dst*3);uvs.set([uv.getX(src),uv.getY(src)],dst*2);normals.set([normal.getX(src),normal.getY(src),normal.getZ(src)],dst*3);const next=(i+1)%edges.length;indices.push(src,edges[next],n*n+next,src,n*n+next,dst);});
- geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));geometry.setAttribute('uv',new THREE.BufferAttribute(uvs,2));geometry.setIndex(indices);geometry.setAttribute('normal',new THREE.BufferAttribute(normals,3));
- const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({roughness:.92,metalness:.04,side:THREE.FrontSide}));shadeWaterConsistently(mesh.material);mesh.userData={p,a,ocean,edges};paint(mesh);position(mesh,p);return mesh;
+const colourQueue=new Map();let colouring=false;
+function paint(mesh){
+ const token=mesh.userData.paintToken=(mesh.userData.paintToken||0)+1;
+ colourQueue.set(mesh,{token,mode:$('surfaceStyle').value});void drainColours();
+}
+async function drainColours(){
+ if(colouring)return;colouring=true;
+ try{while(colourQueue.size){
+  const [mesh,{token,mode}]=colourQueue.entries().next().value;colourQueue.delete(mesh);
+  if(mesh.userData.disposed)continue;
+  try{const {p,a,water,ocean}=mesh.userData,result=await reader.call('colour',[{p,a,water,ocean},mode]);
+   await installTerrain(()=>{if(!mesh.userData.disposed&&mesh.userData.paintToken===token)applyColour(mesh,result);});
+  }catch(e){if(!mesh.userData.disposed)console.warn('Terrain colour',e.message);}
+ }}finally{colouring=false;}
+}
+
+function makeMesh(p,a,ocean,prepared){
+ const geometry=new THREE.BufferGeometry();
+ for(const [name,key,size]of [['position','positions',3],['normal','normals',3],['uv','uvs',2]])geometry.setAttribute(name,new THREE.BufferAttribute(prepared[key],size));
+ geometry.setIndex(new THREE.BufferAttribute(prepared.indices,1));
+ const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({roughness:.92,metalness:.04,side:THREE.FrontSide}));shadeWaterConsistently(mesh.material);mesh.userData={p,a,ocean,edges:prepared.edges};applyColour(mesh,prepared);position(mesh,p);return mesh;
 }
 async function build(p){
  const name=demName(p.south+p.span/2,p.west+p.span/2),ocean=!catalogue.has(name);
  const a=ocean?null:await reader.grid('dem',p,p.cells+1,{halo:1});
- if(!needed.has(p.key))return null;return makeMesh(p,a,ocean);
+ if(!needed.has(p.key))return null;const mode=$('surfaceStyle').value,prepared=await reader.call('prepare',[p,a,ocean,mode]);
+ return installTerrain(()=>{if(!needed.has(p.key))return null;const mesh=makeMesh(p,a,ocean,prepared);if(mode!==$('surfaceStyle').value)paint(mesh);return mesh;});
 }
 function pumpWater(){
  while(waterActive<2&&waterQueue.length){const {mesh,p}=waterQueue.shift();if(tiles.get(p.key)?.mesh!==mesh)continue;waterActive++;
@@ -166,7 +162,7 @@ function go(lat=anchor.lat,lon=anchor.lon){if(!Number.isFinite(lat)||!Number.isF
  rebasing=true;controls.target.set(0,0,0);camera.position.set(0,approaching&&!readySent?240:38,approaching&&!readySent?0:55);controls.update();rebasing=false;update();}
 setupSearch($('search'),$('matches'),(lat,lon)=>go(lat,lon));
 $('viewAngle').onchange=()=>{const d=camera.position.distanceTo(controls.target),angle=controls.getAzimuthalAngle(),polar=$('viewAngle').value==='top'?0:Math.atan2(.82,.57);camera.position.copy(controls.target).add(new THREE.Vector3(d*Math.sin(polar)*Math.sin(angle),d*Math.cos(polar),d*Math.sin(polar)*Math.cos(angle)));controls.update();update();};
-function retryTerrain(){reader?.files.clear();failures.clear();for(const key of waterMissing){const old=tiles.get(key);if(old)waterQueue.push(old);}waterMissing.clear();pumpWater();update();}
+function retryTerrain(){reader?.clear();failures.clear();for(const key of waterMissing){const old=tiles.get(key);if(old)waterQueue.push(old);}waterMissing.clear();pumpWater();update();}
 $('retry').onclick=()=>{retryDelay=15000;retryTerrain();};
 let retryDelay=15000;
 function scheduleRetry(){setTimeout(()=>{
@@ -196,4 +192,4 @@ function weatherContext(){
 weatherView=new WeatherView(scene,weatherContext);
 placeLabels=new PlaceLabels(camera,weatherContext);
 const params=new URLSearchParams(location.search);if(params.has('lat')&&params.has('lon')&&Number.isFinite(Number(params.get('lat')))&&Math.abs(Number(params.get('lat')))<=89.85&&Number.isFinite(Number(params.get('lon'))))anchor={lat:Number(params.get('lat')),lon:wrap(Number(params.get('lon')))};
-fetch('/dem/tileList.txt').then(r=>{if(!r.ok)throw Error('Terrain catalogue unavailable');return r.text();}).then(text=>{catalogue=new Set(text.split(/\s+/).map(s=>s.replace(/\/$/,'')));reader=new RasterReader(GeoTIFF,'',catalogue);styleNote();go();}).catch(e=>$('status').textContent=e.message);
+fetch('/dem/tileList.txt').then(r=>{if(!r.ok)throw Error('Terrain catalogue unavailable');return r.text();}).then(text=>{catalogue=new Set(text.split(/\s+/).map(s=>s.replace(/\/$/,'')));reader=new TerrainWorker(catalogue);reader.ready.then(()=>{styleNote();go();}).catch(e=>$('status').textContent=e.message);}).catch(e=>$('status').textContent=e.message);

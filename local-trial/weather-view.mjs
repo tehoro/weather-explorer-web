@@ -1,3 +1,4 @@
+import {replayFrame} from './playback-loop.mjs';
 import {updateCloudTerrain} from './cloud-terrain.mjs';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
@@ -19,7 +20,7 @@ export class WeatherView{
   for(const id of ['windLayer','cloudLow','cloudMiddle','cloudHigh','rainLayer','pressureLayer','surfaceField','precipitationStyle'])$(id).onchange=()=>this.options();
   $('forecastTime').oninput=()=>{this.playing=false;this.playLabel();this.load(Math.round(Number($('forecastTime').value)));};
   $('retryBuffer').onclick=()=>this.prepare();
-  $('weatherPlay').onclick=()=>{this.playing=!this.playing;this.elapsed=0;this.playLabel();};
+  $('weatherPlay').onclick=()=>{this.playing=!this.playing;this.elapsed=0;this.endHold=0;this.playLabel();};
   for(const [id,delta]of [['previousFrame',-1],['nextFrame',1]])$(id).onclick=()=>{this.playing=false;this.playLabel();this.load(clamp(this.frame+delta,0,(this.data.meta?.times.length||1)-1));};
   $('forecastNow').onclick=()=>{if(!this.data.meta)return;const times=this.data.meta.times.map(t=>Math.abs(Date.parse(t)-Date.now()));this.playing=false;this.playLabel();this.load(times.indexOf(Math.min(...times)));};
   $('weatherRetry').onclick=()=>this.load(this.requestedFrame??this.frame,true);
@@ -95,7 +96,7 @@ export class WeatherView{
    const old=this.current,oldFrame=this.frame;
    this.timeTransition=Boolean(!moved&&old&&this.playing&&frame===oldFrame+1);
    this.fromFrame=this.timeTransition?oldFrame:frame;
-   this.current=grid;this.previous=!moved&&old&&(this.timeTransition||frame===oldFrame)?old:grid;this.frame=frame;this.blend=this.previous===grid?1:0;
+   this.endHold=0;this.current=grid;this.previous=!moved&&old&&(this.timeTransition||frame===oldFrame)?old:grid;this.frame=frame;this.blend=this.previous===grid?1:0;
    this.build(moved);this.group.visible=true;this.loading=false;this.elapsed=0;
    this.updateTimeDisplay();
    $('weatherLoad').textContent=(grid.quality==='coarse'?'IFS 1° global preview · run ':'IFS 0.1° · run ')+this.data.meta.initial_utc.slice(0,16).replace('T',' ')+' UTC';this.readout();if(moved||this.prepared?.region!==this.regionKey)this.prepare();
@@ -193,7 +194,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
   else this.blend=Math.min(1,this.blend+dt/1.2);
   if(this.playing&&!this.loading&&this.blend===1){
    if(this.retryWait>0){this.retryWait=Math.max(0,this.retryWait-dt);return;}
-   if(this.frame===this.data.meta.times.length-1){this.playing=false;this.playLabel();}
+   if(this.frame===this.data.meta.times.length-1){this.endHold=(this.endHold||0)+dt;if(this.endHold>=2){this.endHold=0;this.load(replayFrame(this.data.meta.times));}}
    else this.load(this.frame+1);
   }
  }

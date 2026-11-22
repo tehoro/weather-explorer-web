@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {replayFrame} from './playback-loop.mjs';
+import {readFile} from 'node:fs/promises';
+const times=['2026-11-22T00:00Z','2026-11-22T03:00Z','2026-11-22T06:00Z'];
+assert.equal(replayFrame(times,Date.parse('2026-11-22T02:00Z')),1);
+const source=await readFile(new URL('./weather-view.mjs',import.meta.url),'utf8');
+const method=source.slice(source.indexOf(' advanceTime(dt){'),source.indexOf('\n tick(dt)'));
+const logic=new Function('replayFrame','$','return ({'+method+'});')(replayFrame,()=>({value:1}));
+let loads=[];const view={elapsed:0,timeTransition:false,blend:1,playing:true,loading:false,frame:2,data:{meta:{times}},load(f){loads.push(f);this.loading=true;}};
+for(let i=0;i<19;i++)logic.advanceTime.call(view,.1);
+assert.equal(loads.length,0);logic.advanceTime.call(view,.11);assert.equal(loads.length,1);assert.equal(view.playing,true);
+console.log('Playback holds the last frame for two seconds and restarts near now without stopping animation.');
