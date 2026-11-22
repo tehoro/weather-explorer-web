@@ -1,4 +1,5 @@
-import {GlobeClouds} from './globe-clouds.mjs?v=20261122z';
+import {globeJourney} from './camera-travel.mjs';
+import {GlobeClouds} from './globe-clouds.mjs?v=20261122an';
 import {GlobePlaces} from './globe-places.mjs?v=20261120n';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {GlobalRelief} from './global-relief.mjs?v=20261122z';
@@ -29,18 +30,22 @@ const clouds=new GlobeClouds(globe,$('globeClock'));
 const labels=new GlobePlaces(host,globe,camera,vector,choose);
 // A subtle atmospheric rim, matching the highlights globe's blue halo.
 const halo=new THREE.Mesh(new THREE.SphereGeometry(1.035,96,64),new THREE.ShaderMaterial({side:THREE.BackSide,transparent:true,depthWrite:false,vertexShader:'varying vec3 n,v;void main(){vec4 p=modelViewMatrix*vec4(position,1.);n=normalize(normalMatrix*normal);v=normalize(-p.xyz);gl_Position=projectionMatrix*p;}',fragmentShader:'varying vec3 n,v;void main(){float a=pow(1.-abs(dot(normalize(n),normalize(v))),3.);gl_FragColor=vec4(.3,.55,.7,a*.35);}'}));globe.add(halo);
-function choose(lat,lon,name='Selected location'){
- if(flight||!active)return;
+function choose(lat,lon,name='Selected location',journey=null){
+ if(flight||(!active&&!journey))return;
  if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>89.85){$('status').textContent='Enter a valid latitude and longitude.';return;}
- returnPosition=camera.position.clone();spin(false);controls.enabled=false;$('status').textContent='Approaching '+name+' · loading terrain…';
+ if(journey){active=true;$('local').hidden=false;$('local').classList.remove('departing');camera.position.copy(vector(journey.from.lat,journey.from.lon,1.2).applyQuaternion(globe.quaternion));resize();}
+ returnPosition=camera.position.clone();spin(false);controls.enabled=false;$('status').textContent='Flying to '+name+' · detail will refine in the background.';
+ const selectedTime=journey?.time||new Date().toISOString();clouds.hold(selectedTime);
  const point=vector(lat,lon,1.2).applyQuaternion(globe.quaternion);
- flight={start:performance.now(),from:camera.position.clone(),to:point,lat,lon,name,ready:false,revealing:false};
- $('viewer').src='http://127.0.0.1:8092/global-test.html?'+new URLSearchParams({lat,lon,approach:'1',time:clouds.times?.[Math.round(clouds.pos)]?new Date(clouds.times[Math.round(clouds.pos)]).toISOString():''});
+ flight={start:performance.now(),from:camera.position.clone(),to:point,lat,lon,name,journey:!!journey,ready:false,revealing:false};
+ const f=flight,url='http://127.0.0.1:8092/global-test.html?'+new URLSearchParams({lat,lon,name,approach:'1',searchFlight:journey?'1':'0',time:selectedTime});
+ const load=()=>{if(flight===f)$('viewer').src=url;};if(journey&&!reduced.matches)setTimeout(load,1200);else load();
  $('viewer').hidden=false;$('viewer').inert=true;$('viewer').classList.add('preparing');$('back').hidden=false;
 }
 addEventListener('message',event=>{
- if(event.origin!=='http://127.0.0.1:8092'||event.source!==$('viewer').contentWindow||!flight)return;
- if(event.data?.type==='local-terrain-ready')flight.ready=true;
+ if(event.origin!=='http://127.0.0.1:8092'||event.source!==$('viewer').contentWindow )return;
+ if(event.data?.type==='local-search-flight'){const m=event.data;if(m.from&&m.to&&Number.isFinite(m.from.lat)&&Number.isFinite(m.from.lon))choose(m.to.lat,m.to.lon,m.to.name,m);return;}
+ if(event.data?.type==='local-terrain-ready'&&flight)flight.ready=true;
 });
 function revealTerrain(f){
  if(f.revealing)return;f.revealing=true;
@@ -72,7 +77,10 @@ $('back').onclick=()=>showTab('local');document.querySelectorAll('[data-tab]').f
 function resize(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.clearViewOffset();if(w>700)camera.setViewOffset(w,h,180,0,w,h);else camera.setViewOffset(w,h,0,220,w,h);camera.updateProjectionMatrix();}
 addEventListener('resize',resize);resize();let last=performance.now();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,(now-last)/1000);last=now;if(!active)return;
- if(flight){const t=reduced.matches?1:Math.min(1,(now-flight.start)/2600),e=t*t*(3-2*t);const rotation=new THREE.Quaternion().setFromUnitVectors(flight.from.clone().normalize(),flight.to.clone().normalize()),direction=flight.from.clone().normalize().applyQuaternion(new THREE.Quaternion().slerp(rotation,e));camera.position.copy(direction.multiplyScalar(THREE.MathUtils.lerp(flight.from.length(),flight.to.length(),e)));camera.clearViewOffset();camera.updateProjectionMatrix();camera.lookAt(0,0,0);if(t===1&&flight.ready)revealTerrain(flight);}
+ if(flight){const t=reduced.matches?1:Math.min(1,(now-flight.start)/(flight.journey?6800:2600)),e=t*t*(3-2*t),journey=flight.journey?globeJourney(t):null;const rotation=new THREE.Quaternion().setFromUnitVectors(flight.from.clone().normalize(),flight.to.clone().normalize()),direction=flight.from.clone().normalize().applyQuaternion(new THREE.Quaternion().slerp(rotation,journey?journey.turn:e));camera.position.copy(direction.multiplyScalar(journey?journey.radius:THREE.MathUtils.lerp(flight.from.length(),flight.to.length(),e)));camera.clearViewOffset();camera.updateProjectionMatrix();camera.lookAt(0,0,0);if(t===1&&flight.ready)revealTerrain(flight);}
  else {controls.update();if(spinning&&!interacting&&!reduced.matches)globe.rotation.y+=dt*.035;}
  clouds.tick(dt,reduced.matches);labels.layer.hidden=!!flight;if(!flight)labels.tick(dt);renderer.render(scene,camera);
 }requestAnimationFrame(animate);
+
+const travel=new URLSearchParams(location.search).get('travel');
+if(travel){try{const journey=JSON.parse(travel);if(journey.from&&journey.to)choose(journey.to.lat,journey.to.lon,journey.to.name,journey);}catch{}history.replaceState(null,'',location.pathname);}

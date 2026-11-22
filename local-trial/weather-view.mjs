@@ -1,6 +1,7 @@
-import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261122ak';
+import {frameAtTime,timeAtFrame} from './forecast-position.mjs';
+import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261122an';
 import {replayFrame} from './playback-loop.mjs';
-import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261122ak';
+import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261122an';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
@@ -10,7 +11,7 @@ import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122ak';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122an';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 
@@ -19,21 +20,21 @@ export class WeatherView{
   this.scene=scene;this.context=context;this.data=new WeatherData();this.group=new THREE.Group();scene.add(this.group);this.token=0;this.frame=0;this.playing=false;this.elapsed=0;this.blend=1;this.particles=[];this.rain=[];this.meshes=[];
   $('cloudOpacity').oninput=()=>this.options();
   for(const id of ['windLayer','cloudLow','cloudMiddle','cloudHigh','rainLayer','pressureLayer','surfaceField','precipitationStyle'])$(id).onchange=()=>this.options();
-  $('forecastTime').oninput=()=>{this.playing=false;this.playLabel();this.load(Math.round(Number($('forecastTime').value)));};
+  $('forecastTime').oninput=()=>{this.heldFrame=null;this.playing=false;this.playLabel();this.load(Math.round(Number($('forecastTime').value)));};
   $('retryBuffer').onclick=()=>this.prepare();
-  $('weatherPlay').onclick=()=>{this.playing=!this.playing;this.elapsed=0;this.endHold=0;this.playLabel();};
-  for(const [id,delta]of [['previousFrame',-1],['nextFrame',1]])$(id).onclick=()=>{this.playing=false;this.playLabel();this.load(clamp(this.frame+delta,0,(this.data.meta?.times.length||1)-1));};
-  $('forecastNow').onclick=()=>{if(!this.data.meta)return;const times=this.data.meta.times.map(t=>Math.abs(Date.parse(t)-Date.now()));this.playing=false;this.playLabel();this.load(times.indexOf(Math.min(...times)));};
+  $('weatherPlay').onclick=()=>{this.heldFrame=null;this.playing=!this.playing;this.elapsed=0;this.endHold=0;this.playLabel();};
+  for(const [id,delta]of [['previousFrame',-1],['nextFrame',1]])$(id).onclick=()=>{this.heldFrame=null;this.playing=false;this.playLabel();this.load(clamp(this.frame+delta,0,(this.data.meta?.times.length||1)-1));};
+  $('forecastNow').onclick=()=>{this.heldFrame=null;if(!this.data.meta)return;const times=this.data.meta.times.map(t=>Math.abs(Date.parse(t)-Date.now()));this.playing=false;this.playLabel();this.load(times.indexOf(Math.min(...times)));};
   $('weatherRetry').onclick=()=>this.load(this.requestedFrame??this.frame,true);
-  this.data.init().then(m=>{const requested=m.steps.indexOf(Number(new URLSearchParams(location.search).get('step')));if(requested>=0)this.frame=this.requestedFrame=requested;
-   else{const time=Date.parse(new URLSearchParams(location.search).get('time'))||Date.now();if(Number.isFinite(time)){const delta=m.times.map(t=>Math.abs(Date.parse(t)-time));this.frame=this.requestedFrame=delta.indexOf(Math.min(...delta));}}$('forecastTime').max=m.times.length-1;$('forecastTime').disabled=false;$('weatherPlay').disabled=false;this.refresh(true);}).catch(e=>this.error(e));
+  this.data.init().then(m=>{const params=new URLSearchParams(location.search),requested=params.has('step')?m.steps.indexOf(Number(params.get('step'))):-1;if(requested>=0)this.frame=this.requestedFrame=requested;
+   else{const time=Date.parse(new URLSearchParams(location.search).get('time'))||Date.now();if(Number.isFinite(time)){const delta=m.times.map(t=>Math.abs(Date.parse(t)-time));if(params.has('time')){this.heldFrame=frameAtTime(m.times,time);this.displayFrame=this.heldFrame;this.frame=this.requestedFrame=Math.ceil(this.heldFrame);}else this.frame=this.requestedFrame=delta.indexOf(Math.min(...delta));}}$('forecastTime').max=m.times.length-1;$('forecastTime').disabled=false;$('weatherPlay').disabled=false;this.playLabel();this.refresh(true);}).catch(e=>this.error(e));
   this.runRefresh=new RunRefresh({active:()=>this.data,view:()=>this.current&&this.regionKey?{key:this.regionKey,region:this.region,time:Date.parse(this.data.meta.times[this.frame])}:null,apply:(data,grids,key)=>this.adoptRun(data,grids,key),report:text=>{$('runRefreshStatus').textContent=text;$('runRefreshStatus').hidden=!text;}});
   this.runTimer=setInterval(()=>this.runRefresh.check(),30000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)this.runRefresh.check();});
  }
  async adoptRun(data,grids,key){
   if(key!==this.regionKey)return;
-  const frame=nearestTime(data.meta.times,Date.parse(this.data.meta.times[this.frame]));
+  const time=timeAtFrame(this.data.meta.times,this.heldFrame??this.displayFrame??this.frame);if(this.heldFrame!=null)this.heldFrame=frameAtTime(data.meta.times,time);const frame=nearestTime(data.meta.times,time);
   // Invalidate old requests before swapping all fields and the run metadata.
   this.token++;this.prepareId=(this.prepareId||0)+1;this.loading=false;
   this.data.dispose?.();this.data=data;this.prepared={region:key,grids};this.requestedFrame=frame;
@@ -41,7 +42,7 @@ export class WeatherView{
   await this.load(frame);this.prepare();
  }
  async prepare(){
-  if(!this.current||this.loading)return;
+  if(!this.current||this.loading||this.context().travelling)return;
   const id=this.prepareId=(this.prepareId||0)+1,region=this.regionKey;
   this.preparing=true;this.monitoringTerrain=true;$('prepareStatus').hidden=false;$('retryBuffer').hidden=true;
   const valid=()=>id===this.prepareId&&region===this.regionKey;
@@ -71,11 +72,18 @@ export class WeatherView{
     const f=forecastOrder(this.requestedFrame??this.frame,total).find(f=>grids.get(f)?.quality!=='fine');if(f===undefined)break;
     const detail=await data.detailGrid(f,region,129,valid);
     if(!valid()||this.data!==data)return;grids.set(f,detail);
-    if(this.frame===f&&!this.loading&&(!this.timeTransition||this.blend===1)){const elapsed=this.elapsed;await this.load(f);this.elapsed=elapsed;}
+    if((this.frame===f||(this.heldFrame!=null&&Math.floor(this.heldFrame)===f))&&!this.loading&&(!this.timeTransition||this.blend===1||this.heldFrame!=null)){const elapsed=this.elapsed;await this.load(f);this.elapsed=elapsed;}
     $('weatherDetailStatus').textContent=`Detailed weather ${[...grids.values()].filter(g=>g.quality==='fine').length}/${total} times ready. Global preview remains available.`;
    }
    $('weatherDetailStatus').textContent='Detailed weather ready for this view.';
   }catch(e){if(valid()){$('weatherDetailStatus').textContent='Detailed weather delayed; using the global preview. Retry loading this view to try again.';$('retryBuffer').hidden=false;}}
+ }
+ pauseForTravel(resetToNow=false){
+  this.playing=false;this.playLabel();if(!this.data.meta)return null;
+  this.heldFrame=resetToNow?frameAtTime(this.data.meta.times,Date.now()):(this.displayFrame??this.frame);this.requestedFrame=Math.ceil(this.heldFrame);
+  this.token++;this.loading=false;
+  if(resetToNow&&this.region)void this.load(this.requestedFrame);
+  return new Date(timeAtFrame(this.data.meta.times,this.heldFrame)).toISOString();
  }
  playLabel(){$('weatherPlay').textContent=this.playing?'Pause':'Play';}
  error(e){$('weatherLoad').textContent=e.message+' — retry weather.';$('weatherRetry').hidden=false;this.playing=false;this.playLabel();$('prepareStatus').textContent=e.message+' — retry weather in Settings.';}
@@ -91,13 +99,17 @@ export class WeatherView{
   this.load(this.requestedFrame??this.frame,true);
  }
  async load(frame,moved=false){
-  if(!this.data.meta||!this.region)return;this.data.prioritise?.(frame);const token=++this.token;this.requestedFrame=frame;this.loading=true;
+  if(!this.data.meta||!this.region)return;const retainTime=moved&&this.current&&this.timeTransition;let held=this.heldFrame??(retainTime?this.displayFrame:null);if(held!=null)frame=Math.ceil(held);this.data.prioritise?.(frame);const token=++this.token;this.requestedFrame=frame;this.loading=true;
   $('weatherLoad').textContent='Loading IFS for this view…';$('weatherRetry').hidden=true;
   try{const prepared=this.prepared?.region===this.regionKey?this.prepared.grids.get(frame):null;let grid=prepared||await this.data.grid(frame,this.region,129,()=>token===this.token);if(token!==this.token)return;const detail=this.prepared?.region===this.regionKey?this.prepared.grids.get(frame):null;if(detail?.quality==='fine')grid=detail;
+   if(retainTime&&this.playing)held=Math.min(frame,this.displayFrame);
+   let heldPrevious=null;
+   if(held!=null&&held%1){heldPrevious=this.prepared?.region===this.regionKey?this.prepared.grids.get(Math.floor(held)):null;heldPrevious??=await this.data.grid(Math.floor(held),this.region,129,()=>token===this.token);if(token!==this.token)return;}
    const old=this.current,oldFrame=this.frame;
    this.timeTransition=Boolean(!moved&&old&&this.playing&&frame===oldFrame+1);
    this.fromFrame=this.timeTransition?oldFrame:frame;
    this.endHold=0;this.current=grid;this.previous=!moved&&old&&(this.timeTransition||frame===oldFrame)?old:grid;this.frame=frame;this.blend=this.previous===grid?1:0;
+   if(held!=null){this.previous=heldPrevious||grid;this.fromFrame=Math.floor(held);this.timeTransition=!!heldPrevious;this.blend=heldPrevious?held-Math.floor(held):1;}
    this.build(moved);this.group.visible=true;this.loading=false;this.elapsed=0;
    this.updateTimeDisplay();
    $('weatherLoad').textContent=(grid.quality==='coarse'?'IFS 1° global preview · run ':'IFS 0.1° · run ')+this.data.meta.initial_utc.slice(0,16).replace('T',' ')+' UTC';this.readout();if(moved||this.prepared?.region!==this.regionKey)this.prepare();

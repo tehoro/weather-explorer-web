@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import {placeTiles,selectPlaces} from './place-selection.mjs?v=20261122ak';
-import {meshSightGrid,terrainBlocksSight} from './place-visibility.mjs?v=20261122ak';
+import {placeTiles,selectPlaces} from './place-selection.mjs?v=20261122an';
+import {meshSightGrid,terrainBlocksSight} from './place-visibility.mjs?v=20261122an';
 export class PlaceLabels{
  constructor(camera,context,projectPlace){
   this.camera=camera;this.context=context;this.projectPlace=projectPlace;this.visible=[];this.vector=new THREE.Vector3();this.cache=new Map();this.rows=[];this.selected=new Set();this.key='';this.token=0;this.elapsed=0;this.widths=new Map();
