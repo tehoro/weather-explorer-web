@@ -16,11 +16,11 @@ export class PrecipitationStreaks{
     vec2 d=(b.xy/b.w-a.xy/a.w)*viewport;
     if(length(d)<6.){b.xy+=vec2(0.,6./viewport.y)*b.w;d=(b.xy/b.w-a.xy/a.w)*viewport;}
     vec2 normal=normalize(vec2(-d.y,d.x));vec4 p=mix(a,b,position.x);p.xy+=normal*position.y*2./viewport*p.w;gl_Position=p;
-   }`,fragmentShader:`varying float edge;void main(){gl_FragColor=vec4(.76,.91,1.,.78*(1.-smoothstep(.55,1.,abs(edge))));
+   }`,fragmentShader:`varying float edge;void main(){gl_FragColor=vec4(.52,.78,1.,.78*(1.-smoothstep(.55,1.,abs(edge))));
     #include <colorspace_fragment>
    }`}));
   this.snowGeometry=new THREE.BufferGeometry();this.snowGeometry.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(this.count*3),3));
-  this.snow=new THREE.Points(this.snowGeometry,new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{pixelRatio:{value:1}},vertexShader:`uniform float pixelRatio;void main(){gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=3.*pixelRatio;}`,fragmentShader:`void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;gl_FragColor=vec4(1.,1.,1.,.8*(1.-smoothstep(.15,.5,r)));}`}));
+  this.snow=new THREE.Points(this.snowGeometry,new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{pixelRatio:{value:1}},vertexShader:`uniform float pixelRatio;void main(){gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=5.*pixelRatio;}`,fragmentShader:`void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;gl_FragColor=vec4(1.,1.,1.,.95*(1.-smoothstep(.3,.5,r)));}`}));
   for(const obj of [this.rain,this.snow]){obj.frustumCulled=false;obj.visible=false;group.add(obj);}
  }
  visible(on){this.rain.visible=this.snow.visible=on;}

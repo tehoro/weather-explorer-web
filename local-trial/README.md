@@ -654,3 +654,17 @@ Checks: `test_refresh.py` covers complete-run discovery and atomic publication,
 including failure retention. `test-run-refresh.mjs` covers staging, adoption,
 failures and changed views. Precipitation tests cover the strip instance count.
 Browser verification showed the new run and visible streaks without console errors.
+
+### Snow visibility and consistent loading status (build F)
+
+Drifting snow uses brighter five-CSS-pixel soft discs (previously three pixels),
+with a fuller centre. Rain has a slightly stronger blue tint to distinguish it
+from yellow wind trails; snow stays white. Snow still falls over seven seconds through the particle
+layer, compared with 1.5 seconds for rain. Density and original symbols are unchanged.
+
+Loading details now separates elevation meshes from water/land-cover completeness.
+Both displays use the same viewport-only counts. Missing cover can no longer look
+like a fully ready view just because its elevation mesh is present. Buffering keeps
+watching after tile failures, so a successful terrain Retry clears the warning
+automatically and preserves the Play/Pause choice. Camera and effects keep moving.
+The buffering browser test covers this recovery; particle tests check slower snow.

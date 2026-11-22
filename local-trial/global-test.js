@@ -1,3 +1,4 @@
+import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
 import {GlobalRelief} from './global-relief.mjs?v=20261122c';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
@@ -5,7 +6,7 @@ import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122c';
-import {WeatherView} from './weather-view.mjs?v=20261122e';
+import {WeatherView} from './weather-view.mjs?v=20261122f';
 import {setupUI} from './global-ui.mjs?v=20261122e';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
@@ -71,11 +72,10 @@ function rebase(){
  rebasing=true;camera.position.sub(shift);controls.target.sub(shift);controls.update();rebasing=false;
  for(const {mesh,p}of tiles.values())position(mesh,p);positionBackdrop();if(weatherView)weatherView.regionKey=null;
 }
-function status(){const c=centre(),d=detail(camera.position.distanceTo(controls.target));
- $('status').textContent=`${c.lat.toFixed(4)}°, ${c.lon.toFixed(4)}°\nAutomatic detail · about ${Math.round(d.span*111200/d.cells)} m sampling\n${[...needed.keys()].filter(k=>tiles.has(k)).length}/${needed.size} visible terrain patches · ${active} loading\n${failures.size?failures.size+' patches need retry; source unavailable.':'Pan freely: new areas load automatically.'}`;
- if([...needed.keys()].some(k=>waterMissing.has(k)))$('status').textContent+='\nWater classification unavailable in part of this view.';
- $('retry').hidden=failures.size===0&&waterMissing.size===0;
- if(waterActive||waterQueue.length)$('status').textContent+='\nRefining water and land cover…';
+function preloadStatus(){return {key:terrainKey,...terrainReadiness(needed,tiles,failures,waterMissing)};}
+function status(){const c=centre(),d=detail(camera.position.distanceTo(controls.target)),s=preloadStatus();
+ $('status').textContent=`${c.lat.toFixed(4)}°, ${c.lon.toFixed(4)}°\nAutomatic detail · about ${Math.round(d.span*111200/d.cells)} m sampling\nTerrain elevation: ${s.elevation}/${s.total} patches\nWater & land cover: ${s.ready}/${s.total} patches (including ocean)\n${s.failed?s.terrainFailed+' elevation and '+s.coverFailed+' water/land-cover patches need retry.':s.ready===s.total?'All detail for this view is ready.':'Loading detail for this view…'}`;
+ $('retry').hidden=s.failed===0;
  if(reader)$('status').textContent+=`\n${reader.saved.hits} terrain/land-cover grids reused from browser storage.`;
 }
 const terrainStops=[[0,'#234e45'],[200,'#477353'],[700,'#7a8960'],[1400,'#9b9b80'],[2200,'#b3b3aa'],[3000,'#e7eff0']].map(([z,c])=>[z,new THREE.Color(c)]);
@@ -174,7 +174,7 @@ function weatherContext(){
  const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=points.map(p=>p[0]),zs=points.map(p=>p[1]),scale=111.2*cos();
  const west=Math.floor((c.lon+Math.max(-2400,Math.min(...xs))/scale)*4)/4,north=Math.min(90,Math.ceil((c.lat-Math.max(-2400,Math.min(...zs))/111.2)*4)/4);
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
- return {preloadStatus:()=>({key:terrainKey,total:needed.size,ready:[...needed.keys()].filter(k=>tiles.has(k)&&(tiles.get(k).mesh.userData.ocean||tiles.get(k).mesh.userData.water)).length,failed:failures.size+waterMissing.size}),camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
+ return {preloadStatus,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};
 }

@@ -10,6 +10,9 @@ const view={liveContext:{distance:50,target:{x:0,z:0}},bounds:{west:-100,east:10
 particles.update(view,1/30);assert.ok(particles.rainGeometry.instanceCount>1000);assert.equal(particles.snowGeometry.drawRange.count,0);
 snow=8;particles.update(view,1/30);assert.equal(particles.rainGeometry.instanceCount,0);assert.ok(particles.snowGeometry.drawRange.count>1000);
 for(let i=0;i<particles.snowGeometry.drawRange.count;i++)assert.ok(particles.snowGeometry.attributes.position.getY(i)>=.325-1e-6);
+// Identical particle falls more slowly as snow than rain.
+particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};snow=8;particles.update(view,.1);const snowY=particles.particles[0].y;
+particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};snow=0;particles.update(view,.1);assert.ok(snowY>particles.particles[0].y);
 rain=snow=0;particles.update(view,1/30);assert.equal(particles.rainGeometry.instanceCount,0);assert.equal(particles.snowGeometry.drawRange.count,0);
 particles.visible(false);assert.equal(particles.rain.visible,false);assert.equal(particles.snow.visible,false);
 console.log('Rain-only, snow-only, dry conditions, terrain clearance and visibility passed.');

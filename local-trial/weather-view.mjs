@@ -1,5 +1,5 @@
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122e';
-import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122e';
+import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122f';
 import {IsobarLines} from './isobar-lines.mjs?v=20261120s';
 import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
@@ -46,10 +46,15 @@ export class WeatherView{
   void (async()=>{try{for(const f of frames){if(!valid())return;grids.set(f,await this.data.grid(f,this.region,129,valid));}}catch(e){error=e;}finally{done=true;}})();
   try{
    while(valid()){
-    const terrain=this.context().preloadStatus();$('prepareStatus').textContent=`Loading detail… Terrain ${terrain.ready}/${terrain.total} · forecast ${grids.size}/${this.data.meta.times.length}. You can keep moving around.`;
+    const terrain=this.context().preloadStatus();$('prepareStatus').textContent=`Loading detail… Terrain & land cover ${terrain.ready}/${terrain.total} · forecast ${grids.size}/${this.data.meta.times.length}. You can keep moving around.`;
     if(error)throw error;
-    if(terrain.failed)throw Error('Some terrain or land-cover tiles could not load. Use Retry in View & terrain, then Retry loading this view.');
-    if(done&&terrain.ready===terrain.total&&terrain.total){$('prepareStatus').hidden=true;this.preparing=false;this.elapsed=0;return;}
+    // Keep observing after a terrain error: Retry or a changed view can recover
+    // without leaving a stale warning or cancelling the user's Play choice.
+    if(terrain.failed){
+     const missing=[terrain.terrainFailed?`${terrain.terrainFailed} terrain elevation patches`:null,(terrain.coverFailed??terrain.failed)?`${terrain.coverFailed??terrain.failed} water/land-cover patches`:null].filter(Boolean).join(' and ');
+     $('prepareStatus').textContent=`Could not load ${missing}. Use Retry in View & terrain. Forecast playback will be ready once these arrive.`;
+    }
+    if(done&&!terrain.failed&&terrain.ready===terrain.total&&terrain.total){$('prepareStatus').hidden=true;this.preparing=false;this.elapsed=0;return;}
     await new Promise(resolve=>setTimeout(resolve,300));
    }
   }catch(e){if(valid()){$('prepareStatus').textContent=e.message;$('retryBuffer').hidden=false;this.playing=false;this.playLabel();}}
