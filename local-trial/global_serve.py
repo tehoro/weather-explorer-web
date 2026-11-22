@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import sys
 import threading
 from urllib.parse import unquote,urlsplit
 from serve import Handler,HERE
@@ -92,4 +93,9 @@ if __name__=='__main__':
     OUT.mkdir(exist_ok=True)
     fetch(ROOT+'/tileList.txt',OUT/'tileList.txt')
     print('Worldwide terrain: http://127.0.0.1:8092/global-test.html',flush=True)
-    ThreadingHTTPServer(('127.0.0.1',8092),GlobalHandler).serve_forever()
+    # Independent low-priority global preparation; HTTP requests only serve files.
+    log=(HERE/'global-refresh.log').open('a')
+    updater=subprocess.Popen([sys.executable,str(HERE/'auto_refresh.py'),'--watch'],stdout=log,stderr=subprocess.STDOUT)
+    try:ThreadingHTTPServer(('127.0.0.1',8092),GlobalHandler).serve_forever()
+    finally:
+        updater.terminate();log.close()

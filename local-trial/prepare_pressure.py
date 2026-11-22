@@ -4,8 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from global_weather import OUTPUT,CACHE_ROOT,decode
 
-def build():
-    latest=json.loads((OUTPUT/'latest.json').read_text());root=OUTPUT/latest['run'];meta=json.loads((root/'manifest.json').read_text())
+def build(run=None):
+    run=run or json.loads((OUTPUT/'latest.json').read_text())['run'];root=OUTPUT/run;meta=json.loads((root/'manifest.json').read_text())
     for step in meta['steps']:
         out=root/'pressure'/f'{step:03}';out.mkdir(parents=True,exist_ok=True)
         pressure=decode(CACHE_ROOT/meta['run']/f'{step}-msl-0.grib2')/100

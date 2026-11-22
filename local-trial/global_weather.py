@@ -98,6 +98,7 @@ def build(args):
     previous={p:decode(path) for p,path,m in initial}
     source_bytes+=sum(m['bytes'] for p,path,m in initial);new_bytes+=sum(m['new_bytes'] for p,path,m in initial)
     for step in range(args.start,args.end+1,3):
+        if getattr(args,'progress',None):args.progress((step-args.start)//3)
         tick=time.monotonic();frame_dir=out/f'{step:03}';report=frame_dir/'report.json'
         inputs=fetch_fields(args.run,step,PARAMS)
         source_bytes+=sum(m['bytes'] for p,path,m in inputs);new_bytes+=sum(m['new_bytes'] for p,path,m in inputs)
@@ -135,7 +136,8 @@ def build(args):
     report={'run':args.run,'frames':frames,'source_bytes':source_bytes,'downloaded_this_build_bytes':new_bytes,
             'fine_bytes':sum(f['fine_bytes'] for f in frames),'coarse_bytes':sum(f['coarse_bytes'] for f in frames),
             'elapsed_seconds':round(time.monotonic()-began,3),'cache_note':'Existing raw GRIB cache reused where available; download time is not a cold-start benchmark.'}
-    write(out/'benchmark.json',report);write(OUTPUT/'latest.json',{'run':args.run,'manifest':args.run+'/manifest.json'})
+    write(out/'benchmark.json',report)
+    if getattr(args,'publish',True):write(OUTPUT/'latest.json',{'run':args.run,'manifest':args.run+'/manifest.json'})
     print(json.dumps({k:v for k,v in report.items() if k!='frames'},indent=2),flush=True)
 
 if __name__=='__main__':

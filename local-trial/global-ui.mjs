@@ -8,6 +8,7 @@ export function setupUI(){
  const nodes=[...aside.children],weather=$('weatherControls');
  const precipitation=document.createElement('div');precipitation.innerHTML='<label for="precipitationStyle">Precipitation style</label><select id="precipitationStyle"><option value="symbols">Raindrops &amp; snowflakes</option><option value="streaks">Rain streaks &amp; drifting snow</option></select><p><small>Streaks use small, slower drifting snow particles. Density follows IFS precipitation; falling heights and speeds are illustrative.</small></p>';
  weather.append(precipitation);
+ const refresh=document.createElement('p');refresh.id='runRefreshStatus';refresh.setAttribute('role','status');refresh.hidden=true;weather.prepend(refresh);
  const loading=document.createElement('div');loading.id='prepareStatus';loading.className='glass';loading.setAttribute('role','status');loading.hidden=true;loading.style.cssText='position:fixed;left:20px;top:90px;max-width:340px;padding:12px;z-index:8;pointer-events:none';document.body.append(loading);
  const retryBuffer=document.createElement('button');retryBuffer.id='retryBuffer';retryBuffer.textContent='Retry loading this view';retryBuffer.hidden=true;weather.append(retryBuffer);
  const location=document.createElement('details');location.open=true;location.innerHTML='<summary>Location</summary>';

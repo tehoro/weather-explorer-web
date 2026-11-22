@@ -567,8 +567,7 @@ wind, precipitation and cloud effects continue. Forecast playback waits until
 ready, then continues if Play is active; a user-paused timeline remains paused.
 Panning to a different footprint invalidates the old buffer. Failures stop forecast
 playback and offer retry instead of silently claiming completion. Camera controls
-remain usable. The existing trial forecast is not automatically refreshed to a new
-IFS run by this feature.
+remain usable. Automatic IFS run refresh is described below (build E).
 
 The viewport forecast grids are kept in memory for immediate playback. Raw tile
 cache size remains bounded. Detailed terrain still has the existing tile budget;
@@ -625,3 +624,33 @@ The camera can now pull back to 3,200 km rather than 1,200 km. At the existing
 fit the North, South and Stewart islands comfortably when centred on New Zealand.
 The far clipping plane and tilted-camera footprint limit increase alongside it.
 Terrain selection retains its bounded tile budget and global relief foundation.
+
+
+### Automatic forecast refresh and clearer rain (build E)
+
+`global_serve.py` starts a separate low-priority `auto_refresh.py --watch` process.
+While the local server runs, it checks Open Data every ten minutes, AWS first and
+ECMWF as fallback. Every required surface field and forecast time must be present
+before a run is selected. It builds global 0.1° tiles for +3 to +84 hours, including
+native pressure, and validates every tile before atomically replacing `latest.json`.
+Failed or incomplete builds leave the previous forecast available. The newest and
+preceding completed packages are retained; older generated packages are pruned.
+The builder needs at least 4 GiB free disk space. This is background preparation,
+not per-request computation, and does not alter production deployment.
+
+The browser checks for a published replacement every 30 seconds. It loads all
+new forecast times for the current footprint into a separate buffer while the old
+run keeps animating. It then blends to the nearest valid time in the new run,
+preserving the camera and Play/Pause choice. Panning invalidates pending adoption;
+loading resumes for the new footprint. Settings shows refresh progress or retries.
+Run-specific cache keys prevent mixing forecasts. On first opening, the timeline
+selects the time nearest now unless the URL requests a particular forecast time.
+
+Rain streaks now use screen-width strips rather than single-device-pixel WebGL
+lines: two CSS pixels wide, 50% longer and brighter. Their density still follows
+forecast precipitation. Original raindrops and drifting snow remain available.
+
+Checks: `test_refresh.py` covers complete-run discovery and atomic publication,
+including failure retention. `test-run-refresh.mjs` covers staging, adoption,
+failures and changed views. Precipitation tests cover the strip instance count.
+Browser verification showed the new run and visible streaks without console errors.

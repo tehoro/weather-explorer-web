@@ -24,10 +24,10 @@ export function bilinear(a,n,x,y){
 }
 export class WeatherData{
  constructor(){this.cache=new Map();}
- async init(){const latest=await this.json('/global-data/latest.json');this.meta=await this.json('/global-data/'+latest.manifest);return this.meta;}
- async json(url){const r=await fetch(url);if(!r.ok)throw Error('IFS manifest unavailable');return r.json();}
+ async init(latest=null){latest=latest||await this.json('/global-data/latest.json');this.meta=await this.json('/global-data/'+latest.manifest);return this.meta;}
+ async json(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error('IFS manifest unavailable');return r.json();}
  async tile(frame,x,y){
-  const m=this.meta,key=`${frame}/${x}/${y}`;
+  const m=this.meta,key=`${m.run}/${frame}/${x}/${y}`;
   if(this.cache.has(key)){const p=this.cache.get(key);this.cache.delete(key);this.cache.set(key,p);return p;}
   const promise=(async()=>{const r=await fetch(`/global-data/${m.run}/${String(m.steps[frame]).padStart(3,'0')}/fine/${String(x).padStart(2,'0')}-${String(y).padStart(2,'0')}.bin.gz`);if(!r.ok)throw Error('IFS tile unavailable');const tile=decodeTile(await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),m);
    if(m.pressure_path){const p=await fetch(`/global-data/${m.run}/${m.pressure_path}/${String(m.steps[frame]).padStart(3,'0')}/${String(x).padStart(2,'0')}-${String(y).padStart(2,'0')}.bin.gz`);if(!p.ok)throw Error('IFS pressure tile unavailable');tile.pressure=decodePressure(await new Response(p.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());}return tile;})();
