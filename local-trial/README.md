@@ -692,3 +692,13 @@ Rain ribbon tails follow the same velocity as their moving heads. Original symbo
 particles also advect with surface wind. These are illustrative accelerated motions,
 not a physical simulation of individual hydrometeors. Particle tests cover both
 wind directions, both phases, ribbon orientation and slower snow descent.
+
+### Weather-only playback readiness (build I)
+
+Forecast playback now waits only for weather buffering, not terrain or land cover.
+The terrain progress monitor continues independently, including retry warnings and
+recovery, while forecast time can advance over the available coarse/detail surface.
+The Play/Pause choice is preserved. Missing weather still holds playback. Browser
+buffering checks cover zero terrain ready, failed cover tiles, terrain-only detail
+changes, missing weather and stale requests. This replaces the earlier requirement
+that both weather and terrain be complete before time playback starts.

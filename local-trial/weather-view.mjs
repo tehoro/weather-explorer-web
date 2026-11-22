@@ -38,7 +38,7 @@ export class WeatherView{
  async prepare(){
   if(!this.current||this.loading)return;
   const id=this.prepareId=(this.prepareId||0)+1,region=this.regionKey;
-  this.preparing=true;$('prepareStatus').hidden=false;$('retryBuffer').hidden=true;
+  this.preparing=true;this.monitoringTerrain=true;$('prepareStatus').hidden=false;$('retryBuffer').hidden=true;
   const valid=()=>id===this.prepareId&&region===this.regionKey;
   const grids=this.prepared?.region===region?this.prepared.grids:new Map([[this.frame,this.current]]);this.prepared={region,grids};let done=false,error=null;
   // All times for this viewport, with imminent frames first. Never download a global forecast here.
@@ -48,17 +48,19 @@ export class WeatherView{
    while(valid()){
     const terrain=this.context().preloadStatus();$('prepareStatus').textContent=`Loading detail… Terrain & land cover ${terrain.ready}/${terrain.total} · forecast ${grids.size}/${this.data.meta.times.length}. You can keep moving around.`;
     if(error)throw error;
+    if(done&&this.preparing){this.preparing=false;this.elapsed=0;}
+    if(done)$('prepareStatus').textContent=`Weather ready · terrain & land cover ${terrain.ready}/${terrain.total} loading in the background. Forecast playback is available.`;
     // Keep observing after a terrain error: Retry or a changed view can recover
     // without leaving a stale warning or cancelling the user's Play choice.
     if(terrain.failed){
      const missing=[terrain.terrainFailed?`${terrain.terrainFailed} terrain elevation patches`:null,(terrain.coverFailed??terrain.failed)?`${terrain.coverFailed??terrain.failed} water/land-cover patches`:null].filter(Boolean).join(' and ');
-     $('prepareStatus').textContent=`Could not load ${missing}. Use Retry in View & terrain. Forecast playback will be ready once these arrive.`;
+     $('prepareStatus').textContent=`Could not load ${missing}. Use Retry in View & terrain. ${done?'Weather is ready; forecast playback is available.':'Weather is still loading.'}`;
     }
     if(done&&!terrain.failed&&terrain.ready===terrain.total&&terrain.total){$('prepareStatus').hidden=true;this.preparing=false;this.elapsed=0;return;}
     await new Promise(resolve=>setTimeout(resolve,300));
    }
   }catch(e){if(valid()){$('prepareStatus').textContent=e.message;$('retryBuffer').hidden=false;this.playing=false;this.playLabel();}}
-  finally{if(id===this.prepareId)this.preparing=false;}
+  finally{if(id===this.prepareId){this.preparing=false;this.monitoringTerrain=false;}}
  }
  playLabel(){$('weatherPlay').textContent=this.playing?'Pause':'Play';}
  error(e){$('weatherLoad').textContent=e.message+' — retry weather.';$('weatherRetry').hidden=false;this.playing=false;this.playLabel();$('prepareStatus').textContent=e.message+' — retry weather in Settings.';}
@@ -66,7 +68,7 @@ export class WeatherView{
   if(!this.data.meta)return;updateForecastClock(this.data.meta,this.frame,this.context().centre);
   const c=this.context(),r=c.region,key=[r.west,r.north,r.lonSpan,r.latSpan].map(v=>v.toFixed(3)).join('/');
   const terrain=c.preloadStatus(),changed=terrain.key!==this.terrainKey;this.terrainKey=terrain.key;
-  if(!force&&key===this.regionKey){if(changed&&!this.preparing&&!this.loading&&terrain.ready<terrain.total)this.prepare();return;}
+  if(!force&&key===this.regionKey){if(changed&&!this.monitoringTerrain&&!this.loading&&terrain.ready<terrain.total)this.prepare();return;}
   this.regionKey=key;this.region=r;this.prepareId=(this.prepareId||0)+1;this.preparing=true;this.prepared=null;$('prepareStatus').hidden=false;$('prepareStatus').textContent='Loading weather for this view… You can keep moving around.';
   // Keep the previous forecast moving in its own geographic footprint. Rebase
   // its geometry with the camera instead of applying old weather to new land.
