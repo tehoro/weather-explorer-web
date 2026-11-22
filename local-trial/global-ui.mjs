@@ -26,12 +26,19 @@ export function setupUI(){
   else if(node.tagName==='P')help.append(node);
   else if(node.tagName==='A')view.append(node);
  }
+ const footer=document.querySelector('footer'),credits=document.createElement('section');
+ credits.id='dataCredits';credits.tabIndex=-1;
+ credits.innerHTML='<h3>Data sources and licences</h3>'+footer.innerHTML;
+ credits.insertAdjacentHTML('beforeend','<p>Forecasts are based on ECMWF IFS Open Data, accessed through AWS with ECMWF as fallback. Fields are resampled, interpolated and unit-converted. <a href="https://www.ecmwf.int/en/forecasts/datasets/open-data">Weather source</a> · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0 licence</a>. ECMWF does not accept liability for errors, omissions, availability or loss arising from use of its data.</p><p>Terrain produced using Copernicus WorldDEM™-90 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved. The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM™-90.</p><p><a href="https://esa-worldcover.org/en/data-access">WorldCover source and citation</a> · <a href="https://www.geonames.org/">GeoNames source</a>. These datasets are used under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. Place names are filtered and tiled; land-cover data are resampled for display.</p>');
+ help.append(credits);
+ footer.innerHTML='Data: © 2026 ECMWF · <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a> · <button id="creditsOpen" aria-haspopup="dialog" aria-controls="helpDialog">Data credits</button>';
+ $('creditsOpen').onclick=()=>{help.showModal();credits.focus();credits.scrollIntoView({block:'start'});};
  aside.replaceChildren();const panelHeader=document.createElement('div');panelHeader.className='panelHeading';panelHeader.innerHTML='<h2>Settings</h2><button id="closeSettings" aria-label="Close settings">×</button>';aside.append(panelHeader);
  const body=document.createElement('div');body.className='panelBody';body.append(location,weather,reading,view,diagnostics);aside.append(body);
  function panel(open){aside.hidden=!open;document.body.classList.toggle('panelClosed',!open);$('settingsToggle').setAttribute('aria-expanded',String(open));}
  $('closeSettings').onclick=()=>panel(false);$('settingsToggle').onclick=()=>{document.body.classList.remove('clean');panel(aside.hidden);};
  $('cleanView').onclick=()=>{const clean=document.body.classList.toggle('clean');panel(false);$('cleanView').textContent=clean?'Show controls':'Clean view';};
- $('helpOpen').onclick=()=>help.showModal();$('helpClose').onclick=()=>help.close();
+ $('helpOpen').onclick=()=>{help.showModal();help.scrollTop=0;};$('helpClose').onclick=()=>help.close();
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!help.open){document.body.classList.remove('clean');$('cleanView').textContent='Clean view';panel(false);}});
  if(matchMedia('(max-width:700px)').matches)panel(false);
 }

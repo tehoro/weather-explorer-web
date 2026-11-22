@@ -9,3 +9,5 @@
 #locationSearch #search{width:100%;margin:8px 0}#matches button{display:block;width:100%;text-align:left;white-space:normal;margin:4px 0}#matches p{font-size:12px}#matches{max-height:280px;overflow:auto}
 
 #viewAngle{display:block;width:100%;margin:8px 0 16px}
+
+footer button{pointer-events:auto;border:0;border-radius:0;background:none;color:inherit;padding:0;font:inherit;text-decoration:underline;cursor:pointer}#dataCredits{margin-top:24px;padding-top:12px;border-top:1px solid var(--edge);font-size:13px;line-height:1.6}#dataCredits h3{font-size:17px}

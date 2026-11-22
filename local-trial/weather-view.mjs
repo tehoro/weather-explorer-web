@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122j';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
-const noise=`float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}float filteredNoise(vec2 p){float footprint=max(length(dFdx(p)),length(dFdy(p)));return mix(noise(p),.5,smoothstep(.25,1.25,footprint));}float fbm(vec2 p){return .57*filteredNoise(p)+.28*filteredNoise(p*2.03)+.15*filteredNoise(p*4.07);}`;
+
 export class WeatherView{
  constructor(scene,context){
   this.scene=scene;this.context=context;this.data=new WeatherData();this.group=new THREE.Group();scene.add(this.group);this.token=0;this.frame=0;this.playing=false;this.elapsed=0;this.blend=1;this.particles=[];this.rain=[];this.meshes=[];
@@ -108,17 +108,18 @@ export class WeatherView{
   const {west,east,north,south}=this.bounds,w=east-west,h=south-north;
   this.uniforms={cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
   const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.computeBoundingSphere();return g;};
-  const vertex=`varying vec2 vUv;varying vec3 cloudPosition;void main(){vUv=uv;cloudPosition=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
+  const vertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
   this.surfaceUniforms??={};
   for(const [key,uniform]of Object.entries(this.uniforms)){this.surfaceUniforms[key]??={value:uniform.value};this.surfaceUniforms[key].value=uniform.value;}
   this.surfaceUniforms.weatherBounds??={value:new THREE.Vector4()};this.surfaceUniforms.weatherBounds.value.set(west,north,w,h);
   this.attachSurfaces();
   this.clouds=[];
-  // Schematic layers above the display terrain, not forecast cloud-base heights.
+  // Smooth forecast coverage: synthetic fine noise stretched into horizontal
+  // streaks in oblique views. Schematic heights are not forecast cloud bases.
   for(let layer=0;layer<3;layer++)for(let slab=0;slab<3;slab++){
    const uniforms={...this.uniforms,layer:{value:layer},slab:{value:slab},opacity:{value:layer===2?.12:.23}};
-   const mesh=new THREE.Mesh(geometry([1.2,4,8][layer]+slab*[.3,.5,.35][layer]),new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms,vertexShader:vertex,fragmentShader:`varying vec2 vUv;varying vec3 cloudPosition;uniform sampler2D cloudA,cloudB;uniform float blend,layer,slab,clock,opacity;uniform vec2 extent;${noise}
-void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float cover=layer<.5?c.r:layer<1.5?c.g:c.b;vec2 pos=vUv*extent/8.+vec2(slab*.43,layer*4.);if(layer>1.5)pos.x*=.32;float angle=abs(normalize(cameraPosition-cloudPosition).y);float n=mix(.5,fbm(pos),smoothstep(.12,.5,angle));float edge=smoothstep(0.,.025,vUv.x)*smoothstep(0.,.025,vUv.y)*smoothstep(0.,.025,1.-vUv.x)*smoothstep(0.,.025,1.-vUv.y);float softness=max(.12,fwidth(n));float a=smoothstep(1.-cover-softness,1.-cover+softness,n)*cover*opacity*edge;gl_FragColor=vec4(mix(vec3(.58,.66,.72),vec3(1.),n),a);\n#include <colorspace_fragment>\n}`}));
+   const mesh=new THREE.Mesh(geometry([1.2,4,8][layer]+slab*[.3,.5,.35][layer]),new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms,vertexShader:vertex,fragmentShader:`varying vec2 vUv;uniform sampler2D cloudA,cloudB;uniform float blend,layer,slab,clock,opacity;uniform vec2 extent;
+void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float cover=layer<.5?c.r:layer<1.5?c.g:c.b;float edge=smoothstep(0.,.025,vUv.x)*smoothstep(0.,.025,vUv.y)*smoothstep(0.,.025,1.-vUv.x)*smoothstep(0.,.025,1.-vUv.y);float a=smoothstep(.02,.85,cover)*cover*opacity*edge;gl_FragColor=vec4(vec3(.84,.88,.92),a);\n#include <colorspace_fragment>\n}`}));
    mesh.userData.layer=layer;this.clouds.push(mesh);this.meshes.push(mesh);this.group.add(mesh);
   }
   if(!this.wind)this.makeWind();if(!this.drops)this.makeRain();
