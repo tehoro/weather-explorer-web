@@ -1,22 +1,22 @@
 import {localPreviewReady} from './preview-readiness.mjs';
 import {ARRIVAL,ease,bezier,distanceKm,globeTravel} from './camera-travel.mjs';
 import {orbitStep,orbitOffset} from './camera-orbit.mjs';
-import {PointForecast} from './point-forecast.mjs?v=20261122at';
+import {PointForecast} from './point-forecast.mjs?v=20261123a';
 import {TerrainIndex} from './terrain-index.mjs';
 import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
-import {GlobalRelief} from './global-relief.mjs?v=20261122at';
+import {GlobalRelief} from './global-relief.mjs?v=20261123a';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {sample} from './terrain-raster.mjs?v=20261122l';
-import {TerrainWorker} from './terrain-worker-client.mjs';
-import {WeatherView} from './weather-view.mjs?v=20261122at';
-import {setupUI} from './global-ui.mjs?v=20261122at';
-import {PlaceLabels} from './place-labels.mjs?v=20261122at';
+import {TerrainWorker} from './terrain-worker-client.mjs?v=20261123a';
+import {WeatherView} from './weather-view.mjs?v=20261123a';
+import {setupUI} from './global-ui.mjs?v=20261123a';
+import {PlaceLabels} from './place-labels.mjs?v=20261123a';
 setupUI();
 const terrainScale=()=>Number(document.getElementById("terrainScale").value);
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
@@ -178,7 +178,7 @@ function scheduleRetry(){setTimeout(()=>{
 },retryDelay);}
 scheduleRetry();
 $('surfaceStyle').onchange=()=>{for(const {mesh}of tiles.values())paint(mesh);styleNote();};
-function styleNote(){$('styleNote').textContent=$('surfaceStyle').value==='relief'?'Weather3D elevation colours. Pale high ground is an elevation colour. Forecast snow and sea ice are shown separately when enabled.':($('surfaceStyle').value==='hybrid'?'90% relief · 10% land cover. ':'')+'WorldCover 2021 base colours. Forecast snow and sea ice are shown separately when enabled.';}$('north').onclick=()=>{const d=camera.position.distanceTo(controls.target);camera.position.copy(controls.target).add(new THREE.Vector3(0,d*.57,d*.82));controls.update();};
+function styleNote(){$('styleNote').textContent=$('surfaceStyle').value==='relief'?'Elevation colours with rocky high ground. Forecast snow and sea ice are shown separately when enabled.':($('surfaceStyle').value==='hybrid'?'Relief with land-cover colours; mapped snow/ice and bare ground are emphasised. ':'')+'WorldCover 2021 base colours. Forecast snow and sea ice are shown separately when enabled.';}$('north').onclick=()=>{const d=camera.position.distanceTo(controls.target);camera.position.copy(controls.target).add(new THREE.Vector3(0,d*.57,d*.82));controls.update();};
 $('in').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(.55).add(controls.target);controls.update();};$('out').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(1.8).add(controls.target);controls.update();};
 for(const b of document.querySelectorAll('[data-pan]'))b.onclick=()=>{zoomFocus=null;const [x,z]=b.dataset.pan.split(',').map(Number),d=camera.position.distanceTo(controls.target)*.6,shift=new THREE.Vector3(x*d,0,z*d);camera.position.add(shift);controls.target.add(shift);controls.update();update();};
 const terrainIndex=new TerrainIndex();let indexedRevision=-1;

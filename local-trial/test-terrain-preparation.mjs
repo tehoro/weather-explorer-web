@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {colourTile,terrainGeometry} from './terrain-preparation.mjs';
+import {colourTile,terrainGeometry} from './terrain-preparation.mjs?v=20261123a';
 const p={west:0,south:0,span:1,cells:4,background:true},a=new Float32Array(49).fill(200);
 const g=terrainGeometry(p,a,false);
 assert.equal(g.positions.length,g.normals.length);assert.equal(g.uvs.length,g.positions.length/3*2);
@@ -10,3 +10,10 @@ assert.deepEqual([...sea.pixels.slice(0,3)],[18,56,78]);
 const water=new Float32Array(64*64).fill(80);
 assert.deepEqual(colourTile({p,a,water,ocean:false},'hybrid').pixels,sea.pixels);
 console.log('Worker preparation: geometry, indices, land/water masks and sea colour passed.');
+const high=new Float32Array(49).fill(4000),codes=code=>new Float32Array(64*64).fill(code);
+const rock=colourTile({p,a:high,ocean:false},'relief').pixels;
+const permanent=colourTile({p,a:high,water:codes(70),ocean:false},'hybrid').pixels;
+const bare=colourTile({p,a:high,water:codes(60),ocean:false},'hybrid').pixels;
+assert.ok(rock[0]<190&&rock[1]<190&&rock[2]<190,'Height alone must not imply snow');
+assert.ok(permanent[0]>220&&permanent[1]>220,'Mapped snow/ice remains white');
+assert.notDeepEqual([...bare.slice(0,3)],[...rock.slice(0,3)]);

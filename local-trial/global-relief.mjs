@@ -22,7 +22,7 @@ export class GlobalRelief{
   this.heights=decodeRelief(await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
   const texture=new THREE.DataTexture(this.heights,WIDTH,HEIGHT,THREE.RedFormat,THREE.FloatType);texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.needsUpdate=true;
   this.uniforms={elevationScale:{value:.001*this.scale},heights:{value:texture},anchor:{value:new THREE.Vector2()},extent:{value:new THREE.Vector4()},longitudeScale:{value:1},
-   colours:{value:['#234e45','#477353','#7a8960','#9b9b80','#b3b3aa','#e7eff0'].map(c=>new THREE.Color(c))},sea:{value:new THREE.Color('#12384e')}};
+   colours:{value:['#234e45','#477353','#7a8960','#9b9b80','#969187','#a39d94'].map(c=>new THREE.Color(c))},sea:{value:new THREE.Color('#12384e')}};
   const material=new THREE.ShaderMaterial({depthWrite:false,depthTest:false,uniforms:this.uniforms,vertexShader:`
    uniform sampler2D heights;uniform vec2 anchor;uniform vec4 extent;uniform float longitudeScale,elevationScale;
    varying vec2 location;

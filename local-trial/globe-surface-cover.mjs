@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {WeatherData} from './weather-engine.mjs?v=20261122at';
+import {WeatherData} from './weather-engine.mjs?v=20261123a';
 import {frameAtTime} from './forecast-position.mjs';
 // Only the small global cover previews are needed; no detailed weather tiles.
 export class GlobeSurfaceCover{
@@ -13,10 +13,10 @@ export class GlobeSurfaceCover{
   this.times=meta.times.map(t=>Date.parse(t));
   for(let i=0;i<this.times.length;i++){
    try{
-    const fields=await data.surfaceCover(i,'global.bin.gz',361*181),pixels=new Float32Array(361*181*2);
-    for(let j=0;j<361*181;j++){pixels[j*2]=Math.max(0,fields.snowCover[j]);pixels[j*2+1]=Math.max(0,fields.seaIce[j]);}
-    const texture=new THREE.DataTexture(pixels,361,181,THREE.RGFormat,THREE.FloatType);
-    texture.minFilter=texture.magFilter=THREE.NearestFilter;texture.needsUpdate=true;this.textures[i]=texture;
+    const fields=await data.surfaceCover(i,'global.bin.gz',361*181),pixels=new Float32Array(361*181*4);
+    for(let j=0;j<361*181;j++){pixels[j*4]=Math.max(0,fields.snowCover[j]);pixels[j*4+1]=Math.max(0,fields.seaIce[j]);pixels[j*4+2]=fields.snowlineWeighted[j];pixels[j*4+3]=fields.snowlineWeight[j];}
+    const texture=new THREE.DataTexture(pixels,361,181,THREE.RGBAFormat,THREE.FloatType);
+    texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.needsUpdate=true;this.textures[i]=texture;
    }catch{} // A missing frame must not replace another time's cover.
   }
  }
@@ -28,7 +28,9 @@ export class GlobeSurfaceCover{
     void main(){`).replace('#include <colorspace_fragment>',`
     if(coverReady>.5){
      vec2 coverUV=(vec2(mod(mod(location.x,360.)+360.,360.),90.-location.y)+.5)/vec2(361.,181.);
-     vec2 cover=mix(texture2D(coverA,coverUV).rg,texture2D(coverB,coverUV).rg,coverMix);
+     vec4 cover=mix(texture2D(coverA,coverUV),texture2D(coverB,coverUV),coverMix);
+     float line=cover.b/max(cover.a,.0001);
+     cover.r=mix(cover.r,smoothstep(line-.15,line+.15,elevation*.001)*max(cover.r,.65),cover.a);
      float ice=elevation<.1?cover.g:0.,snow=elevation>=.1?cover.r:0.;
      vec3 white=ice>0.?vec3(.72,.84,.89):vec3(.86,.91,.94);
      float relief=clamp(dot(gl_FragColor.rgb,vec3(.2126,.7152,.0722))*1.3+.45,.5,1.);

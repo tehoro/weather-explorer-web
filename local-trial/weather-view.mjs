@@ -1,8 +1,8 @@
 import {advanceWindHistory} from './wind-history.mjs';
 import {frameAtTime,timeAtFrame} from './forecast-position.mjs';
-import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261122at';
+import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261123a';
 import {replayFrame} from './playback-loop.mjs';
-import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261122at';
+import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261123a';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
@@ -12,7 +12,7 @@ import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122at';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261123a';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 
@@ -124,8 +124,8 @@ export class WeatherView{
   const context=this.context(),r=this.current.region;this.bounds=context.bounds(r);this.ground=context.ground;
   const {west,east,north,south}=this.bounds,w=east-west,h=south-north;
   const typeTexture=g=>{const t=this.texture(g,['rain','snow','ptype']);t.minFilter=t.magFilter=THREE.NearestFilter;this.textures.push(t);return t;};
-  const coverTexture=g=>{const t=this.texture(g,['snowCover','seaIce']);t.minFilter=t.magFilter=THREE.NearestFilter;this.textures.push(t);return t;};
-  this.uniforms={coverEnabled:{value:1},coverA:{value:coverTexture(this.previous)},coverB:{value:coverTexture(this.current)},ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
+  const coverTexture=g=>{const t=this.texture(g,['snowCover','seaIce','snowlineWeighted','snowlineWeight']);t.minFilter=t.magFilter=THREE.LinearFilter;this.textures.push(t);return t;};
+  this.uniforms={coverTerrainScale:{value:Number($('terrainScale').value)},coverEnabled:{value:1},coverA:{value:coverTexture(this.previous)},coverB:{value:coverTexture(this.current)},ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
   const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.userData.terrainRevision=context.terrainRevision;g.computeBoundingSphere();return g;};
   const vertex=`varying vec2 vUv;varying vec3 cloudPosition;void main(){vUv=uv;cloudPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
   this.surfaceUniforms??={};
@@ -163,7 +163,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
     beforeCompile.call(material,shader);
     // Only attach weather inputs. The coarse terrain owns an `extent` vec4;
     // copying all view uniforms replaced it with the weather extent vec2.
-    for(const key of ['coverEnabled','coverA','coverB','ptypeA','ptypeB','surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
+    for(const key of ['coverTerrainScale','coverEnabled','coverA','coverB','ptypeA','ptypeB','surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
     shader.vertexShader='varying vec3 weatherPosition;\n'+shader.vertexShader;
     // Coarse relief displaces its vertices in its own shader rather than the
     // standard material chunks. Sample weather at those same world positions.
@@ -172,7 +172,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
      shader.fragmentShader=shader.fragmentShader.replace('gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);','vec4 diffuseColor=vec4(elevation<.1?sea:c*shade,1.);\n#include <color_fragment>\ngl_FragColor=diffuseColor;');
     }
     shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>','weatherPosition=(modelMatrix*vec4(transformed,1.)).xyz;\n#include <project_vertex>');
-    shader.fragmentShader='varying vec3 weatherPosition; uniform sampler2D coverA,coverB,ptypeA,ptypeB,surfaceA,surfaceB,cloudA,cloudB; uniform float coverEnabled,blend,mode,isobars,isobarStep,weatherGridSize; uniform vec4 weatherBounds;\n'+shader.fragmentShader;
+    shader.fragmentShader='varying vec3 weatherPosition; uniform sampler2D coverA,coverB,ptypeA,ptypeB,surfaceA,surfaceB,cloudA,cloudB; uniform float coverTerrainScale,coverEnabled,blend,mode,isobars,isobarStep,weatherGridSize; uniform vec4 weatherBounds;\n'+shader.fragmentShader;
     shader.fragmentShader=typeShader+'\n'+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
      vec2 weatherUV=(weatherPosition.xz-weatherBounds.xy)/weatherBounds.zw;
@@ -180,8 +180,12 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
       vec2 sampleUV=(weatherUV*(weatherGridSize-1.)+.5)/weatherGridSize;
       vec4 s=mix(texture2D(surfaceA,sampleUV),texture2D(surfaceB,sampleUV),blend);
       float rain=mix(texture2D(cloudA,sampleUV).a,texture2D(cloudB,sampleUV).a,blend);
-      vec2 cover=mix(max(texture2D(coverA,sampleUV).rg,vec2(0.)),max(texture2D(coverB,sampleUV).rg,vec2(0.)),blend);
-      cover.r*=step(.001,weatherPosition.y);cover.g*=1.-step(.001,weatherPosition.y);
+      vec4 cover=mix(max(texture2D(coverA,sampleUV),vec4(0.)),max(texture2D(coverB,sampleUV),vec4(0.)),blend);
+      float terrainKm=weatherPosition.y/coverTerrainScale;
+      float line=cover.b/max(cover.a,.0001);
+      float mountainSnow=smoothstep(line-.15,line+.15,terrainKm)*max(cover.r,.65);
+      cover.r=mix(cover.r,mountainSnow,cover.a);
+      cover.r*=${material.userData.coarseRelief?'step(.0001,weatherPosition.y)':'diffuseColor.a'};cover.g*=1.-step(.001,weatherPosition.y);
       float whiten=max(cover.r,cover.g)*coverEnabled;
       vec2 iceUV=weatherPosition.xz/8.;
       float iceFilter=1.-smoothstep(.2,.8,max(length(dFdx(iceUV)),length(dFdy(iceUV))));
@@ -200,7 +204,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
 
      }`);
    };
-   material.customProgramCacheKey=()=> 'local-weather-cover-v1-'+Boolean(material.userData.coarseRelief);material.needsUpdate=true;
+   material.customProgramCacheKey=()=> 'local-weather-cover-v2-'+Boolean(material.userData.coarseRelief);material.needsUpdate=true;
   }
  }
  sample(name,x,z){if(!this.current)return NaN;const b=this.bounds,n=this.current.n,px=(x-b.west)/(b.east-b.west)*(n-1),py=(z-b.north)/(b.south-b.north)*(n-1);return bilinear(this.previous.fields[name],n,px,py)*(1-this.blend)+bilinear(this.current.fields[name],n,px,py)*this.blend;}
@@ -237,7 +241,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
   }
  }
  tick(dt){
-  if(!this.current||!this.group.visible)return;this.liveContext=this.context();const viewWidth=2*this.liveContext.distance*Math.tan(this.liveContext.camera.fov*Math.PI/360)*this.liveContext.camera.aspect;this.isobarSpacing=isobarInterval(viewWidth,this.isobarSpacing);this.surfaceUniforms.isobarStep.value=this.isobarSpacing;this.advanceTime(dt);this.updateTimeDisplay();this.uniforms.blend.value=this.blend;this.surfaceUniforms.blend.value=this.blend;this.uniforms.clock.value+=dt;this.isobarLines?.update(this,dt,this.isobarSpacing,$('pressureLayer').checked);
+  if(!this.current||!this.group.visible)return;this.surfaceUniforms.coverTerrainScale.value=Number($('terrainScale').value);this.liveContext=this.context();const viewWidth=2*this.liveContext.distance*Math.tan(this.liveContext.camera.fov*Math.PI/360)*this.liveContext.camera.aspect;this.isobarSpacing=isobarInterval(viewWidth,this.isobarSpacing);this.surfaceUniforms.isobarStep.value=this.isobarSpacing;this.advanceTime(dt);this.updateTimeDisplay();this.uniforms.blend.value=this.blend;this.surfaceUniforms.blend.value=this.blend;this.uniforms.clock.value+=dt;this.isobarLines?.update(this,dt,this.isobarSpacing,$('pressureLayer').checked);
   this.readClock=(this.readClock||0)+dt;if(this.readClock>.4){this.readClock=0;this.readout();}
   this.terrainClock=(this.terrainClock||0)+dt;
   if(this.terrainClock>2){this.terrainClock=0;this.attachSurfaces();}

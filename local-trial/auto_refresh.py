@@ -93,7 +93,7 @@ def validate(root):
     field_bytes=sum(np.dtype(dtype).itemsize for _,dtype,_ in weather.FIELDS)
     for step in STEPS:
         if len(gzip.decompress((root/'global'/f'{step:03}.bin.gz').read_bytes()))!=361*181*field_bytes:raise ValueError('Invalid global preview')
-        if meta.get('surface_cover') and len(gzip.decompress((root/meta['surface_cover']['path']/f'{step:03}'/'global.bin.gz').read_bytes()))!=361*181*2:raise ValueError('Invalid global surface cover')
+        if meta.get('surface_cover') and len(gzip.decompress((root/meta['surface_cover']['path']/f'{step:03}'/'global.bin.gz').read_bytes()))!=361*181*meta['surface_cover'].get('bytes_per_point',2):raise ValueError('Invalid global surface cover')
         if meta.get('ptype_path') and len(gzip.decompress((root/meta['ptype_path']/f'{step:03}'/'global.bin.gz').read_bytes()))!=361*181:raise ValueError('Invalid global precipitation type')
         for y in range(18):
             for x in range(36):
@@ -102,7 +102,7 @@ def validate(root):
                     raw=gzip.decompress((root/f'{step:03}'/res/name).read_bytes())
                     if len(raw)!=n*n*field_bytes:raise ValueError('Invalid weather tile '+name)
                 if meta.get('surface_cover'):
-                    if len(gzip.decompress((root/meta['surface_cover']['path']/f'{step:03}'/name).read_bytes()))!=10201*2:raise ValueError('Invalid surface cover tile '+name)
+                    if len(gzip.decompress((root/meta['surface_cover']['path']/f'{step:03}'/name).read_bytes()))!=10201*meta['surface_cover'].get('bytes_per_point',2):raise ValueError('Invalid surface cover tile '+name)
                 if meta.get('ptype_path'):
                     raw=gzip.decompress((root/meta['ptype_path']/f'{step:03}'/name).read_bytes())
                     if len(raw)!=10201:raise ValueError('Invalid precipitation type tile '+name)

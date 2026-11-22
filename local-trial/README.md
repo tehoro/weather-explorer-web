@@ -865,22 +865,32 @@ Tests cover retention against a stronger challenger and replacement on occlusion
 
 ### Forecast snow and sea ice
 
-The optional `surface-cover-v1` package uses only indexed IFS Open Data `sd`,
-`sithick` and `lsm`. Positive valid sea-ice thickness denotes model ice presence;
-it is not ice concentration. Missing values remain 255 in the package and −1
-in browser arrays. Land snow whitening saturates at 20 mm of lying snow water
-equivalent; it is a display convention, not a physical snow depth or downscaled
-mountain snowline. Coast masking uses the model land-sea mask. Fixed surface
-texture is illustrative. Both covers interpolate with forecast time and can be
-hidden using **Snow & sea ice on the surface**.
+The optional `surface-cover-v3` package uses indexed IFS Open Data `sd`, `sithick`,
+`lsm` and surface `z` at **step 0**. Model terrain height is `z / 9.80665` metres;
+no temperature/pressure estimate is used. Positive valid ice thickness denotes
+ice presence, not concentration. Snow whitening saturates at 20 mm SWE (a display
+convention). Latitude-aware smoothing and linear spatial sampling soften edges; missing samples are excluded. Coarse previews average nearby samples before subsampling to avoid polar aliasing.
+The detailed land/water mask clips Local snow, and elevation clips ocean ice.
 
-`prepare_surface_cover.py` prepares 0.1° tiles and a 1° global preview outside
-the repository. It publishes the manifest entry only after all frames finish.
-The background run builder includes this stage; HTTP requests only serve files.
-Existing packages without the extension retain their ordinary landscape.
+A roughly 90 km neighbourhood compares snowy (at least 5 mm SWE) and effectively
+bare (at most 0.5 mm) model points. Both groups must occupy at least 8% of the
+neighbourhood, with snowy points at least 300 m higher on average and separation
+exceeding the sum of their elevation standard deviations. Otherwise no snowline
+is inferred. Supported boundary estimates are spatially blended, using a 300 m
+soft elevation transition and fading the adjustment where evidence is sparse.
+The calculation uses real terrain heights, unaffected by display exaggeration.
+This is an illustrative terrain adjustment, not an observed snowline or a
+high-resolution forecast. It is disabled beyond 85 degrees latitude.
 
-The rotating Local chooser globe also uses these cover previews, matched by absolute
-valid time to its cloud animation (including held times during travel). It preloads
-only the small global cover files, about 132 KB compressed for the current 28-frame
-package. Coverage outside the available forecast period is hidden rather than
-showing another time. The 8091 preview serves these existing static files too.
+The background builder prepares four uint16 arrays (snow, ice, weighted snowline
+in km, evidence weight), 0.1° tiles and a 1° global preview. It publishes the
+manifest only when every frame is ready. HTTP requests only serve static files.
+The decoder still accepts v1 and packages without cover. Both views interpolate
+with forecast time; the globe matches absolute cloud time and hides unavailable
+periods. Local has a **Snow & sea ice on the surface** switch.
+
+High terrain now uses rock colours rather than automatic elevation-based white.
+In Local's relief/land-cover blend, WorldCover snow/ice retains its mapped white
+appearance, and bare/sparse land has stronger rock/soil colouring. These static
+classes are separate from the forecast snow overlay; they do not establish a
+universal treeline. The globe retains its coarse relief base.
