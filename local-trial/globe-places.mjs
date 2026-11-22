@@ -37,6 +37,6 @@ export class GlobePlaces{
   // Preserve buttons so rotation does not replace a focused/clicked element.
   const keep=new Set(selected.map(p=>String(p.id)));
   for(const el of [...this.layer.children])if(!keep.has(el.dataset.id)&&el!==document.activeElement)el.remove();
-  for(const p of selected){this.positions.set(String(p.id),p);let el=this.layer.querySelector(`[data-id="${p.id}"]`);if(!el){el=document.createElement('button');el.dataset.id=p.id;el.textContent='● '+p.name;el.onclick=()=>this.choose(p.lat,p.lon,p.name);this.layer.append(el);}el.style.transform=`translate(${p.x}px,${p.y}px)`;}
+  for(const p of selected){this.positions.set(String(p.id),p);let el=this.layer.querySelector(`[data-id="${p.id}"]`);if(!el){el=document.createElement('button');el.dataset.id=p.id;el.textContent=p.name;el.onclick=()=>this.choose(p.lat,p.lon,p.name);this.layer.append(el);}el.style.transform=`translate(${p.x}px,${p.y}px)`;}
  }
 }

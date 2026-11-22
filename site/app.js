@@ -700,7 +700,7 @@ function drawBase() {
   cg.lineWidth = 0.6;
   cg.strokeStyle = st.border;
   cg.stroke();
-  drawGrid(cg, st, vb);
+  if (!S.overview) drawGrid(cg, st, vb);
   return loading;
 }
 
@@ -1173,10 +1173,10 @@ let sharedGlobe,sharedGlobeAsked=false;
 function drawSharedGlobe(){
  if(OFFLINE||!S.view)return;
  const p=projection(S.view);
- if(p.g>.001&&!sharedGlobeAsked){sharedGlobeAsked=true;import('./shared-globe.mjs?v='+VERSION).then(({SharedGlobe})=>{sharedGlobe=new SharedGlobe(field,drawField);}).catch(()=>{});}
+ if(p.g>.001&&!sharedGlobeAsked){sharedGlobeAsked=true;import('./shared-globe.mjs?v='+VERSION).then(({SharedGlobe})=>{sharedGlobe=new SharedGlobe(field,drawField,UNPROJECT_GLSL);}).catch(()=>{});}
  const f=Math.floor(clouds.pos),a=clouds.times?.[f],b=clouds.times?.[Math.min(f+1,clouds.last)]??a;
  const time=Number.isFinite(a)?new Date(a+(b-a)*(clouds.pos-f)).toISOString():new Date().toISOString();
- sharedGlobe?.draw({...S.view,g:p.g},W,H,DPR,time,S.overview!=='past'&&!S.entry?.past);
+ sharedGlobe?.draw({...S.view,g:p.g},W,H,DPR,time,S.overview!=='past'&&!S.entry?.past,!!S.overview);
 }
 function drawField() {
   drawSharedGlobe();
