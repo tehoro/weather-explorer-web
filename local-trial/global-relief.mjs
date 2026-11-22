@@ -13,7 +13,7 @@ export function reliefHeight(a,lat,lon){
  return Math.max(0,(a[k]*(1-u)+a[k+1]*u)*(1-v)+(a[k+WIDTH]*(1-u)+a[k+WIDTH+1]*u)*v);
 }
 export class GlobalRelief{
- async load(scene){
+ async load(scene,spherical=false){
   const {TerrainCache}=await import('./terrain-cache.mjs?v=20261122j');
   const disk=new TerrainCache(),key='etopo1-ice-5min-v1';let compressed=await disk.get(key);
   if(!compressed){const r=await fetch(new URL('./assets/etopo1-5min.bin.gz',import.meta.url));if(!r.ok)throw Error('Global relief unavailable');compressed=await r.arrayBuffer();void disk.put(key,compressed);}
@@ -41,7 +41,12 @@ export class GlobalRelief{
     #include <colorspace_fragment>
    }`});
   material.userData.coarseRelief=true;
-  const geometry=new THREE.PlaneGeometry(1,1,512,512);geometry.rotateX(-Math.PI/2);
+  if(spherical){
+   material.depthWrite=true;material.depthTest=true;
+   material.vertexShader='varying vec2 location;void main(){location=vec2(uv.x*360.-180.,uv.y*180.-90.);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}';
+  }
+  const geometry=spherical?new THREE.SphereGeometry(1,128,96):new THREE.PlaneGeometry(1,1,512,512);
+  if(!spherical)geometry.rotateX(-Math.PI/2);
   this.mesh=new THREE.Mesh(geometry,material);this.mesh.frustumCulled=false;this.mesh.renderOrder=-90;scene.add(this.mesh);
  }
  update(anchor,centre,footprint){

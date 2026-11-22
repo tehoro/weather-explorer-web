@@ -110,10 +110,10 @@ def encode(olr: np.ndarray) -> bytes:
     return b.getvalue()
 
 
-def build(data: Path) -> bool:
+def build(data: Path, resolution: float = 0.5) -> bool:
     run = latest_main_run()
     out_root = data / "globe"
-    tag = f"{run:%Y%m%d%H}"
+    tag = f"{run:%Y%m%d%H}" + ("-025" if resolution == 0.25 else "")
     meta_path = out_root / "meta.json"
     if meta_path.exists():
         try:
@@ -136,14 +136,14 @@ def build(data: Path) -> bool:
     frames, total = [], 0
     for i, s in enumerate(steps):
         olr = np.maximum(-(acc[s] - acc[s - STEP_H]) / (STEP_H * 3600.0), 0)
-        b = encode(to_half_degree(olr))
+        b = encode(olr if resolution == 0.25 else to_half_degree(olr))
         (out / f"{i:03d}.webp").write_bytes(b)
         total += len(b)
         frames.append({"valid_time": f"{run + s * H:%Y-%m-%dT%H:%MZ}", "step": s})
     meta = {
         "format": FORMAT, "tag": tag, "path": f"globe/{tag}", "run": f"{run:%Y-%m-%dT%H:%MZ}",
-        "layer": "olr", "units": "W/m²", "lo": LO, "hi": HI, "nx": 720, "ny": 361,
-        "grid": "latlon", "west": -180, "north": 90, "step_deg": 0.5,
+        "layer": "olr", "units": "W/m²", "lo": LO, "hi": HI, "nx": int(360 / resolution), "ny": int(180 / resolution) + 1,
+        "grid": "latlon", "west": -180, "north": 90, "step_deg": resolution,
         "model": "IFS HRES (Open Data)", "frames": frames,
         "attribution": f"Data: © {now.year} ECMWF, CC BY 4.0. Regridded and unit-converted.",
     }
@@ -158,8 +158,9 @@ def build(data: Path) -> bool:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--data", type=Path, default=HERE / "site" / "data")
+    ap.add_argument("--resolution", type=float, choices=(0.25, 0.5), default=0.5)
     args = ap.parse_args()
-    return 0 if build(args.data) else 3
+    return 0 if build(args.data, args.resolution) else 3
 
 
 if __name__ == "__main__":

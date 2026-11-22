@@ -1,7 +1,7 @@
-import {GlobeClouds} from './globe-clouds.mjs?v=20261120m';
+import {GlobeClouds} from './globe-clouds.mjs?v=20261122z';
 import {GlobePlaces} from './globe-places.mjs?v=20261120n';
 import {setupSearch} from './location-search.mjs?v=20261120j';
-import {paintLand} from './basemap-texture.mjs?v=20261120g';
+import {GlobalRelief} from './global-relief.mjs?v=20261122z';
 import * as THREE from 'three';
 import {OrbitControls} from '/terrain-assets/OrbitControls.js';
 const $=id=>document.getElementById(id),host=$('globe');
@@ -10,7 +10,7 @@ const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(
 renderer.setClearColor('#07131f');host.append(renderer.domElement);
 const globe=new THREE.Group();scene.add(globe);
 const material=new THREE.MeshBasicMaterial({color:'#182630'});
-const sphere=new THREE.Mesh(new THREE.SphereGeometry(1,96,64),material);globe.add(sphere);
+let sphere=new THREE.Mesh(new THREE.SphereGeometry(1,96,64),material);globe.add(sphere);
 scene.add(new THREE.AmbientLight('#c2deeb',2));const sun=new THREE.DirectionalLight('#edfaff',2.5);sun.position.set(-3,4,5);scene.add(sun);
 const vector=(lat,lon,r=1)=>new THREE.Vector3(r*Math.cos(lat*Math.PI/180)*Math.cos(lon*Math.PI/180),r*Math.sin(lat*Math.PI/180),-r*Math.cos(lat*Math.PI/180)*Math.sin(lon*Math.PI/180));
 camera.position.copy(vector(-35,174,3.7));
@@ -20,18 +20,11 @@ const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 function spin(on){spinning=on;$('spinToggle').textContent=on?'Pause rotation':'Resume rotation';}
 $('spinToggle').onclick=()=>spin(!spinning);
 controls.addEventListener('start',()=>{lastInput=performance.now();if(flight)return;spin(false);interacting=true;});controls.addEventListener('end',()=>{lastInput=performance.now();interacting=false;});
-// Use the existing basemap's delta-coded rings, with no external map service.
-fetch('/explorer/basemap.json').then(r=>r.json()).then(data=>{
- const canvas=document.createElement('canvas');canvas.width=2048;canvas.height=1024;const c=canvas.getContext('2d');
- c.fillStyle='#0b1821';c.fillRect(0,0,2048,1024);c.fillStyle='#1c2c35';c.strokeStyle='#7e929d';c.lineWidth=.6;
- paintLand(c,data,2048,1024,true);
- c.strokeStyle='#566773';c.lineWidth=.45;
- for(const ring of data.borders){let lon=0,lat=0;c.beginPath();for(let i=0;i<ring.length;i+=2){lon+=ring[i];lat+=ring[i+1];const x=(lon/data.scale+180)/360*2048,y=(90-lat/data.scale)/180*1024;i?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();}
- c.strokeStyle='#82939c';c.lineWidth=.7;c.setLineDash([5,6]);
- for(let lat=-60;lat<=60;lat+=30){const y=(90-lat)/180*1024;c.beginPath();c.moveTo(0,y);c.lineTo(2048,y);c.stroke();}
- for(let lon=-180;lon<180;lon+=30){const x=(lon+180)/360*2048;c.beginPath();c.moveTo(x,0);c.lineTo(x,1024);c.stroke();}
- const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;material.map=tex;material.color.set('white');material.needsUpdate=true;
-}).catch(()=>{$('status').textContent='Basemap unavailable; region selection still works.';});
+// Share Local's bundled elevation, palette, sea colour and hill shading.
+const relief=new GlobalRelief();
+relief.load(globe,true).then(()=>{
+ globe.remove(sphere);sphere.geometry.dispose();sphere.material.dispose();sphere=relief.mesh;
+}).catch(()=>{$('status').textContent='Terrain preview unavailable; region selection still works.';});
 const clouds=new GlobeClouds(globe,$('globeClock'));
 const labels=new GlobePlaces(host,globe,camera,vector,choose);
 // A subtle atmospheric rim, matching the highlights globe's blue halo.

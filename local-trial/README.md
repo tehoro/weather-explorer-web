@@ -766,3 +766,17 @@ footprint and its contrast fades at grazing angles to avoid thin horizontal
 texture stripes and shimmer. Forecast cloud coverage and layer switches remain.
 Browser checks cover paused Southland views tilted towards the horizon and rotated,
 including wind, both precipitation styles and isobars; shaders compile without errors.
+
+### Sharper opening globe (22 November)
+
+The Local opening globe now shares the bundled 5-arc-minute ETOPO1 elevation,
+relief palette, hill shading and sea colour with Local's coarse terrain.
+It does not fetch worldwide detailed DEM or WorldCover tiles.
+
+Clouds remain pseudo-infrared OLR, with the existing brightness transfer.
+Run `web/.venv/bin/python web/local-trial/prepare_globe.py` from the root
+to build native 0.25-degree frames (1440 × 721) directly from Open Data.
+The optional `--public-cache` uses the smaller published 0.5-degree preview.
+The cloud shader reads dimensions from metadata and supports both; mipmaps
+reduce shimmer when zoomed out, and the displayed time follows interpolation.
+The public site's builder still defaults to 0.5 degrees.

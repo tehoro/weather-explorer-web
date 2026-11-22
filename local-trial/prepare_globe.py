@@ -1,7 +1,9 @@
-"""Cache the public Highlights globe forecast for the private static preview.
+"""Prepare native-resolution OLR clouds for the private static preview.
 
 No forecast computation or publication. Run manually when refreshing the trial.
 """
+import argparse
+import sys
 import json
 import subprocess
 from pathlib import Path
@@ -15,6 +17,13 @@ def fetch(remote, path):
     subprocess.run(['curl', '-fsSL', '--retry', '2', SOURCE + remote, '-o', str(path)], check=True)
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--public-cache', action='store_true', help='Use the smaller published 0.5-degree frames')
+    args = parser.parse_args()
+    if not args.public_cache:
+        result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1] / 'buildglobe.py'),
+                        '--data', str(ROOT), '--resolution', '0.25'], check=False)
+        sys.exit(0 if result.returncode in (0, 3) else result.returncode)
     meta_path = ROOT / 'globe/meta.next.json'
     fetch('globe/meta.json', meta_path)
     meta = json.loads(meta_path.read_text())
