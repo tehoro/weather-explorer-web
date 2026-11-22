@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><title>Viewport buffering checks</title>
+<script type="importmap">{"imports":{"three":"./assets/three.module.js"}}</script>
+<pre id="result">Running…</pre><div id="prepareStatus" hidden></div><button id="retryBuffer" hidden>Retry</button><button id="weatherPlay">Play</button>
+<script type="module">
+import {WeatherView} from './weather-view.mjs';
+const out=document.querySelector('#result'),check=(ok,message)=>{if(!ok)throw Error(message);out.textContent+='\nPASS '+message;};
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+try{
+ let ready=0,calls=0;
+ const view={frame:0,current:{frame:0},regionKey:'a',region:{},playing:true,loading:false,context:()=>({preloadStatus:()=>({total:2,ready,failed:0})}),data:{meta:{times:[0,1,2]},grid:async f=>{calls++;return {frame:f};}},playLabel:WeatherView.prototype.playLabel};
+ const loading=WeatherView.prototype.prepare.call(view);await pause(10);
+ check(view.preparing&&view.prepared.grids.size===3,'forecast ready still waits for all viewport terrain');
+ ready=2;await loading;
+ check(!view.preparing&&view.playing,'ready view preserves requested playback');
+ check(document.querySelector('#prepareStatus').hidden,'loading indicator closes only when ready');
+ view.playing=false;ready=1;
+ const zoom=WeatherView.prototype.prepare.call(view);await pause(10);
+ check(view.preparing&&calls===2,'terrain-only refinement reuses all prepared forecast grids');
+ ready=2;await zoom;check(!view.playing,'user-paused forecast remains paused');
+ ready=0;const old=WeatherView.prototype.prepare.call(view);view.prepareId++;view.regionKey='b';view.preparing=true;
+ await old;check(view.preparing,'superseded buffer cannot clear a newer loading state');
+ out.textContent+='\nAll buffering checks passed.';
+}catch(e){out.textContent+='\nFAIL '+e.stack;}
+</script>

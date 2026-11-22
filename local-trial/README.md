@@ -546,3 +546,74 @@ dragging only rotates. Point picking raycasts the visible sphere and transforms
 the hit back through the globe's current rotation before deriving coordinates.
 Repeated clicks during an approach are ignored so they cannot restart the flight.
 Verified by rotating the globe and double-clicking unlabelled inland Australia.
+
+## Rain streaks, colours and automatic buffering (22 November, build B)
+
+Mixed landscape colours now use 90% elevation relief and 10% WorldCover colour;
+pure relief and pure land-cover options remain. Water classification is unchanged.
+
+Settings > Precipitation style offers the original raindrops/snowflakes (default)
+or rain streaks/drifting snow. The latter uses 8,000 candidate particles on desktop
+and 3,000 on narrow screens. Density follows total IFS precipitation; its snow
+fraction determines how many become small soft white snow particles. Snow falls
+more slowly with lateral flutter. Rain slants with the 10 m wind. Both terminate
+at the terrain. Heights, speeds and particle sizes are illustrative, not cloud-base
+measurements. No CA3D source was copied; the new renderer uses the trial's data.
+
+There is no Freeze or Prepare mode. New views automatically buffer all forecast
+times for their current footprint, prioritising upcoming times, and wait for the
+bounded terrain/land-cover tile set. A small loading status shows progress while
+wind, precipitation and cloud effects continue. Forecast playback waits until
+ready, then continues if Play is active; a user-paused timeline remains paused.
+Panning to a different footprint invalidates the old buffer. Failures stop forecast
+playback and offer retry instead of silently claiming completion. Camera controls
+remain usable. The existing trial forecast is not automatically refreshed to a new
+IFS run by this feature.
+
+The viewport forecast grids are kept in memory for immediate playback. Raw tile
+cache size remains bounded. Detailed terrain still has the existing tile budget;
+'ready' means the selected detail for this view, not full 90 m coverage of the
+whole visible region at wide zoom.
+
+Validation: precipitation tests cover rain-only, snow-only, dry fields, terrain
+clearance and visibility toggling. Existing weather and terrain-stream tests pass.
+Browser checks at Sydney reached 43/43 terrain patches and 25/25 forecast frames,
+then played buffered frames and paused while retaining moving weather effects.
+Both precipitation styles were selected successfully.
+
+### Coarse global terrain and repeat visits (build C)
+
+A bundled 3.8 MB gzip grid of NOAA ETOPO1 surface elevations now supplies real
+coarse relief everywhere, including the poles, beneath the streamed Copernicus
+terrain. It uses 10 arc-minute sampling (about 18.5 km north–south), the same
+relief colour ramp, and the same 1.5× height exaggeration. The renderer samples
+this grid on a moving viewport mesh; no global high-resolution download is needed.
+The land/sea backdrop remains an emergency fallback if this asset cannot load.
+ETOPO1 is public domain; source and rebuild instructions are in
+`prepare_global_relief.py`. Coarse coastlines and mountains will change as finer
+Copernicus/WorldCover data arrives. This is elevation, not current snow cover.
+
+Camera controls never wait for downloads. Existing geographically located weather
+continues moving while new coverage loads. The loading panel is non-blocking.
+Readiness is checked against every selected terrain/land-cover patch even when
+a zoom changes detail without changing the forecast footprint. Zoomed-out views
+are still bounded by the terrain budget; coarse global relief fills beyond it.
+
+Sampled elevation and land-cover grids are now cached in IndexedDB, keyed by
+source version, location, sampling resolution and halo. The limit is 256 MiB,
+with older entries evicted first. Cached grids survive reloads and revisits in the
+same browser/origin; private browsing, clearing site data, or browser eviction can
+remove them. Cache errors fall back to normal streaming. A small in-memory mesh
+reserve makes returning to a recent zoom faster. The existing loopback server's
+raw byte-range cache is unchanged. Forecast buffers remain scoped to their run.
+Previously unseen finer detail still needs downloading; a ready wide view does
+not promise every possible close-up is already cached.
+
+Checks: `test-global-relief.mjs` verifies real mountain heights, sea level, poles,
+longitude wrapping and malformed data. `test-terrain-cache.html` exercises actual
+browser persistence, resolution keys, eviction and unavailable-storage fallback.
+A Sydney reload reused 84 sampled grids, and zoom controls remained usable while
+a larger viewport was still loading terrain and forecast frames.
+`test-buffering.html` also checks waiting for both terrain and forecast data,
+reusing prepared frames during terrain-only refinement, preserving the paused/
+playing choice, and ignoring completion from superseded view requests.

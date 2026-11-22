@@ -1,11 +1,12 @@
+import {GlobalRelief} from './global-relief.mjs?v=20261122c';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
-import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261120b';
-import {WeatherView} from './weather-view.mjs?v=20261120s';
-import {setupUI} from './global-ui.mjs?v=20261120p';
+import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122c';
+import {WeatherView} from './weather-view.mjs?v=20261122c';
+import {setupUI} from './global-ui.mjs?v=20261122c';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
@@ -15,14 +16,15 @@ controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:TH
 controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=1200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
 scene.add(new THREE.HemisphereLight(0xc2eaff,0x293a22,2.2));const sun=new THREE.DirectionalLight(0xffefd8,2.6);sun.position.set(-200,400,-150);scene.add(sun);
 let anchor={lat:-41.1,lon:174.8},serial=0,catalogue,active=0,timer,rebasing=false,lastWeather='',failures=new Map();
-const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader;
-const waterMissing=new Set(),waterSize=512;
+const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader,terrainKey='';
+const waterMissing=new Set(),waterSize=512,globalRelief=new GlobalRelief();
+globalRelief.load(scene).catch(e=>console.warn(e.message));
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();queueMicrotask(update);}resize();addEventListener('resize',resize);
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
 renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;weatherView?.tick(dt);placeLabels?.tick(dt);if(approaching&&!readySent&&needed.size&&backdrop){const near=[...needed.values()].filter(p=>!p.background).sort((a,b)=>a.distance-b.distance),central=near.slice(0,3),waited=now-approachLoadStart;if((central.length&&central.every(p=>tiles.has(p.key)))||(waited>12000&&near.some(p=>tiles.has(p.key)))){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}}
- if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(150-240)*e;camera.position.set(0,d*(1-e*.43),d*e*.82);controls.update();if(t===1){approachStart=null;update();}}renderer.render(scene,camera);});
+ if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(150-240)*e;camera.position.set(0,d*(1-e*.43),d*e*.82);controls.update();if(t===1){approachStart=null;update();}}globalRelief.update(anchor,controls.target,cameraFootprint());renderer.render(scene,camera);});
 const cos=()=>Math.max(.015,Math.cos(anchor.lat*Math.PI/180));
 function centre(){return {lat:Math.max(-89.85,Math.min(89.85,anchor.lat-controls.target.z/111.2)),lon:wrap(anchor.lon+controls.target.x/(111.2*cos()))};}
 function position(mesh,p){
@@ -74,6 +76,7 @@ function status(){const c=centre(),d=detail(camera.position.distanceTo(controls.
  if([...needed.keys()].some(k=>waterMissing.has(k)))$('status').textContent+='\nWater classification unavailable in part of this view.';
  $('retry').hidden=failures.size===0&&waterMissing.size===0;
  if(waterActive||waterQueue.length)$('status').textContent+='\nRefining water and land cover…';
+ if(reader)$('status').textContent+=`\n${reader.saved.hits} terrain/land-cover grids reused from browser storage.`;
 }
 const terrainStops=[[0,'#234e45'],[200,'#477353'],[700,'#7a8960'],[1400,'#9b9b80'],[2200,'#b3b3aa'],[3000,'#e7eff0']].map(([z,c])=>[z,new THREE.Color(c)]);
 const coverColours={10:'#315d3c',20:'#78834e',30:'#81985c',40:'#a0a56a',50:'#a49a90',60:'#a7a18e',70:'#e4ecee',90:'#547a67',95:'#315d50',100:'#989578'};
@@ -86,7 +89,7 @@ function paint(mesh){
   const i=y*size+x,z=ocean?0:sample(a,hn,hn,1+(x+.5)/size*p.cells,1+(y+.5)/size*p.cells),code=water?.[i];
   let c=reliefRGB[Math.min(1800,Math.max(0,Math.round(z/5)))];
   if(isWater(code??0,z,ocean))c=seaRGB;
-  else if(mode!=='relief'&&coverRGB[code]){const cc=coverRGB[code];c=mode==='cover'?cc:c.map((v,j)=>v*.55+cc[j]*.45);}
+  else if(mode!=='relief'&&coverRGB[code]){const cc=coverRGB[code];c=mode==='cover'?cc:c.map((v,j)=>v*.9+cc[j]*.1);}
   pixels.set([Math.round(c[0]),Math.round(c[1]),Math.round(c[2]),255],i*4);
  }
  const texture=new THREE.DataTexture(pixels,size,size,THREE.RGBAFormat);texture.colorSpace=THREE.SRGBColorSpace;texture.magFilter=THREE.LinearFilter;texture.minFilter=THREE.LinearFilter;texture.needsUpdate=true;
@@ -118,7 +121,7 @@ function pumpWater(){
  while(waterActive<2&&waterQueue.length){const {mesh,p}=waterQueue.shift();if(tiles.get(p.key)?.mesh!==mesh)continue;waterActive++;
   reader.grid('water',p,p.background?64:waterSize,{centres:true}).then(water=>{if(tiles.get(p.key)?.mesh!==mesh)return;mesh.userData.water=water;paint(mesh);waterMissing.delete(p.key);})
   .catch(e=>{if(tiles.get(p.key)?.mesh===mesh){waterMissing.add(p.key);console.warn('Water mask',p.key,e.message);}})
-  .finally(()=>{waterActive--;status();pumpWater();});
+  .finally(()=>{waterActive--;prune();status();pumpWater();});
  }
 }
 function pump(){
@@ -130,10 +133,10 @@ function pump(){
  }
 }
 function prune(){
- const complete=[...needed.keys()].every(k=>tiles.has(k));
- for(const [key,{mesh}]of tiles)if(!needed.has(key)&&complete){dispose(mesh);tiles.delete(key);}
+ const complete=[...needed.keys()].every(k=>tiles.has(k)&&(tiles.get(k).mesh.userData.ocean||tiles.get(k).mesh.userData.water));
  // Keep the previous coarser surface while replacement patches arrive.
- for(const [key,{mesh}]of tiles)mesh.position.y=needed.has(key)?0:-.03;
+ // Retain a bounded set of hidden meshes for a quick zoom back to the previous view.
+ for(const [key,{mesh}]of tiles){mesh.visible=needed.has(key)||!complete;mesh.position.y=needed.has(key)?0:-.03;}
  const distance=({mesh})=>mesh.geometry.boundingSphere.center.clone().multiply(mesh.scale).distanceTo(controls.target);
  const old=[...tiles].filter(([k])=>!needed.has(k)).sort((a,b)=>distance(b[1])-distance(a[1]));
  while(tiles.size>needed.size+36&&old.length){const [key,{mesh}]=old.shift();dispose(mesh);tiles.delete(key);}
@@ -141,6 +144,7 @@ function prune(){
 function update(){
  if(!catalogue)return;rebase();const c=centre(),distance=camera.position.distanceTo(controls.target),wanted=viewTiles(c.lat,c.lon,distance,cameraFootprint());
  needed.clear();for(const p of wanted)needed.set(p.key,p);
+ terrainKey=[...needed.keys()].sort().join('|');
  prune();
  for(const key of failures.keys())if(!needed.has(key))failures.delete(key);
  for(const key of waterMissing)if(!needed.has(key))waterMissing.delete(key);
@@ -155,22 +159,22 @@ setupSearch($('search'),$('matches'),(lat,lon)=>go(lat,lon));
 $('viewAngle').onchange=()=>{const d=camera.position.distanceTo(controls.target),angle=controls.getAzimuthalAngle(),polar=$('viewAngle').value==='top'?0:Math.atan2(.82,.57);camera.position.copy(controls.target).add(new THREE.Vector3(d*Math.sin(polar)*Math.sin(angle),d*Math.cos(polar),d*Math.sin(polar)*Math.cos(angle)));controls.update();update();};
 $('retry').onclick=()=>{failures.clear();for(const key of waterMissing){const old=tiles.get(key);if(old)waterQueue.push(old);}waterMissing.clear();pumpWater();update();};
 $('surfaceStyle').onchange=()=>{for(const {mesh}of tiles.values())paint(mesh);styleNote();};
-function styleNote(){$('styleNote').textContent=$('surfaceStyle').value==='relief'?'Weather3D elevation colours. Pale high ground is a colour convention, not current snow cover.':'Muted WorldCover 2021 land classes; static snow/ice class is not a current snow forecast.';}$('north').onclick=()=>{const d=camera.position.distanceTo(controls.target);camera.position.copy(controls.target).add(new THREE.Vector3(0,d*.57,d*.82));controls.update();};
+function styleNote(){$('styleNote').textContent=$('surfaceStyle').value==='relief'?'Weather3D elevation colours. Pale high ground is a colour convention, not current snow cover.':($('surfaceStyle').value==='hybrid'?'90% relief · 10% land cover. ':'')+'WorldCover 2021; static snow/ice is not a current snow forecast.';}$('north').onclick=()=>{const d=camera.position.distanceTo(controls.target);camera.position.copy(controls.target).add(new THREE.Vector3(0,d*.57,d*.82));controls.update();};
 $('in').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(.55).add(controls.target);controls.update();};$('out').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(1.8).add(controls.target);controls.update();};
 for(const b of document.querySelectorAll('[data-pan]'))b.onclick=()=>{const [x,z]=b.dataset.pan.split(',').map(Number),d=camera.position.distanceTo(controls.target)*.6,shift=new THREE.Vector3(x*d,0,z*d);camera.position.add(shift);controls.target.add(shift);controls.update();update();};
 function groundHeight(x,z){
  const lat=anchor.lat-z/111.2,lon=anchor.lon+x/(111.2*cos());let best=null;
- for(const t of tiles.values()){const dx=((lon-t.p.west)%360+360)%360,dy=t.p.south+t.p.span-lat;
+ for(const t of tiles.values()){if(!t.mesh.visible)continue;const dx=((lon-t.p.west)%360+360)%360,dy=t.p.south+t.p.span-lat;
   if(dx<=t.p.span&&dy>=0&&dy<=t.p.span&&(!best||t.p.span/t.p.cells<best.p.span/best.p.cells))best={...t,dx,dy};
  }
- if(!best||best.mesh.userData.ocean)return 0;
+ if(!best)return globalRelief.height(lat,lon);if(best.mesh.userData.ocean)return 0;
  const {p,mesh,dx,dy}=best;return sample(mesh.userData.a,p.cells+3,p.cells+3,1+dx/p.span*p.cells,1+dy/p.span*p.cells)*.0015;
 }
 function weatherContext(){
  const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=points.map(p=>p[0]),zs=points.map(p=>p[1]),scale=111.2*cos();
  const west=Math.floor((c.lon+Math.max(-2400,Math.min(...xs))/scale)*4)/4,north=Math.min(90,Math.ceil((c.lat-Math.max(-2400,Math.min(...zs))/111.2)*4)/4);
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
- return {camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
+ return {preloadStatus:()=>({key:terrainKey,total:needed.size,ready:[...needed.keys()].filter(k=>tiles.has(k)&&(tiles.get(k).mesh.userData.ocean||tiles.get(k).mesh.userData.water)).length,failed:failures.size+waterMissing.size}),camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};
 }

@@ -1,4 +1,5 @@
 import {wrap,demName,waterName} from './terrain-stream.mjs';
+import {TerrainCache,terrainCacheKey} from './terrain-cache.mjs';
 export const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 export function isWater(code,height,ocean=false){return ocean||code===80||(code===0&&Math.abs(height)<.01);}
 export function sourceName(kind,lat,lon){return kind==='dem'?demName(Math.max(-89.99999999,lat-1e-9),lon+1e-9):waterName(Math.min(89.99999999,lat),lon);}
@@ -14,7 +15,7 @@ export function sample(a,w,h,x,y,nearest=false){
 }
 // Browser byte cache + GeoTIFF decoded-block cache; reuse image objects as well.
 export class RasterReader{
- constructor(G,base='',catalogue=new Set()){this.G=G;this.base=base;this.catalogue=catalogue;this.files=new Map();}
+ constructor(G,base='',catalogue=new Set()){this.G=G;this.base=base;this.catalogue=catalogue;this.files=new Map();this.saved=new TerrainCache();}
  async file(kind,name){
   const key=kind+'/'+name;
   if(this.files.has(key)){const f=this.files.get(key);this.files.delete(key);this.files.set(key,f);return f;}
@@ -31,6 +32,8 @@ export class RasterReader{
  }
  async image(file,i){if(!file.images.has(i))file.images.set(i,file.t.getImage(i));return file.images.get(i);}
  async grid(kind,p,size,{halo=0,centres=false}={}){
+  const key=terrainCacheKey(kind,p,size,{halo,centres}),cached=await this.saved.get(key);
+  if(cached)return cached;
   const step=p.span/(centres?size:size-1),outSize=size+halo*2;
   const xs=Array.from({length:outSize},(_,i)=>wrap(Math.round((p.west+(i-halo+(centres?.5:0))*step)*1e10)/1e10));
   const ys=Array.from({length:outSize},(_,i)=>clamp(Math.round((p.south+p.span-(i-halo+(centres?.5:0))*step)*1e10)/1e10,-90,90));
@@ -51,6 +54,6 @@ export class RasterReader{
    const data=await im.readRasters({window:[x0,y0,x1,y1],interleave:true});
    for(const c of coords)out[c.index]=sample(data,x1-x0,y1-y0,c.x-x0,c.y-y0,kind==='water');
   }
-  return out;
+  void this.saved.put(key,out);return out;
  }
 }

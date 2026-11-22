@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>Terrain cache checks</title><pre id="result">Running…</pre>
+<script type="module">
+import {TerrainCache,terrainCacheKey} from './terrain-cache.mjs';
+const out=document.querySelector('#result'),check=(ok,message)=>{if(!ok)throw Error(message);out.textContent+='\nPASS '+message;};
+const name='weather-explorer-cache-test-'+Date.now(),cache=new TerrainCache(name,16);
+try{
+ out.textContent='Checking real browser storage';
+ await cache.put('a',new Float32Array([123,456]));
+ const reopened=new TerrainCache(name,16);
+ check((await reopened.get('a'))[1]===456,'sampled elevation survives reopening the database');await reopened.writes;
+ await cache.put('b',new Float32Array([789,10]));
+ await cache.put('c',new Float32Array([11,12]));
+ check(!await cache.get('a'),'oldest terrain evicted at storage limit');
+ check((await cache.get('c'))[0]===11,'newest terrain retained');await cache.writes;
+ const p={west:1,south:2,span:.25};
+ check(terrainCacheKey('dem',p,76,{halo:1})!==terrainCacheKey('dem',p,151,{halo:1}),'different resolutions have different keys');
+ check(terrainCacheKey('dem',p,76)!==terrainCacheKey('water',p,76),'elevation and land cover are separate');
+ (await reopened.db).close();(await cache.db).close();
+ check(await cache.get('c')===null,'unavailable cache falls back without breaking terrain');
+ out.textContent+='\nAll cache checks passed.';
+}catch(e){out.textContent+='\nFAIL '+e.stack;}finally{indexedDB.deleteDatabase(name);}
+</script>
