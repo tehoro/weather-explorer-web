@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {updateCloudTerrain} from './cloud-terrain.mjs';
+let calls=0;
+const ground=()=>{calls++;return 2;};
+const mesh=visible=>({visible,geometry:{userData:{alt:1,terrainRevision:0},attributes:{position:{count:1000,getX(){return 0;},getZ(){return 0;},setY(i,y){assert.equal(y,3);}}},computeBoundingSphere(){}}});
+const hidden=mesh(false),shown=mesh(true);
+assert.equal(updateCloudTerrain([hidden],ground,1),0);assert.equal(calls,0);
+assert.equal(updateCloudTerrain([shown],ground,0),0);
+assert.equal(updateCloudTerrain([shown],ground,1),512);
+assert.equal(updateCloudTerrain([shown],ground,1),488);
+assert.equal(updateCloudTerrain([shown],ground,1),0);
+hidden.visible=true;assert.equal(updateCloudTerrain([hidden],ground,1),512);
+assert.equal(updateCloudTerrain([hidden],ground,2),488);
+assert.equal(hidden.geometry.userData.terrainRevision,1);
+assert.equal(updateCloudTerrain([hidden],ground,2),512);
+console.log('Hidden/unchanged clouds do no work; terrain refresh is bounded and resumes correctly.');

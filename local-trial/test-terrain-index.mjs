@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {TerrainIndex} from './terrain-index.mjs';
+const tile=(west,south,span,cells,visible=true)=>({p:{west,south,span,cells},mesh:{visible}});
+const coarse=tile(-2,52,2,32),fine=tile(-1,53,.5,64),hidden=tile(-1,53,.5,128,false),date=tile(179,-1,2,32);
+const index=new TerrainIndex();index.rebuild([coarse,fine,hidden,date]);
+assert.equal(index.find(53.2,-.8).mesh,fine.mesh);
+assert.equal(index.find(52.2,-1.8).mesh,coarse.mesh);
+assert.equal(index.find(0,-179.5).mesh,date.mesh);
+assert.equal(index.find(40,0),null);
+index.rebuild([]);assert.equal(index.find(53.2,-.8),null);
+console.log('Terrain lookup: finest visible tile, fallback, dateline and eviction passed.');

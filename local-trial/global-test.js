@@ -1,3 +1,4 @@
+import {TerrainIndex} from './terrain-index.mjs';
 import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
@@ -8,7 +9,7 @@ import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122l';
-import {WeatherView} from './weather-view.mjs?v=20261122u';
+import {WeatherView} from './weather-view.mjs?v=20261122w';
 import {setupUI} from './global-ui.mjs?v=20261122o';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
@@ -19,9 +20,9 @@ controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:TH
 controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=3200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
 scene.add(new THREE.HemisphereLight(0xc2eaff,0x293a22,2.2));const sun=new THREE.DirectionalLight(0xffefd8,2.6);sun.position.set(-200,400,-150);scene.add(sun);
 let anchor={lat:-41.1,lon:174.8},serial=0,catalogue,active=0,timer,rebasing=false,lastWeather='',failures=new Map();
-const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader,terrainKey='';
+const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader,terrainKey='',terrainRevision=0;
 const waterMissing=new Set(),waterSize=512,globalRelief=new GlobalRelief();
-globalRelief.load(scene).catch(e=>console.warn(e.message));
+globalRelief.load(scene).then(()=>{terrainRevision++;}).catch(e=>console.warn(e.message));
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();queueMicrotask(update);}resize();addEventListener('resize',resize);
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
@@ -140,6 +141,7 @@ function pump(){
  }
 }
 function prune(){
+ terrainRevision++;
  const complete=[...needed.keys()].every(k=>tiles.has(k)&&(tiles.get(k).mesh.userData.ocean||tiles.get(k).mesh.userData.water));
  // Keep the previous coarser surface while replacement patches arrive.
  // Retain a bounded set of hidden meshes for a quick zoom back to the previous view.
@@ -160,7 +162,7 @@ function update(){
 }
 controls.addEventListener('change',()=>{$('viewAngle').value=controls.getPolarAngle()<.08?'top':'slanted';if(rebasing)return;clearTimeout(timer);timer=setTimeout(update,180);});
 function go(lat=anchor.lat,lon=anchor.lon){if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>89.85){$('status').textContent='Use a latitude between −89.85 and 89.85 and a finite longitude.';return;}
- anchor={lat,lon:wrap(lon)};positionBackdrop();if(weatherView)weatherView.regionKey=null;$('weather').textContent='Loading IFS at this location…';lastWeather='';serial++;for(const {mesh}of tiles.values())dispose(mesh);tiles.clear();needed.clear();failures.clear();queue=[];
+ anchor={lat,lon:wrap(lon)};positionBackdrop();if(weatherView)weatherView.regionKey=null;$('weather').textContent='Loading IFS at this location…';lastWeather='';serial++;for(const {mesh}of tiles.values())dispose(mesh);tiles.clear();terrainRevision++;needed.clear();failures.clear();queue=[];
  rebasing=true;controls.target.set(0,0,0);camera.position.set(0,approaching&&!readySent?240:38,approaching&&!readySent?0:55);controls.update();rebasing=false;update();}
 setupSearch($('search'),$('matches'),(lat,lon)=>go(lat,lon));
 $('viewAngle').onchange=()=>{const d=camera.position.distanceTo(controls.target),angle=controls.getAzimuthalAngle(),polar=$('viewAngle').value==='top'?0:Math.atan2(.82,.57);camera.position.copy(controls.target).add(new THREE.Vector3(d*Math.sin(polar)*Math.sin(angle),d*Math.cos(polar),d*Math.sin(polar)*Math.cos(angle)));controls.update();update();};
@@ -176,11 +178,10 @@ $('surfaceStyle').onchange=()=>{for(const {mesh}of tiles.values())paint(mesh);st
 function styleNote(){$('styleNote').textContent=$('surfaceStyle').value==='relief'?'Weather3D elevation colours. Pale high ground is a colour convention, not current snow cover.':($('surfaceStyle').value==='hybrid'?'90% relief · 10% land cover. ':'')+'WorldCover 2021; static snow/ice is not a current snow forecast.';}$('north').onclick=()=>{const d=camera.position.distanceTo(controls.target);camera.position.copy(controls.target).add(new THREE.Vector3(0,d*.57,d*.82));controls.update();};
 $('in').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(.55).add(controls.target);controls.update();};$('out').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(1.8).add(controls.target);controls.update();};
 for(const b of document.querySelectorAll('[data-pan]'))b.onclick=()=>{const [x,z]=b.dataset.pan.split(',').map(Number),d=camera.position.distanceTo(controls.target)*.6,shift=new THREE.Vector3(x*d,0,z*d);camera.position.add(shift);controls.target.add(shift);controls.update();update();};
+const terrainIndex=new TerrainIndex();let indexedRevision=-1;
 function groundHeight(x,z){
- const lat=anchor.lat-z/111.2,lon=anchor.lon+x/(111.2*cos());let best=null;
- for(const t of tiles.values()){if(!t.mesh.visible)continue;const dx=((lon-t.p.west)%360+360)%360,dy=t.p.south+t.p.span-lat;
-  if(dx<=t.p.span&&dy>=0&&dy<=t.p.span&&(!best||t.p.span/t.p.cells<best.p.span/best.p.cells))best={...t,dx,dy};
- }
+ if(indexedRevision!==terrainRevision){terrainIndex.rebuild(tiles.values());indexedRevision=terrainRevision;}
+ const lat=anchor.lat-z/111.2,lon=anchor.lon+x/(111.2*cos()),best=terrainIndex.find(lat,lon);
  if(!best)return globalRelief.height(lat,lon);if(best.mesh.userData.ocean)return 0;
  const {p,mesh,dx,dy}=best;return sample(mesh.userData.a,p.cells+3,p.cells+3,1+dx/p.span*p.cells,1+dy/p.span*p.cells)*.0015;
 }
@@ -188,7 +189,7 @@ function weatherContext(){
  const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=points.map(p=>p[0]),zs=points.map(p=>p[1]),scale=111.2*cos();
  const west=Math.floor((c.lon+Math.max(-2400,Math.min(...xs))/scale)*4)/4,north=Math.min(90,Math.ceil((c.lat-Math.max(-2400,Math.min(...zs))/111.2)*4)/4);
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
- return {preloadStatus,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
+ return {preloadStatus,terrainRevision,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};
 }

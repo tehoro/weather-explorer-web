@@ -1,3 +1,4 @@
+import {updateCloudTerrain} from './cloud-terrain.mjs';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
@@ -108,7 +109,7 @@ export class WeatherView{
   const context=this.context(),r=this.current.region;this.bounds=context.bounds(r);this.ground=context.ground;
   const {west,east,north,south}=this.bounds,w=east-west,h=south-north;
   this.uniforms={cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
-  const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.computeBoundingSphere();return g;};
+  const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.userData.terrainRevision=context.terrainRevision;g.computeBoundingSphere();return g;};
   const vertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
   this.surfaceUniforms??={};
   for(const [key,uniform]of Object.entries(this.uniforms)){this.surfaceUniforms[key]??={value:uniform.value};this.surfaceUniforms[key].value=uniform.value;}
@@ -200,7 +201,8 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
   if(!this.current||!this.group.visible)return;this.liveContext=this.context();const viewWidth=2*this.liveContext.distance*Math.tan(this.liveContext.camera.fov*Math.PI/360)*this.liveContext.camera.aspect;this.isobarSpacing=isobarInterval(viewWidth,this.isobarSpacing);this.surfaceUniforms.isobarStep.value=this.isobarSpacing;this.advanceTime(dt);this.updateTimeDisplay();this.uniforms.blend.value=this.blend;this.surfaceUniforms.blend.value=this.blend;this.uniforms.clock.value+=dt;this.isobarLines?.update(this,dt,this.isobarSpacing,$('pressureLayer').checked);
   this.readClock=(this.readClock||0)+dt;if(this.readClock>.4){this.readClock=0;this.readout();}
   this.terrainClock=(this.terrainClock||0)+dt;
-  if(this.terrainClock>2){this.terrainClock=0;this.attachSurfaces();for(const mesh of this.meshes){const g=mesh.geometry,a=g.attributes.position;for(let i=0;i<a.count;i++)a.setY(i,Math.max(0,this.ground(a.getX(i),a.getZ(i)))+g.userData.alt);a.needsUpdate=true;g.computeBoundingSphere();}}
+  if(this.terrainClock>2){this.terrainClock=0;this.attachSurfaces();}
+  updateCloudTerrain(this.meshes,this.ground,this.liveContext.terrainRevision);
   this.wind.material.uniforms.viewport.value.set(innerWidth,innerHeight);
   // Fixed-rate histories avoid display refresh rate changing trail length.
   this.accumulator=(this.accumulator||0)+dt;if(this.accumulator<1/30)return;const step=Math.min(.1,this.accumulator);this.accumulator=0;
