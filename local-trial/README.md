@@ -747,3 +747,11 @@ snaps to the nearest source frame; the previous/next buttons retain three-hour
 steps. Detail upgrades do not replace a frame partway through a time transition.
 Browser checks cover interpolation speed, pause/resume, missing-frame holds and
 partial terrain; time tests cover intermediate timestamps and local time zones.
+
+### Wide-view cloud depth (build M)
+
+The camera near plane now scales to 0.5% of the viewing distance (minimum 30 m).
+Keeping it fixed at 30 m while viewing hundreds of kilometres lost enough depth
+precision for low cloud and sea fragments to collide, producing horizontal bands.
+The scaled plane retains depth testing against terrain and keeps cloud layers
+visible, including when forecast time is paused.
