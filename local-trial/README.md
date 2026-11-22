@@ -755,3 +755,14 @@ Keeping it fixed at 30 m while viewing hundreds of kilometres lost enough depth
 precision for low cloud and sea fragments to collide, producing horizontal bands.
 The scaled plane retains depth testing against terrain and keeps cloud layers
 visible, including when forecast time is paused.
+
+### Cloud stability when tilting (build N)
+
+The near-plane adjustment alone did not cover distant grazing views. The renderer
+now uses logarithmic depth, with the same depth chunks added to every custom
+weather shader as to built-in terrain materials. This preserves cloud/sea
+separation near the horizon. Cloud procedural detail is filtered by screen-pixel
+footprint and its contrast fades at grazing angles to avoid thin horizontal
+texture stripes and shimmer. Forecast cloud coverage and layer switches remain.
+Browser checks cover paused Southland views tilted towards the horizon and rotated,
+including wind, both precipitation styles and isobars; shaders compile without errors.

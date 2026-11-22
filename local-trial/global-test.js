@@ -1,3 +1,4 @@
+import {prepareSceneDepth} from './scene-depth.mjs';
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
 import {GlobalRelief} from './global-relief.mjs?v=20261122l';
 import {setupSearch} from './location-search.mjs?v=20261120j';
@@ -6,12 +7,12 @@ import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122l';
-import {WeatherView} from './weather-view.mjs?v=20261122l';
+import {WeatherView} from './weather-view.mjs?v=20261122n';
 import {setupUI} from './global-ui.mjs?v=20261122l';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
+const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
 const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,12000),controls=new OrbitControls(camera,renderer.domElement);
 controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
 controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=3200;controls.maxPolarAngle=1.35;controls.minPolarAngle=0;
@@ -29,7 +30,7 @@ renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);last
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
  if(Math.abs(camera.near-near)>near*.01){camera.near=near;camera.updateProjectionMatrix();}
- globalRelief.update(anchor,controls.target,cameraFootprint());renderer.render(scene,camera);});
+ globalRelief.update(anchor,controls.target,cameraFootprint());prepareSceneDepth(scene);renderer.render(scene,camera);});
 const cos=()=>Math.max(.015,Math.cos(anchor.lat*Math.PI/180));
 function centre(){return {lat:Math.max(-89.85,Math.min(89.85,anchor.lat-controls.target.z/111.2)),lon:wrap(anchor.lon+controls.target.x/(111.2*cos()))};}
 function position(mesh,p){
