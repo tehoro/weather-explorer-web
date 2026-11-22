@@ -1,3 +1,4 @@
+import {PointForecast} from './point-forecast.mjs?v=20261122ac';
 import {TerrainIndex} from './terrain-index.mjs';
 import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
@@ -10,9 +11,9 @@ import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {sample} from './terrain-raster.mjs?v=20261122l';
 import {TerrainWorker} from './terrain-worker-client.mjs';
-import {WeatherView} from './weather-view.mjs?v=20261122y';
-import {setupUI} from './global-ui.mjs?v=20261122o';
-import {PlaceLabels} from './place-labels.mjs?v=20261122aa';
+import {WeatherView} from './weather-view.mjs?v=20261122ac';
+import {setupUI} from './global-ui.mjs?v=20261122ac';
+import {PlaceLabels} from './place-labels.mjs?v=20261122ac';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
@@ -24,11 +25,12 @@ let anchor={lat:-41.1,lon:174.8},serial=0,catalogue,active=0,timer,rebasing=fals
 const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader,terrainKey='',terrainRevision=0;
 const waterMissing=new Set(),waterSize=512,globalRelief=new GlobalRelief();
 globalRelief.load(scene).then(()=>{terrainRevision++;}).catch(e=>console.warn(e.message));
-function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();queueMicrotask(update);}resize();addEventListener('resize',resize);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;centreViewport();camera.updateProjectionMatrix();queueMicrotask(update);}resize();addEventListener('resize',resize);
+let pointForecast,flight=null;
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
-renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;weatherView?.tick(dt);placeLabels?.tick(dt);if(approaching&&!readySent&&needed.size&&backdrop){const near=[...needed.values()].filter(p=>!p.background).sort((a,b)=>a.distance-b.distance),central=near.slice(0,3),waited=now-approachLoadStart;if((central.length&&central.every(p=>tiles.has(p.key)))||(waited>12000&&near.some(p=>tiles.has(p.key)))){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}}
+renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);weatherView?.tick(dt);pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&needed.size&&backdrop){const near=[...needed.values()].filter(p=>!p.background).sort((a,b)=>a.distance-b.distance),central=near.slice(0,3),waited=now-approachLoadStart;if((central.length&&central.every(p=>tiles.has(p.key)))||(waited>12000&&near.some(p=>tiles.has(p.key)))){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(150-240)*e;camera.position.set(0,d*(1-e*.43),d*e*.82);controls.update();if(t===1){approachStart=null;update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
@@ -158,9 +160,9 @@ function update(){
 }
 controls.addEventListener('change',()=>{$('viewAngle').value=controls.getPolarAngle()<.08?'top':'slanted';if(rebasing)return;clearTimeout(timer);timer=setTimeout(update,180);});
 function go(lat=anchor.lat,lon=anchor.lon){if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>89.85){$('status').textContent='Use a latitude between −89.85 and 89.85 and a finite longitude.';return;}
- anchor={lat,lon:wrap(lon)};positionBackdrop();if(weatherView)weatherView.regionKey=null;$('weather').textContent='Loading IFS at this location…';lastWeather='';serial++;for(const {mesh}of tiles.values())dispose(mesh);tiles.clear();terrainRevision++;needed.clear();failures.clear();queue=[];
+ anchor={lat,lon:wrap(lon)};positionBackdrop();if(weatherView)weatherView.regionKey=null;lastWeather='';serial++;for(const {mesh}of tiles.values())dispose(mesh);tiles.clear();terrainRevision++;needed.clear();failures.clear();queue=[];
  rebasing=true;controls.target.set(0,0,0);camera.position.set(0,approaching&&!readySent?240:38,approaching&&!readySent?0:55);controls.update();rebasing=false;update();}
-setupSearch($('search'),$('matches'),(lat,lon)=>go(lat,lon));
+setupSearch($('search'),$('matches'),(lat,lon,name)=>{go(lat,lon);pointForecast.select(lat,lon,name);});
 $('viewAngle').onchange=()=>{const d=camera.position.distanceTo(controls.target),angle=controls.getAzimuthalAngle(),polar=$('viewAngle').value==='top'?0:Math.atan2(.82,.57);camera.position.copy(controls.target).add(new THREE.Vector3(d*Math.sin(polar)*Math.sin(angle),d*Math.cos(polar),d*Math.sin(polar)*Math.cos(angle)));controls.update();update();};
 function retryTerrain(){reader?.clear();failures.clear();for(const key of waterMissing){const old=tiles.get(key);if(old)waterQueue.push(old);}waterMissing.clear();pumpWater();update();}
 $('retry').onclick=()=>{retryDelay=15000;retryTerrain();};
@@ -193,5 +195,49 @@ function weatherContext(){
 }
 weatherView=new WeatherView(scene,weatherContext);
 placeLabels=new PlaceLabels(camera,weatherContext);
+pointForecast=new PointForecast(weatherView,flyToPoint);weatherView.pointForecast=pointForecast;
+const viewportObserver=new MutationObserver(()=>centreViewport());
+for(const id of ['settingsPanel','pointForecast'])viewportObserver.observe($(id),{attributes:true,attributeFilter:['hidden','class']});
+const pointMarker=document.createElement('div');pointMarker.id='pointMarker';pointMarker.hidden=true;document.body.append(pointMarker);
+function updatePointMarker(){
+ const p=pointForecast?.location;if(!p){if(typeof pointMarker!=='undefined')pointMarker.hidden=true;return;}
+ const v=weatherContext().projectPlace(p.lat,p.lon),q=new THREE.Vector3(v.x,groundHeight(v.x,v.z)+.01,v.z).project(camera);
+ pointMarker.hidden=q.z< -1||q.z>1;pointMarker.style.transform=`translate(${(q.x+1)*innerWidth/2}px,${(1-q.y)*innerHeight/2}px)`;
+}
+addEventListener('local-place-select',e=>pointForecast.select(e.detail.lat,e.detail.lon,e.detail.name));
+let clickStart;
+renderer.domElement.addEventListener('pointerdown',e=>{clickStart={x:e.clientX,y:e.clientY,id:e.pointerId,button:e.button};});
+renderer.domElement.addEventListener('pointerup',e=>{
+ const p=clickStart;clickStart=null;if(!p||p.button!==0||p.id!==e.pointerId||Math.hypot(e.clientX-p.x,e.clientY-p.y)>5)return;
+ camera.updateMatrixWorld();const ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2),camera);
+ const hit=ray.intersectObjects([...tiles.values()].filter(t=>t.mesh.visible).map(t=>t.mesh),false)[0];
+ let point=hit?.point;
+ if(!point){let last=ray.ray.origin.clone(),above=last.y-groundHeight(last.x,last.z);
+  for(let d=.1;d<12000;d=d*1.08+.1){const q=ray.ray.at(d,new THREE.Vector3()),gap=q.y-groundHeight(q.x,q.z);
+   if(gap<=0&&above>0){let a=last,b=q;for(let i=0;i<18;i++){const mid=a.clone().lerp(b,.5);if(mid.y>groundHeight(mid.x,mid.z))a=mid;else b=mid;}point=b;break;}last=q;above=gap;}
+ }
+ if(point)pointForecast.select(anchor.lat-point.z/111.2,wrap(anchor.lon+point.x/(111.2*cos())));
+});
+controls.addEventListener('start',()=>{flight=null;});
+function flyToPoint(p){
+ if(!p)return;const q=weatherContext().projectPlace(p.lat,p.lon),target=new THREE.Vector3(q.x,groundHeight(q.x,q.z),q.z),offset=camera.position.clone().sub(controls.target);
+ const end=target.clone().add(offset),start=camera.position.clone();let lift=0;
+ for(let i=0;i<=64;i++){const t=i/64,v=start.clone().lerp(end,t);lift=Math.max(lift,groundHeight(v.x,v.z)+.3-v.y);}
+ flight={start:performance.now(),from:controls.target.clone(),to:target,eye:start,end,lift:Math.max(0,lift)+.2};
+ centreViewport();
+}
+function centreViewport(){
+ const w=innerWidth,h=innerHeight,settings=$('settingsPanel'),point=$('pointForecast'),right=settings&&!settings.hidden?settings.getBoundingClientRect().left:w,left=point&&!point.hidden?point.getBoundingClientRect().right:0;
+ const top=80,bottom=$('timeline').getBoundingClientRect().top;
+ if(right-left>200)camera.setViewOffset(w,h,(w-left-right)/2,(h-top-bottom)/2,w,h);else camera.clearViewOffset();
+ camera.updateProjectionMatrix();
+}
+function tickFlight(now){
+ if(!flight)return;const f=flight,t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-f.start)/2400),u=t*t*(3-2*t);
+ controls.target.copy(f.from).lerp(f.to,u);camera.position.copy(f.eye).lerp(f.end,u);camera.position.y+=Math.sin(Math.PI*u)*f.lift;
+ camera.position.y=Math.max(camera.position.y,groundHeight(camera.position.x,camera.position.z)+.3);controls.update();
+ if(t===1){const dy=groundHeight(f.to.x,f.to.z)-controls.target.y;controls.target.y+=dy;camera.position.y+=dy;controls.update();flight=null;update();}
+}
+
 const params=new URLSearchParams(location.search);if(params.has('lat')&&params.has('lon')&&Number.isFinite(Number(params.get('lat')))&&Math.abs(Number(params.get('lat')))<=89.85&&Number.isFinite(Number(params.get('lon'))))anchor={lat:Number(params.get('lat')),lon:wrap(Number(params.get('lon')))};
 fetch('/dem/tileList.txt').then(r=>{if(!r.ok)throw Error('Terrain catalogue unavailable');return r.text();}).then(text=>{catalogue=new Set(text.split(/\s+/).map(s=>s.replace(/\/$/,'')));reader=new TerrainWorker(catalogue);reader.ready.then(()=>{styleNote();go();}).catch(e=>$('status').textContent=e.message);}).catch(e=>$('status').textContent=e.message);

@@ -1,0 +1,8 @@
+// Bounds apply to displayed point values; source forecast arrays stay unchanged.
+export function displayPoint(row){
+ const out={...row},speed=Math.hypot(row.u,row.v);
+ if(Number.isFinite(out.gust)&&Number.isFinite(speed))out.gust=Math.max(speed,out.gust);
+ if(Number.isFinite(out.dewpoint)&&Number.isFinite(out.temperature))out.dewpoint=Math.min(out.temperature,out.dewpoint);
+ return out;
+}
+export function snapForecast(fraction,count){return Math.max(0,Math.min(count-1,Math.round(fraction*count-1)));}

@@ -1,3 +1,4 @@
+import {typeShader} from './precipitation-type.mjs';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 // Exercise the actual material hook without needing a DOM or WebGL context.
@@ -7,7 +8,7 @@ let priorHookCalled=false;
 const material={userData:{coarseRelief:true},onBeforeCompile(){priorHookCalled=true;}};
 const extent={value:{x:1,y:2,z:300,w:400}};
 const owner={context:()=>({terrainMeshes:()=>[{material}]}),surfaceUniforms:{extent:{value:{x:8,y:9}},mode:{value:0},weatherBounds:{value:{x:1,y:2,z:3,w:4}}}};
-const hook=new Function('return ({'+method+'});')();
+const hook=new Function('typeShader','return ({'+method+'});')(typeShader);
 hook.attachSurfaces.call(owner);
 const shader={uniforms:{extent},vertexShader:'void main(){gl_Position=projectionMatrix*modelViewMatrix*vec4(p.x,elevation*.0015,p.y,1.);}',fragmentShader:'void main(){gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);}'};
 material.onBeforeCompile(shader);

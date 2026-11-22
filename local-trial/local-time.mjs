@@ -18,7 +18,7 @@ let lastClockKey='';
 export function updateForecastClock(meta,frame,centre){
  if(!meta)return;const zone=zoneAt(centre.lat,centre.lon),moment=forecastMoment(meta,frame),key=meta.initial_utc+'/'+Math.floor(moment.time/60000)+'/'+zone;if(key===lastClockKey)return;lastClockKey=key;const p=timeParts(moment.time,zone),$=id=>document.getElementById(id);
  $('clockDate').textContent=p.date;$('clockHour').textContent=p.day+' '+p.hour;
- $('clockZone').textContent=`${p.zone} · ${zone.replaceAll('_',' ')}`;$('mapClock').title=`Forecast time at view centre · ${p.offset}. Time-zone boundaries are approximate.`;
+ $('clockZone').textContent=`${p.zone} · ${zone.replaceAll('_',' ')}`;$('mapClock').title=`Forecast time in this location’s time zone · ${p.offset}. Time-zone boundaries are approximate.`;
  $('validTime').textContent=p.full;$('forecastLead').textContent=`+${Math.floor(moment.lead)} h ${String(Math.floor((moment.lead%1)*60+1e-6)).padStart(2,'0')} min · ${p.zone}`;
  $('timelineStart').textContent=timeParts(meta.times[0],zone).full;$('timelineEnd').textContent=timeParts(meta.times.at(-1),zone).full;
  $('modelRun').textContent='Model run: '+new Date(meta.initial_utc).toISOString().slice(0,16).replace('T',' ')+' UTC';

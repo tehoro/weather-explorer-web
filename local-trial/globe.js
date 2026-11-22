@@ -69,7 +69,7 @@ function showTab(tab){
  else $('viewer').src='/explorer/#'+tab;
 }
 $('back').onclick=()=>showTab('local');document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-function resize(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.clearViewOffset();if(w>700)camera.setViewOffset(w,h,-180,0,w,h);else camera.setViewOffset(w,h,0,220,w,h);camera.updateProjectionMatrix();}
+function resize(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.clearViewOffset();if(w>700)camera.setViewOffset(w,h,180,0,w,h);else camera.setViewOffset(w,h,0,220,w,h);camera.updateProjectionMatrix();}
 addEventListener('resize',resize);resize();let last=performance.now();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,(now-last)/1000);last=now;if(!active)return;
  if(flight){const t=reduced.matches?1:Math.min(1,(now-flight.start)/2600),e=t*t*(3-2*t);const rotation=new THREE.Quaternion().setFromUnitVectors(flight.from.clone().normalize(),flight.to.clone().normalize()),direction=flight.from.clone().normalize().applyQuaternion(new THREE.Quaternion().slerp(rotation,e));camera.position.copy(direction.multiplyScalar(THREE.MathUtils.lerp(flight.from.length(),flight.to.length(),e)));camera.clearViewOffset();camera.updateProjectionMatrix();camera.lookAt(0,0,0);if(t===1&&flight.ready)revealTerrain(flight);}

@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {meteogram,compassDirection} from './meteogram.mjs';
+assert.equal(compassDirection(0,-5),'N');assert.equal(compassDirection(-5,0),'E');assert.equal(compassDirection(0,5),'S');assert.equal(compassDirection(5,0),'W');
+const times=Array.from({length:8},(_,i)=>new Date(Date.UTC(2026,10,22,3*i)).toISOString());
+const rows=new Map(times.map((_,i)=>[i,{u:3,v:4,temperature:12+i,dewpoint:10,gust:10,rain:1,snow:0,ptype:1,totalCloud:.5}]));
+const html=meteogram({times,rows,zone:'Pacific/Auckland',location:{lat:-36,lon:174},frame:2.5,units:{convert:v=>v,format:(v,u)=>`${v} ${u}`,unit:u=>u}});
+assert.equal((html.match(/class="timeCursor"/g)||[]).length,4);
+assert.match(html,/Wind from SW/);assert.match(html,/Total: 3 mm/);assert.match(html,/Dew point/);
+assert.match(html,/stroke="#39c5a1"/);assert.match(html,/stroke="#f18b43"/);
+assert.doesNotMatch(html,/NaN|undefined|direction.*degrees/);
+assert.match(html,/Sun, 22 Nov/);
+console.log('Meteogram: four aligned panels, amounts, compass arrows, colours and shared cursor pass.');

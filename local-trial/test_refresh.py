@@ -26,7 +26,7 @@ class RefreshTests(TestCase):
                 self.assertEqual(path.name,new)
                 self.assertEqual(json.loads((root/'latest.json').read_text())['run'],old)
                 if fail:raise ValueError('Missing pressure tile')
-            with patch.object(refresh.weather,'OUTPUT',root),patch.object(refresh,'STATUS',root/'status.json'),patch.object(refresh,'discover',return_value=new),patch.object(refresh.weather,'build',side_effect=build),patch.object(refresh,'pressure_build') as pressure,patch.object(refresh,'coarse_build'),patch.object(refresh,'validate',side_effect=validate),patch.object(refresh,'prune_runs'),patch.object(refresh.shutil,'disk_usage') as disk:
+            with patch.object(refresh.weather,'OUTPUT',root),patch.object(refresh,'STATUS',root/'status.json'),patch.object(refresh,'discover',return_value=new),patch.object(refresh.weather,'build',side_effect=build),patch.object(refresh,'pressure_build') as pressure,patch.object(refresh,'coarse_build'),patch.object(refresh,'ptype_build'),patch.object(refresh,'point_build'),patch.object(refresh,'validate',side_effect=validate),patch.object(refresh,'prune_runs'),patch.object(refresh.shutil,'disk_usage') as disk:
                 disk.return_value.free=10*1024**3
                 if fail:
                     with self.assertRaises(ValueError):refresh.refresh()

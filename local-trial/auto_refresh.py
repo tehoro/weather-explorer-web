@@ -19,6 +19,8 @@ import numpy as np
 import global_weather as weather
 from prepare import write, ROOTS, CACHE_ROOT
 from prepare_pressure import build as pressure_build
+from prepare_ptype import build as ptype_build
+from prepare_point_fields import build as point_build
 from prepare_coarse import build as coarse_build
 
 START, END = 3, 84
@@ -90,12 +92,19 @@ def validate(root):
     field_bytes=sum(np.dtype(dtype).itemsize for _,dtype,_ in weather.FIELDS)
     for step in STEPS:
         if len(gzip.decompress((root/'global'/f'{step:03}.bin.gz').read_bytes()))!=361*181*field_bytes:raise ValueError('Invalid global preview')
+        if meta.get('ptype_path') and len(gzip.decompress((root/meta['ptype_path']/f'{step:03}'/'global.bin.gz').read_bytes()))!=361*181:raise ValueError('Invalid global precipitation type')
         for y in range(18):
             for x in range(36):
                 name=f'{x:02}-{y:02}.bin.gz'
                 for res,n in [('fine',101),('coarse',11)]:
                     raw=gzip.decompress((root/f'{step:03}'/res/name).read_bytes())
                     if len(raw)!=n*n*field_bytes:raise ValueError('Invalid weather tile '+name)
+                if meta.get('ptype_path'):
+                    raw=gzip.decompress((root/meta['ptype_path']/f'{step:03}'/name).read_bytes())
+                    if len(raw)!=10201:raise ValueError('Invalid precipitation type tile '+name)
+                if meta.get('point_fields'):
+                    info=meta['point_fields'];size=sum(np.dtype(f['dtype']).itemsize for f in info['fields'])
+                    if len(gzip.decompress((root/info['path']/f'{step:03}'/name).read_bytes()))!=10201*size:raise ValueError('Invalid point forecast tile '+name)
                 raw=gzip.decompress((root/'pressure'/f'{step:03}'/name).read_bytes())
                 a=np.frombuffer(raw,dtype='<f4')
                 if a.size!=10201 or not np.isfinite(a).all() or a.min()<800 or a.max()>1150:raise ValueError('Invalid pressure tile '+name)
@@ -130,6 +139,8 @@ def refresh():
             weather.build(SimpleNamespace(run=run,start=START,end=END,publish=False,progress=progress))
             status('pressure',active_run=current,run=run)
             pressure_build(run)
+            ptype_build(run)
+            point_build(run)
             coarse_build(run)
             status('validating',active_run=current,run=run)
             validate(weather.OUTPUT/run)

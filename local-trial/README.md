@@ -792,3 +792,33 @@ The existing camera/terrain revision cache avoids repeat checks while stationary
 
 Checked with synthetic narrow-ridge, near-town, reversed-view and replacement
 tests, plus low-angle Geneva views and rotation in the browser.
+
+### Point forecasts and meteograms (22 November)
+
+Click terrain or a visible town to open its forecast; **Fly here** preserves the
+view direction and distance, allowing clearance over terrain. The point replaces
+the old view-centre weather readout. Its time zone follows the selected location.
+Local uses the same Units module and choices as Highlights, including the local
+preview's separate ports. Opening-globe location controls now sit on the right.
+
+The movable, resizable meteogram follows Weather3D's aligned panels: green
+temperature/orange dew point, precipitation amounts over the preceding three
+hours, wind and gust together with flow arrows above, and total cloud. Lines join
+three-hourly spot values without smoothing. Night shading is approximate. A red
+cursor follows the viewport's interpolated time; chart clicks select a three-hour
+frame. Display bounds keep dew point at or below temperature and gust at or above
+wind speed without modifying source arrays. Numeric wind directions are not shown.
+The current IFS gust field covers the preceding hour, not three hours.
+
+`prepare_ptype.py` and `prepare_point_fields.py` check Open Data indexes before
+preparing optional static sidecars for actual surface precipitation type, dew
+point, gust and total cloud. They are included in background run preparation and
+validated before publication. Surface precipitation colours use the existing
+ECMWF chart palette, with faint shading for light amounts. No terrain lapse-rate
+or snow-level correction is applied: this remains model guidance at model height.
+Streaks/drifting snow are the default; alternate particles and wind density/speed
+controls are under Advanced settings.
+
+Checks: `test-meteogram.mjs`, `test-point-values.mjs`,
+`test-precipitation-type.mjs`, weather/grid tests and `test_refresh.py`;
+browser checks cover point selection, flight, chart time selection and cursors.

@@ -11,3 +11,22 @@
 #viewAngle{display:block;width:100%;margin:8px 0 16px}
 
 footer button{pointer-events:auto;border:0;border-radius:0;background:none;color:inherit;padding:0;font:inherit;text-decoration:underline;cursor:pointer}#dataCredits{margin-top:24px;padding-top:12px;border-top:1px solid var(--edge);font-size:13px;line-height:1.6}#dataCredits h3{font-size:17px}
+.placeLabel{pointer-events:auto;border:0;padding:0;background:transparent;border-radius:0;text-align:left;cursor:pointer}
+#pointHint{position:fixed;left:20px;top:86px;padding:10px 14px;font-size:13px;pointer-events:none}
+#pointForecast{position:fixed;left:20px;top:88px;width:330px;max-height:calc(100dvh - 280px);overflow:auto;z-index:12;padding:14px}
+#pointForecast h2{font-size:19px;margin:0}#pointForecast .panelHeading{padding:0;margin-bottom:10px}
+#pointValues{white-space:pre-line;line-height:1.7;margin:12px 0}#pointTime,#pointStatus{font-size:12px;color:var(--muted);line-height:1.5}
+.pointActions{display:flex;gap:8px}#pointForecast.expanded{width:min(760px,calc(100vw - 420px))}#pointChart svg{width:100%;cursor:crosshair;display:block}#pointChart p{font-size:11px}
+#pointMarker{position:fixed;left:-6px;top:-6px;width:12px;height:12px;border:2px solid white;background:#ec685b;border-radius:50%;z-index:2;pointer-events:none}
+@media(max-width:700px){#pointForecast,#pointForecast.expanded{left:10px;top:80px;width:calc(100vw - 20px);max-height:calc(100dvh - 250px)}#pointHint{font-size:11px}}
+
+/* Meteogram follows the Weather3D panel layout, with aligned time axes. */
+#pointForecast.expanded{width:min(960px,calc(100vw - 40px));max-height:calc(100dvh - 110px);resize:both;min-width:340px;min-height:300px;background:#0a1c2a}
+#pointForecast .panelHeading{cursor:move;touch-action:none;padding-bottom:8px;border:0}
+#pointForecast.expanded #pointValues{display:none}
+#pointCoordinates{font-size:13px;color:#d4e4ee;margin:5px 0}
+#pointTime{color:#ffb1b5;font-size:14px}
+#pointTotal{color:#95d5ff;font-weight:600;margin:8px 0}
+#pointChart{margin-top:20px}#pointChart p{color:var(--muted);line-height:1.6}
+#pointForecast.expanded .pointActions::after{content:'Drag heading to move · drag bottom corner to resize';font-size:11px;color:var(--muted);align-self:center}
+@media(max-width:700px){#pointForecast.expanded{width:calc(100vw - 20px);min-width:0;max-height:calc(100dvh - 100px)}#pointForecast.expanded .pointActions::after{display:none}}

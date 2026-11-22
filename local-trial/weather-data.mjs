@@ -1,11 +1,11 @@
 // The worker owns decoded global previews, detail tiles and disk-cache access.
-import {WeatherData as Engine} from './weather-engine.mjs?v=20261122j';
-export {FIELDS,clamp,tilePoint,decodeTile,decodePressure,bilinear} from './weather-engine.mjs?v=20261122j';
+import {WeatherData as Engine} from './weather-engine.mjs?v=20261122ac';
+export {FIELDS,clamp,tilePoint,decodeTile,decodePressure,bilinear} from './weather-engine.mjs?v=20261122ac';
 export class WeatherData extends Engine{
  constructor(){
   super();this.serial=0;this.requests=new Map();
   if(typeof Worker!=='undefined'){
-   this.worker=new Worker(new URL('./weather-worker.mjs?v=20261122j',import.meta.url),{type:'module'});
+   this.worker=new Worker(new URL('./weather-worker.mjs?v=20261122ac',import.meta.url),{type:'module'});
    this.worker.onmessage=({data})=>{if(data.progress){this.preloadProgress=data.progress;return;}const p=this.requests.get(data.id);if(!p)return;this.requests.delete(data.id);data.error?p.reject(Error(data.error)):p.resolve(data.value);};
    this.worker.onerror=()=>{this.workerFailed=true;for(const p of this.requests.values())p.reject(Error('Weather worker failed; reload to retry.'));this.requests.clear();};
   }
@@ -17,6 +17,7 @@ export class WeatherData extends Engine{
   if(!current())throw Error('Superseded weather view');
   const result=await this.rpc('coarse',[frame,region,n]);if(!current())throw Error('Superseded weather view');return result;
  }
+ point(frame,lat,lon){return this.worker?this.rpc('point',[frame,lat,lon]):super.point(frame,lat,lon);}
  prioritise(frame){this.worker?.postMessage({method:'priority',args:[frame]});}
  setRegion(key){this.worker?.postMessage({method:'region',args:[key]});}
  async detailGrid(frame,region,n=129,current=()=>true){

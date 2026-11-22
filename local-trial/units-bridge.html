@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><script src="/explorer/units.js"></script><script>
+const origin='http://127.0.0.1:8092';
+function send(){parent.postMessage({type:'local-units',choices:Object.fromEntries(['temperature','wind','rain'].map(k=>[k,Units.choice(k)]))},origin);}
+addEventListener('message',e=>{if(e.origin!==origin||e.source!==parent)return;if(e.data?.type==='local-units-request')send();});
+addEventListener('storage',e=>{if(e.key==='weather-explorer-units')location.reload();});send();
+</script>

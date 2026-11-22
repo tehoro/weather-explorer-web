@@ -20,7 +20,7 @@ export class PlaceLabels{
   this.elapsed+=dt;if(this.elapsed<.2)return;this.elapsed=0;
   this.layer.hidden=!document.getElementById('placeNames').checked;if(this.layer.hidden)return;
   const c=this.context(),width=innerWidth,height=innerHeight,blocked=[];
-  for(const element of document.querySelectorAll('#settingsPanel,.brand,#mapClock,#timeline,#playback,footer')){const rect=element.getBoundingClientRect();if(rect.width&&rect.height)blocked.push(rect);}
+  for(const element of document.querySelectorAll('#settingsPanel,#pointForecast,.brand,#mapClock,#timeline,#playback,footer')){const rect=element.getBoundingClientRect();if(rect.width&&rect.height)blocked.push(rect);}
   this.camera.updateMatrixWorld();
   const key=[...this.camera.matrixWorld.elements,...this.camera.projectionMatrix.elements,c.centre.lat,c.centre.lon,c.terrainRevision,width,height,...blocked.flatMap(r=>[r.left,r.top,r.right,r.bottom])].join('/');
   if(key===this.layoutKey)return;this.layoutKey=key;
@@ -34,13 +34,13 @@ export class PlaceLabels{
    v.set(position.x,y,position.z).project(this.camera);if(v.z<-1||v.z>1||Math.abs(v.x)>1||Math.abs(v.y)>1)continue;
    const x=(v.x+1)*width/2,screenY=(1-v.y)*height/2,labelWidth=this.widths.get(name)??(this.widths.set(name,this.measure.measureText(name).width+23),this.widths.get(name)),box={left:x-5,right:x+labelWidth,top:screenY-12,bottom:screenY+13};
    if(box.left<8||box.right>width-8||box.top<8||box.bottom>height-8)continue;
-   candidates.push({id,name,population,capital,x,y:screenY,box,world:new THREE.Vector3(position.x,ground,position.z)});
+   candidates.push({id,name,lat,lon,population,capital,x,y:screenY,box,world:new THREE.Vector3(position.x,ground,position.z)});
   }
   // Visibility ends at the actual town ground point, never the raised text.
   const chosen=selectPlaces(candidates,blocked,this.selected,5,
    p=>!terrainBlocksSight(this.camera.position,p.world,grids,c.coarseSightGrid));
   this.selected=new Set(chosen.map(p=>p.id));const existing=new Map([...this.layer.children].map(e=>[Number(e.dataset.id),e]));
-  for(const p of chosen){let el=existing.get(p.id);if(!el){el=document.createElement('div');el.className='placeLabel';el.dataset.id=p.id;el.textContent=p.name;this.layer.append(el);}el.style.transform=`translate(${p.x}px,${p.y}px)`;existing.delete(p.id);}
+  for(const p of chosen){let el=existing.get(p.id);if(!el){el=document.createElement('button');el.className='placeLabel';el.setAttribute('aria-label','Forecast for '+p.name);el.dataset.id=p.id;el.textContent=p.name;this.layer.append(el);}el.onclick=()=>dispatchEvent(new CustomEvent('local-place-select',{detail:{lat:p.lat,lon:p.lon,name:p.name}}));el.style.transform=`translate(${p.x}px,${p.y}px)`;existing.delete(p.id);}
   for(const el of existing.values())el.remove();
  }
 }

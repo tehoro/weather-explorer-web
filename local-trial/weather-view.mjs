@@ -1,3 +1,4 @@
+import {typeShader} from './precipitation-type.mjs';
 import {replayFrame} from './playback-loop.mjs';
 import {updateCloudTerrain} from './cloud-terrain.mjs';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
@@ -9,7 +10,7 @@ import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122j';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122ac';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 
@@ -79,7 +80,7 @@ export class WeatherView{
  playLabel(){$('weatherPlay').textContent=this.playing?'Pause':'Play';}
  error(e){$('weatherLoad').textContent=e.message+' — retry weather.';$('weatherRetry').hidden=false;this.playing=false;this.playLabel();$('prepareStatus').textContent=e.message+' — retry weather in Settings.';}
  refresh(force=false){
-  if(!this.data.meta)return;updateForecastClock(this.data.meta,this.displayFrame??this.frame,this.context().centre);
+  if(!this.data.meta)return;updateForecastClock(this.data.meta,this.displayFrame??this.frame,(this.pointForecast?.location||this.context().centre));
   const c=this.context(),r=c.region,key=[r.west,r.north,r.lonSpan,r.latSpan].map(v=>v.toFixed(3)).join('/');
   const terrain=c.preloadStatus(),changed=terrain.key!==this.terrainKey;this.terrainKey=terrain.key;
   if(!force&&key===this.regionKey){if(changed&&!this.monitoringTerrain&&!this.loading&&terrain.ready<terrain.total)this.prepare();return;}
@@ -102,14 +103,15 @@ export class WeatherView{
    $('weatherLoad').textContent=(grid.quality==='coarse'?'IFS 1° global preview · run ':'IFS 0.1° · run ')+this.data.meta.initial_utc.slice(0,16).replace('T',' ')+' UTC';this.readout();if(moved||this.prepared?.region!==this.regionKey)this.prepare();
   }catch(e){if(token===this.token){this.loading=false;if(this.playing){this.elapsed=0;this.retryWait=3;$('weatherLoad').textContent='Waiting for the next weather frame… Retrying automatically.';$('weatherRetry').hidden=false;}else this.error(e);}}
  }
- texture(grid,keys){const pressure=keys.includes('pressure')?pressureAnomalies(grid.fields.pressure,grid.n):null;const a=new Float32Array(grid.n*grid.n*4);for(let i=0;i<grid.n*grid.n;i++)keys.forEach((k,j)=>a[i*4+j]=k==='pressure'?pressure[i]:grid.fields[k][i]);const t=new THREE.DataTexture(a,grid.n,grid.n,THREE.RGBAFormat,THREE.FloatType);t.minFilter=t.magFilter=THREE.LinearFilter;t.needsUpdate=true;return t;}
+ texture(grid,keys){const pressure=keys.includes('pressure')?pressureAnomalies(grid.fields.pressure,grid.n):null;const a=new Float32Array(grid.n*grid.n*4);for(let i=0;i<grid.n*grid.n;i++)keys.forEach((k,j)=>a[i*4+j]=k==='pressure'?pressure[i]:(grid.fields[k]?.[i]??-1));const t=new THREE.DataTexture(a,grid.n,grid.n,THREE.RGBAFormat,THREE.FloatType);t.minFilter=t.magFilter=THREE.LinearFilter;t.needsUpdate=true;return t;}
  build(moved){
   for(const mesh of this.meshes){this.group.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();}this.meshes=[];
   for(const t of this.textures||[])t.dispose();
   this.textures=[this.texture(this.previous,['low','middle','high','rain']),this.texture(this.current,['low','middle','high','rain']),this.texture(this.previous,['temperature','pressure','u','v']),this.texture(this.current,['temperature','pressure','u','v'])];
   const context=this.context(),r=this.current.region;this.bounds=context.bounds(r);this.ground=context.ground;
   const {west,east,north,south}=this.bounds,w=east-west,h=south-north;
-  this.uniforms={cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
+  const typeTexture=g=>{const t=this.texture(g,['rain','snow','ptype']);t.minFilter=t.magFilter=THREE.NearestFilter;this.textures.push(t);return t;};
+  this.uniforms={ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
   const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.userData.terrainRevision=context.terrainRevision;g.computeBoundingSphere();return g;};
   const vertex=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
   this.surfaceUniforms??={};
@@ -128,6 +130,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
   if(!this.wind)this.makeWind();if(!this.drops)this.makeRain();
   if(moved)this.streaks?.reset();
   if(moved||!this.particles.length){this.particles=Array.from({length:N},()=>this.spawn());this.rain=Array.from({length:900},()=>this.spawnRain());}
+  $('precipitationLegend')?.remove();const legend=document.createElement('p');legend.id='precipitationLegend';legend.innerHTML='<small>Rain <span style="color:#3ce213">■</span> · Snow <span style="color:#9d68ee">■</span> · Wet snow <span style="color:#4543fa">■</span> · Rain/snow <span style="color:#1fb8a6">■</span> · Freezing rain <span style="color:#ff044b">■</span> · Ice pellets <span style="color:#ff8000">■</span> · Freezing drizzle <span style="color:#fb6ec0">■</span><br>Fainter shading means lighter precipitation. '+(this.data.meta.ptype_path?'IFS surface precipitation type.':'Type estimated from rain/snow amounts; detailed categories unavailable.')+'</small>';$('surfaceField').after(legend);
   this.isobarLines??=new IsobarLines(this.group);this.isobarLines.key='';this.isobarLines.elapsed=2;this.options();
  }
  attachSurfaces(){
@@ -138,7 +141,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
     beforeCompile.call(material,shader);
     // Only attach weather inputs. The coarse terrain owns an `extent` vec4;
     // copying all view uniforms replaced it with the weather extent vec2.
-    for(const key of ['surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
+    for(const key of ['ptypeA','ptypeB','surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
     shader.vertexShader='varying vec3 weatherPosition;\n'+shader.vertexShader;
     // Coarse relief displaces its vertices in its own shader rather than the
     // standard material chunks. Sample weather at those same world positions.
@@ -147,7 +150,8 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
      shader.fragmentShader=shader.fragmentShader.replace('gl_FragColor=vec4(elevation<.1?sea:c*shade,1.);','vec4 diffuseColor=vec4(elevation<.1?sea:c*shade,1.);\n#include <color_fragment>\ngl_FragColor=diffuseColor;');
     }
     shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>','weatherPosition=(modelMatrix*vec4(transformed,1.)).xyz;\n#include <project_vertex>');
-    shader.fragmentShader='varying vec3 weatherPosition; uniform sampler2D surfaceA,surfaceB,cloudA,cloudB; uniform float blend,mode,isobars,isobarStep,weatherGridSize; uniform vec4 weatherBounds;\n'+shader.fragmentShader;
+    shader.fragmentShader='varying vec3 weatherPosition; uniform sampler2D ptypeA,ptypeB,surfaceA,surfaceB,cloudA,cloudB; uniform float blend,mode,isobars,isobarStep,weatherGridSize; uniform vec4 weatherBounds;\n'+shader.fragmentShader;
+    shader.fragmentShader=typeShader+'\n'+shader.fragmentShader;
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>
      vec2 weatherUV=(weatherPosition.xz-weatherBounds.xy)/weatherBounds.zw;
      if(all(greaterThanEqual(weatherUV,vec2(0)))&&all(lessThanEqual(weatherUV,vec2(1)))){
@@ -157,12 +161,14 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
       vec3 colour=diffuseColor.rgb;float alpha=0.;
       if(mode>.5&&mode<1.5){colour=mix(vec3(.10,.35,.85),vec3(.95,.27,.08),clamp((s.r+10.)/45.,0.,1.));alpha=.48;}
       else if(mode>1.5&&mode<2.5){colour=mix(vec3(.18,.65,.72),vec3(1.,.38,.04),clamp(length(s.ba)/25.,0.,1.));alpha=.48;}
-      else if(mode>2.5){colour=mix(vec3(.1,.5,1.),vec3(.8,.15,.85),clamp(rain/10.,0.,1.));alpha=clamp(sqrt(rain)*.35,0.,.7);}
+      else if(mode>2.5){vec4 pa=texture2D(ptypeA,sampleUV),pb=texture2D(ptypeB,sampleUV);
+       colour=mix(precipitationColour(precipitationKind(pa)),precipitationColour(precipitationKind(pb)),blend);
+       colour=pow(colour,vec3(2.2));alpha=rain<.05?0.:clamp(sqrt(rain)*.20,0.,.55);}
       diffuseColor.rgb=mix(diffuseColor.rgb,colour,alpha);
 
      }`);
    };
-   material.customProgramCacheKey=()=> 'local-weather-g-'+Boolean(material.userData.coarseRelief);material.needsUpdate=true;
+   material.customProgramCacheKey=()=> 'local-weather-type-ab-'+Boolean(material.userData.coarseRelief);material.needsUpdate=true;
   }
  }
  sample(name,x,z){if(!this.current)return NaN;const b=this.bounds,n=this.current.n,px=(x-b.west)/(b.east-b.west)*(n-1),py=(z-b.north)/(b.south-b.north)*(n-1);return bilinear(this.previous.fields[name],n,px,py)*(1-this.blend)+bilinear(this.current.fields[name],n,px,py)*this.blend;}
@@ -181,12 +187,12 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
  spawnRain(){const p=this.spawn();return {x:p.x,z:p.z,phase:Math.random()};}
  makeRain(){this.streaks=new PrecipitationStreaks(this.group);this.precipitation=makePrecipitation(this.group,900);this.drops=this.precipitation.rain.obj;this.flakes=this.precipitation.snow.obj;}
 
- options(){if(!this.current)return;this.wind.visible=$('windLayer').checked;this.drops.visible=this.flakes.visible=$('rainLayer').checked&&$('precipitationStyle').value==='symbols';this.streaks.visible($('rainLayer').checked&&$('precipitationStyle').value==='streaks');for(const c of this.clouds)c.visible=$(['cloudLow','cloudMiddle','cloudHigh'][c.userData.layer]).checked;this.uniforms.mode.value=['none','temperature','wind','rain'].indexOf($('surfaceField').value);this.uniforms.isobars.value=+$('pressureLayer').checked;this.surfaceUniforms.mode.value=this.uniforms.mode.value;this.surfaceUniforms.isobars.value=this.uniforms.isobars.value;for(const c of this.clouds)c.material.uniforms.opacity.value=(c.userData.layer===2?.12:.23)*Number($('cloudOpacity').value)/100;}
- readout(){const c=this.context(),b=this.bounds;if(c.target.x<b.west||c.target.x>b.east||c.target.z<b.north||c.target.z>b.south){$('weather').textContent='Loading weather at view centre…';return;}const v=k=>this.sample(k,c.target.x,c.target.z);$('weather').textContent=`At view centre · interpolated IFS\nWind ${Math.hypot(v('u'),v('v')).toFixed(1)} m/s · ${v('temperature').toFixed(1)} °C\nMSL ${v('pressure').toFixed(1)} hPa · precip ${v('rain').toFixed(2)} mm/h\nCloud low / middle / high: ${['low','middle','high'].map(k=>Math.round(v(k)*100)+'%').join(' / ')}`;}
+ options(){if(!this.current)return;$('precipitationLegend').hidden=$('surfaceField').value!=='rain';this.wind.visible=$('windLayer').checked;this.drops.visible=this.flakes.visible=$('rainLayer').checked&&$('precipitationStyle').value==='symbols';this.streaks.visible($('rainLayer').checked&&$('precipitationStyle').value==='streaks');for(const c of this.clouds)c.visible=$(['cloudLow','cloudMiddle','cloudHigh'][c.userData.layer]).checked;this.uniforms.mode.value=['none','temperature','wind','rain'].indexOf($('surfaceField').value);this.uniforms.isobars.value=+$('pressureLayer').checked;this.surfaceUniforms.mode.value=this.uniforms.mode.value;this.surfaceUniforms.isobars.value=this.uniforms.isobars.value;for(const c of this.clouds)c.material.uniforms.opacity.value=(c.userData.layer===2?.12:.23)*Number($('cloudOpacity').value)/100;}
+ readout(){this.pointForecast?.update();}
  updateTimeDisplay(){
   this.displayFrame=this.timeTransition?this.fromFrame+(this.frame-this.fromFrame)*this.blend:this.frame;
   $('forecastTime').value=this.displayFrame;
-  updateForecastClock(this.data.meta,this.displayFrame,this.context().centre);
+  updateForecastClock(this.data.meta,this.displayFrame,(this.pointForecast?.location||this.context().centre));
  }
  advanceTime(dt){
   this.elapsed+=dt;
@@ -208,8 +214,8 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
   // Fixed-rate histories avoid display refresh rate changing trail length.
   this.accumulator=(this.accumulator||0)+dt;if(this.accumulator<1/30)return;const step=Math.min(.1,this.accumulator);this.accumulator=0;
   this.streaks.update(this,step);
-  const b=this.bounds,attrs=this.wind.geometry.attributes,distance=this.liveContext.distance,speed=2*Math.max(.06,distance*.006);
-  const windCount=particleBudget(N,distance);
+  const b=this.bounds,attrs=this.wind.geometry.attributes,distance=this.liveContext.distance,speed=2*Math.max(.06,distance*.006)*Number($('windSpeed').value);
+  const windCount=particleBudget(Math.round(N*Number($('windDensity').value)),distance);
   this.wind.geometry.instanceCount=windCount*(L-1);
   if(this.activeWindCount!==undefined&&windCount>this.activeWindCount)for(let i=this.activeWindCount;i<windCount;i++)this.particles[i]=this.spawn();
   this.activeWindCount=windCount;
