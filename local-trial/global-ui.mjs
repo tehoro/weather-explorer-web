@@ -51,7 +51,7 @@ export function setupUI(){
  const body=document.createElement('div');body.className='panelBody';body.append(location,weather,view,advanced,diagnostics);aside.append(body);
  function panel(open){aside.hidden=!open;document.body.classList.toggle('panelClosed',!open);$('settingsToggle').setAttribute('aria-expanded',String(open));}
  $('closeSettings').onclick=()=>panel(false);$('settingsToggle').onclick=()=>{document.body.classList.remove('clean');panel(aside.hidden);};
- $('cleanView').onclick=()=>{const clean=document.body.classList.toggle('clean');panel(false);$('cleanView').textContent=clean?'Show controls':'Clean view';};
+ $('cleanView').onclick=()=>{const clean=document.body.classList.toggle('clean');$('cleanView').textContent=clean?'Show controls':'Clean view';};
  $('helpOpen').onclick=()=>{help.showModal();help.scrollTop=0;};$('helpClose').onclick=()=>help.close();
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!help.open){document.body.classList.remove('clean');$('cleanView').textContent='Clean view';panel(false);}});
  if(matchMedia('(max-width:700px)').matches)panel(false);

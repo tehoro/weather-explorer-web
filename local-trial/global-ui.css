@@ -47,3 +47,6 @@ footer button{pointer-events:auto;border:0;border-radius:0;background:none;color
 @media(max-width:700px){#playback button{padding:9px 5px;font-size:11px}}
 
 #windDensity,#windSpeed{display:block;margin:8px 0 14px}
+
+/* Clean view changes overlays only; retain their open state for restoration. */
+.clean #settingsPanel,.clean #pointForecast,.clean #mapClock,.clean #prepareStatus,.clean #pointHint,.clean .brand strong,.clean #helpOpen{display:none!important}

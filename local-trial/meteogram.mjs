@@ -1,4 +1,4 @@
-import {TYPES,precipitationType,typeName} from './precipitation-type.mjs?v=20261122aj';
+import {TYPES,precipitationType,typeName} from './precipitation-type.mjs?v=20261122ak';
 export const chartLayout={width:880,left:52,span:810};
 export const compassDirection=(u,v)=>['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round((Math.atan2(-u,-v)*180/Math.PI+360)/22.5)%16];
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

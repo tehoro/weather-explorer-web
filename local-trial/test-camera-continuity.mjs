@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {Vector3} from './assets/three.module.js';
+const source=await readFile(new URL('./global-test.js',import.meta.url),'utf8');
+const body=source.slice(source.indexOf('function syncZoomFocus(dt){'),source.indexOf("renderer.domElement.addEventListener('wheel'",source.indexOf('function syncZoomFocus(dt){')));
+const camera={position:new Vector3(0,10,20)},controls={target:new Vector3(),update(){}};
+const run=new Function('THREE','camera','controls',`let zoomFocus={lat:0,lon:0},flight=null,focusRevision=0,terrainRevision=1;const groundHeight=()=>2,weatherContext=()=>({projectPlace:()=>({x:0,z:0})});${body};return syncZoomFocus;`)({Vector3},camera,controls);
+run(1/60);
+assert(controls.target.y>0&&controls.target.y<.1,'New terrain height must not snap the orbit centre');
+assert.equal(camera.position.y-controls.target.y,10,'Height reconciliation preserves camera offset');
+for(let i=0;i<400;i++)run(1/60);
+assert(Math.abs(controls.target.y-2)<.0001,'Smooth reconciliation reaches the actual ground');
+console.log('Camera terrain-height reconciliation is gradual and preserves viewing offset.');

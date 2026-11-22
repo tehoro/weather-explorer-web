@@ -1,10 +1,10 @@
 import {orbitStep,orbitOffset} from './camera-orbit.mjs';
-import {PointForecast} from './point-forecast.mjs?v=20261122aj';
+import {PointForecast} from './point-forecast.mjs?v=20261122ak';
 import {TerrainIndex} from './terrain-index.mjs';
 import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
-import {GlobalRelief} from './global-relief.mjs?v=20261122aj';
+import {GlobalRelief} from './global-relief.mjs?v=20261122ak';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
@@ -12,9 +12,9 @@ import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {sample} from './terrain-raster.mjs?v=20261122l';
 import {TerrainWorker} from './terrain-worker-client.mjs';
-import {WeatherView} from './weather-view.mjs?v=20261122aj';
-import {setupUI} from './global-ui.mjs?v=20261122aj';
-import {PlaceLabels} from './place-labels.mjs?v=20261122aj';
+import {WeatherView} from './weather-view.mjs?v=20261122ak';
+import {setupUI} from './global-ui.mjs?v=20261122ak';
+import {PlaceLabels} from './place-labels.mjs?v=20261122ak';
 setupUI();
 const terrainScale=()=>Number(document.getElementById("terrainScale").value);
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
@@ -33,7 +33,7 @@ let pointForecast,flight=null,zoomFocus=null,focusRevision=-1,orbit=null,lastOrb
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
-renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus();tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&needed.size&&backdrop){const near=[...needed.values()].filter(p=>!p.background).sort((a,b)=>a.distance-b.distance),central=near.slice(0,3),waited=now-approachLoadStart;if((central.length&&central.every(p=>tiles.has(p.key)))||(waited>12000&&near.some(p=>tiles.has(p.key)))){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}}
+renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&needed.size&&backdrop){const near=[...needed.values()].filter(p=>!p.background).sort((a,b)=>a.distance-b.distance),central=near.slice(0,3),waited=now-approachLoadStart;if((central.length&&central.every(p=>tiles.has(p.key)))||(waited>12000&&near.some(p=>tiles.has(p.key)))){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(150-240)*e;camera.position.copy(controls.target).add(new THREE.Vector3(0,d*(1-e*.43),d*e*.82));controls.update();if(t===1){approachStart=null;focusRevision=-1;syncZoomFocus();update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
@@ -80,7 +80,7 @@ function cameraFootprint(){
 }
 function dispose(mesh){mesh.userData.disposed=true;colourQueue.delete(mesh);scene.remove(mesh);mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose();}
 function rebase(){
- if(flight||controls.target.length()<30)return;
+ if(flight||Math.hypot(controls.target.x,controls.target.z)<30)return;
  const c=centre(),shift=new THREE.Vector3(controls.target.x,0,controls.target.z);anchor=c;
  rebasing=true;camera.position.sub(shift);controls.target.sub(shift);controls.update();rebasing=false;
  for(const {mesh,p}of tiles.values())position(mesh,p);positionBackdrop();if(weatherView)weatherView.regionKey=null;
@@ -199,8 +199,7 @@ function weatherContext(){
 weatherView=new WeatherView(scene,weatherContext);
 placeLabels=new PlaceLabels(camera,weatherContext,(lat,lon)=>({x:wrap(lon-anchor.lon)*111.2*cos(),z:(anchor.lat-lat)*111.2}));
 pointForecast=new PointForecast(weatherView,flyToPoint);weatherView.pointForecast=pointForecast;
-const viewportObserver=new MutationObserver(()=>centreViewport());
-for(const id of ['settingsPanel','pointForecast'])viewportObserver.observe($(id),{attributes:true,attributeFilter:['hidden','class']});
+// Panel visibility never changes the camera. Reframe only on explicit centring.
 const pointMarker=document.createElement('div');pointMarker.id='pointMarker';pointMarker.hidden=true;document.body.append(pointMarker);
 function updatePointMarker(){
  const p=pointForecast?.location;if(!p){if(typeof pointMarker!=='undefined')pointMarker.hidden=true;return;}
@@ -235,6 +234,7 @@ function flyToPoint(p){
  centreViewport();
 }
 function centreViewport(){
+ if(document.body.classList.contains("clean"))return;
  const w=innerWidth,h=innerHeight,settings=$('settingsPanel'),point=$('pointForecast'),right=settings&&!settings.hidden?settings.getBoundingClientRect().left:w,left=point&&!point.hidden?point.getBoundingClientRect().right:0;
  const top=80,bottom=$('timeline').getBoundingClientRect().top;
  if(right-left>200)camera.setViewOffset(w,h,(w-left-right)/2,(h-top-bottom)/2,w,h);else camera.clearViewOffset();
@@ -251,6 +251,7 @@ function stopOrbit(){orbit=null;const button=$('orbitToggle');button.textContent
 $('orbitToggle').onclick=()=>{
  if(orbit){stopOrbit();update();return;}
  if(flight)tickFlight(flight.start+2400);
+ rebase();
  const offset=camera.position.clone().sub(controls.target);
  orbit={radius:Math.hypot(offset.x,offset.z),height:offset.y,bearing:Math.atan2(offset.x,offset.z),last:performance.now()};
  $('orbitToggle').textContent='Stop orbit';$('orbitToggle').setAttribute('aria-pressed','true');lastOrbitRefresh=0;clearTimeout(timer);
@@ -260,6 +261,12 @@ function tickOrbit(now){
  const seconds=(now-orbit.last)/1000;orbit.last=now;
  if(document.hidden)return;
  orbit.bearing=orbitStep(orbit.bearing,seconds,Math.max(10,Math.min(3600,Number($('orbitPeriod').value)||120)));
+ // Look ahead along the orbit so terrain clearance is approached gradually.
+ // Keep acquired clearance for this orbit rather than dropping back each frame.
+ const period=Math.max(10,Math.min(3600,Number($('orbitPeriod').value)||120));
+ let required=orbit.height;
+ for(let i=0;i<=8;i++){const ahead=orbitOffset(orbit.radius,0,orbitStep(orbit.bearing,i*.25,period));required=Math.max(required,groundHeight(controls.target.x+ahead.x,controls.target.z+ahead.z)+.5*terrainScale()-controls.target.y);}
+ orbit.height+=(required-orbit.height)*(1-Math.exp(-Math.min(seconds,.1)/.3));
  const offset=orbitOffset(orbit.radius,orbit.height,orbit.bearing);
  camera.position.set(controls.target.x+offset.x,controls.target.y+offset.y,controls.target.z+offset.z);
  controls.update();
@@ -274,14 +281,15 @@ $('viewAngle').addEventListener('change',stopOrbit);
 // Keep about 500 real metres above the exaggerated terrain.
 function keepAboveTerrain(){
  const floor=groundHeight(camera.position.x,camera.position.z)+.5*terrainScale();
- if(camera.position.y<floor){camera.position.y=floor;controls.update();}
+ if(camera.position.y<floor){camera.position.y=floor;if(orbit)orbit.height=Math.max(orbit.height,floor-controls.target.y);controls.update();}
 }
 // Zoom and orbit share the selected ground point. Update its height when finer
 // terrain arrives, moving the camera by the same amount to preserve the view.
-function syncZoomFocus(){
+function syncZoomFocus(dt){
  if(!zoomFocus||flight||focusRevision===terrainRevision)return;
  const q=weatherContext().projectPlace(zoomFocus.lat,zoomFocus.lon),target=new THREE.Vector3(q.x,groundHeight(q.x,q.z),q.z),shift=target.clone().sub(controls.target);
- camera.position.add(shift);controls.target.copy(target);focusRevision=terrainRevision;controls.update();
+ if(dt!==undefined&&shift.length()>.0001)shift.multiplyScalar(1-Math.exp(-dt/.6));else focusRevision=terrainRevision;
+ camera.position.add(shift);controls.target.add(shift);controls.update();
 }
 renderer.domElement.addEventListener('wheel',()=>{if(flight)tickFlight(flight.start+2400);syncZoomFocus();},{capture:true,passive:true});
 // A deliberate pan chooses a new focus; ordinary wheel zoom and rotation do not.
