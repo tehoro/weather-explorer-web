@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122l';
-import {WeatherView} from './weather-view.mjs?v=20261122r';
+import {WeatherView} from './weather-view.mjs?v=20261122s';
 import {setupUI} from './global-ui.mjs?v=20261122o';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();

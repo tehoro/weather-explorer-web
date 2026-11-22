@@ -131,7 +131,9 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
   for(const mesh of this.context().terrainMeshes()){
    const material=mesh.material;if(material.userData.weather)continue;material.userData.weather=true;
    material.onBeforeCompile=shader=>{
-    Object.assign(shader.uniforms,this.surfaceUniforms);
+    // Only attach weather inputs. The coarse terrain owns an `extent` vec4;
+    // copying all view uniforms replaced it with the weather extent vec2.
+    for(const key of ['surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
     shader.vertexShader='varying vec3 weatherPosition;\n'+shader.vertexShader;
     // Coarse relief displaces its vertices in its own shader rather than the
     // standard material chunks. Sample weather at those same world positions.
