@@ -8,3 +8,13 @@ for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++)assert.ok(!ove
 assert.ok(!selectPlaces(candidates,[{left:0,right:150,top:0,bottom:100}]).some(p=>p.id===1));
 assert.equal(selectPlaces([]).length,0);assert.equal(selectPlaces([p(1,50,50)]).length,1);
 console.log('Global tile wrapping, five-label cap, population ranking, collision avoidance, panel exclusion and sparse views passed.');
+const near={...p(10,50,50,1000),proximity:.2},far={...p(11,50,50,100000),proximity:10};
+assert.equal(selectPlaces([far,near],[],new Set(),1)[0].id,10);
+const old={...p(12,50,50,900),proximity:.2};
+assert.equal(selectPlaces([near,old],[],new Set([12]),1)[0].id,12);
+console.log('Nearby settlements outrank distant cities; retained labels resist minor ranking changes.');
+const fixed=selectPlaces([near,far],[],new Set([11]),1,()=>true,true);
+assert.equal(fixed[0].id,11,'Orbit retains an existing visible label despite a better challenger');
+assert.equal(selectPlaces([near,far],[],new Set([11]),1,p=>p.id!==11,true)[0].id,10,'Terrain-hidden label is replaced');
+assert.equal(selectPlaces([near],[],new Set([11]),1,()=>true,true)[0].id,10,'Off-screen label is replaced');
+console.log('Orbit keeps its visible label set and replaces only missing or occluded labels.');

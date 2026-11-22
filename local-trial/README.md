@@ -851,3 +851,14 @@ clearance can lift the eye over rising ground. Streaming refreshes periodically
 during continuous rotation rather than waiting for camera motion to stop.
 `test-camera-orbit.mjs` checks period, refresh-rate independence and geometry;
 browser checks confirm the centred marker stays fixed and wheel input pauses.
+
+Place labels now reproject the five selected towns on every rendered frame, so
+orbiting does not move labels in 200 ms steps. Candidate ranking, collision checks,
+terrain sampling and line-of-sight work remain throttled to five times a second.
+The fast path only projects cached ground points and updates CSS transforms.
+Nearby settlements receive priority, existing labels get a modest retention bonus,
+and the candidate radius follows zoom distance instead of a 950 km minimum.
+During automatic orbit, ranking is frozen for the selected set: visible existing
+labels are retained even if a more important town becomes a candidate. Off-screen,
+terrain-occluded or panel-covered labels release slots for nearby replacements.
+Tests cover retention against a stronger challenger and replacement on occlusion.

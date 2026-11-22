@@ -1,5 +1,5 @@
 import {orbitStep,orbitOffset} from './camera-orbit.mjs';
-import {PointForecast} from './point-forecast.mjs?v=20261122af';
+import {PointForecast} from './point-forecast.mjs?v=20261122ah';
 import {TerrainIndex} from './terrain-index.mjs';
 import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
@@ -12,9 +12,9 @@ import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {sample} from './terrain-raster.mjs?v=20261122l';
 import {TerrainWorker} from './terrain-worker-client.mjs';
-import {WeatherView} from './weather-view.mjs?v=20261122af';
-import {setupUI} from './global-ui.mjs?v=20261122af';
-import {PlaceLabels} from './place-labels.mjs?v=20261122af';
+import {WeatherView} from './weather-view.mjs?v=20261122ah';
+import {setupUI} from './global-ui.mjs?v=20261122ah';
+import {PlaceLabels} from './place-labels.mjs?v=20261122ah';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
@@ -190,12 +190,12 @@ function weatherContext(){
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
  const coarseSightGrid={left:-180*scale-anchor.lon*scale,right:180*scale-anchor.lon*scale,top:(anchor.lat-90)*111.2,bottom:(anchor.lat+90)*111.2,stepX:scale/12,stepZ:111.2/12,
    height:(x,z)=>globalRelief.height(anchor.lat-z/111.2,anchor.lon+x/scale)};
-  return {placeMesh:(x,z)=>{groundHeight(x,z);return terrainIndex.find(anchor.lat-z/111.2,anchor.lon+x/scale)?.mesh;},coarseSightGrid,preloadStatus,terrainRevision,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
+  return {orbiting:!!orbit,placeMesh:(x,z)=>{groundHeight(x,z);return terrainIndex.find(anchor.lat-z/111.2,anchor.lon+x/scale)?.mesh;},coarseSightGrid,preloadStatus,terrainRevision,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};
 }
 weatherView=new WeatherView(scene,weatherContext);
-placeLabels=new PlaceLabels(camera,weatherContext);
+placeLabels=new PlaceLabels(camera,weatherContext,(lat,lon)=>({x:wrap(lon-anchor.lon)*111.2*cos(),z:(anchor.lat-lat)*111.2}));
 pointForecast=new PointForecast(weatherView,flyToPoint);weatherView.pointForecast=pointForecast;
 const viewportObserver=new MutationObserver(()=>centreViewport());
 for(const id of ['settingsPanel','pointForecast'])viewportObserver.observe($(id),{attributes:true,attributeFilter:['hidden','class']});
