@@ -680,3 +680,15 @@ Terrain appearance still refines during loading, but precipitation coverage no
 longer waits for detailed terrain. Browser verification near Pori at +9 h showed
 continuous precipitation while only 5/68 terrain/cover patches were ready, without
 shader errors.
+
+### Wind-driven precipitation (build H)
+
+Drifting snow discs increase from five to seven CSS pixels. Rain and snow now
+advect visibly with the sampled 10 m wind: eastward u moves east and northward v
+moves north. The illustrative drift scales with the falling layer height so it
+remains legible at different zooms. Snow retains its seven-second descent versus
+1.5 seconds for rain, and its gentle flutter is bounded relative to the wind.
+Rain ribbon tails follow the same velocity as their moving heads. Original symbol
+particles also advect with surface wind. These are illustrative accelerated motions,
+not a physical simulation of individual hydrometeors. Particle tests cover both
+wind directions, both phases, ribbon orientation and slower snow descent.

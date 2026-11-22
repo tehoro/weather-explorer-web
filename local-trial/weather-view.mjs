@@ -1,5 +1,5 @@
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122e';
-import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122f';
+import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122h';
 import {IsobarLines} from './isobar-lines.mjs?v=20261120s';
 import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
@@ -189,6 +189,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
    let nr=0,ns=0;
    for(let i=0;i<this.rain.length;i++){
     let p=this.rain[i];const rain=this.sample('rain',p.x,p.z),snow=this.sample('snow',p.x,p.z),isSnow=(i%100)/100<clamp(snow/Math.max(.001,rain),0,1);
+    p.x+=step*this.sample('u',p.x,p.z)*.02;p.z-=step*this.sample('v',p.x,p.z)*.02;
     p.phase-=step*(isSnow?.18:.55);if(p.phase<0){this.rain[i]=this.spawnRain();continue;}
     if(rain<.05||((i*37)%101)/101>precipitationDensity(rain))continue;
     const ground=Math.max(0,this.ground(p.x,p.z)),y=ground+.05+p.phase*.5,alpha=.6;

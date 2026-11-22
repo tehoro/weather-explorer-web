@@ -13,6 +13,14 @@ for(let i=0;i<particles.snowGeometry.drawRange.count;i++)assert.ok(particles.sno
 // Identical particle falls more slowly as snow than rain.
 particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};snow=8;particles.update(view,.1);const snowY=particles.particles[0].y;
 particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};snow=0;particles.update(view,.1);assert.ok(snowY>particles.particles[0].y);
+// Both phases follow east/north wind; reversing wind reverses their drift.
+for(const amount of [0,8])for(const sign of [-1,1]){
+ rain=8;snow=amount;particles.particles[0]={x:0,z:0,y:1,seed:0,phase:0};
+ view.sample=k=>k==='rain'?rain:k==='snow'?snow:sign*10;
+ particles.update(view,.1);
+ assert.ok(particles.particles[0].x*sign>0);assert.ok(particles.particles[0].z*sign<0);
+ if(!amount){assert.ok((particles.rainGeometry.attributes.start.getX(0)-particles.rainGeometry.attributes.end.getX(0))*sign>0);}
+}
 rain=snow=0;particles.update(view,1/30);assert.equal(particles.rainGeometry.instanceCount,0);assert.equal(particles.snowGeometry.drawRange.count,0);
 particles.visible(false);assert.equal(particles.rain.visible,false);assert.equal(particles.snow.visible,false);
 console.log('Rain-only, snow-only, dry conditions, terrain clearance and visibility passed.');

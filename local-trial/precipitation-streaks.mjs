@@ -20,7 +20,7 @@ export class PrecipitationStreaks{
     #include <colorspace_fragment>
    }`}));
   this.snowGeometry=new THREE.BufferGeometry();this.snowGeometry.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(this.count*3),3));
-  this.snow=new THREE.Points(this.snowGeometry,new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{pixelRatio:{value:1}},vertexShader:`uniform float pixelRatio;void main(){gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=5.*pixelRatio;}`,fragmentShader:`void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;gl_FragColor=vec4(1.,1.,1.,.95*(1.-smoothstep(.3,.5,r)));}`}));
+  this.snow=new THREE.Points(this.snowGeometry,new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{pixelRatio:{value:1}},vertexShader:`uniform float pixelRatio;void main(){gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=7.*pixelRatio;}`,fragmentShader:`void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;gl_FragColor=vec4(1.,1.,1.,.95*(1.-smoothstep(.3,.5,r)));}`}));
   for(const obj of [this.rain,this.snow]){obj.frustumCulled=false;obj.visible=false;group.add(obj);}
  }
  visible(on){this.rain.visible=this.snow.visible=on;}
@@ -35,11 +35,15 @@ export class PrecipitationStreaks{
    if(p.x<b.west||p.x>b.east||p.z<b.north||p.z>b.south){p.y=-1;continue;}
    const total=view.sample('rain',p.x,p.z),snow=view.sample('snow',p.x,p.z),fraction=Math.max(0,Math.min(1,snow/Math.max(.001,total))),isSnow=(i*.61803398875)%1<fraction;
    const fall=top/(isSnow?7:1.5),u=view.sample('u',p.x,p.z),v=view.sample('v',p.x,p.z);
-   p.y-=dt*fall;p.phase+=dt;p.x+=dt*(u*.0015+(isSnow?Math.sin(p.phase)*length*.4:0));p.z+=dt*(-v*.0015+(isSnow?Math.cos(p.phase)*length*.4:0));
+   // Scale illustrative advection with the falling layer, so wind remains
+   // legible at wide zoom. Snow spends longer aloft and travels farther.
+   const drift=top*.04,flutter=isSnow?Math.min(top*.025,Math.hypot(u,v)*drift*.15):0;
+   p.phase+=dt;const dx=u*drift+Math.sin(p.phase)*flutter,dz=-v*drift+Math.cos(p.phase)*flutter;
+   p.y-=dt*fall;p.x+=dt*dx;p.z+=dt*dz;
    if(total<.05||p.seed>Math.min(1,Math.sqrt(total/8))||p.y<0)continue;
    const ground=Math.max(0,view.ground(p.x,p.z)),y=ground+.025+p.y;
    if(isSnow)sa.setXYZ(ns++,p.x,y,p.z);
-   else{ra.setXYZ(nr,p.x,y,p.z);ea.setXYZ(nr++,p.x-u*.0015*length/fall,y+length,p.z+v*.0015*length/fall);}
+   else{ra.setXYZ(nr,p.x,y,p.z);ea.setXYZ(nr++,p.x-dx*length/fall,y+length,p.z-dz*length/fall);}
   }
   this.rainGeometry.instanceCount=nr;this.rain.material.uniforms.viewport.value.set(globalThis.innerWidth||1280,globalThis.innerHeight||720);this.snowGeometry.setDrawRange(0,ns);ra.needsUpdate=ea.needsUpdate=sa.needsUpdate=true;this.snow.material.uniforms.pixelRatio.value=Math.min(devicePixelRatio,2);
  }
