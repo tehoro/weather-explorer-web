@@ -1,3 +1,4 @@
+import {advanceWindHistory} from './wind-history.mjs';
 import {frameAtTime,timeAtFrame} from './forecast-position.mjs';
 import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261122an';
 import {replayFrame} from './playback-loop.mjs';
@@ -234,7 +235,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
   updateCloudTerrain(this.meshes,this.ground,this.liveContext.terrainRevision+"/"+this.liveContext.cloudScale);
   this.wind.material.uniforms.viewport.value.set(innerWidth,innerHeight);
   // Fixed-rate histories avoid display refresh rate changing trail length.
-  this.accumulator=(this.accumulator||0)+dt;if(this.accumulator<1/30)return;const step=Math.min(.1,this.accumulator);this.accumulator=0;
+  const step=Math.min(.1,dt),firstSample=1/30-(this.windSamplePhase||0);this.windSamplePhase=((this.windSamplePhase||0)+step)%(1/30);
   this.streaks.update(this,step);
   const b=this.bounds,attrs=this.wind.geometry.attributes,distance=this.liveContext.distance,speed=2*Math.max(.06,distance*.006)*Number($('windSpeed').value);
   const windCount=particleBudget(Math.round(N*Number($('windDensity').value)),distance);
@@ -244,7 +245,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
   if(this.wind.visible)for(let i=0;i<windCount;i++){
    let p=this.particles[i],u=this.sample('u',p.x,p.z),v=this.sample('v',p.x,p.z);p.x+=u*step*speed;p.z-=v*step*speed;p.age+=step;
    if(p.age>18||p.x<b.west||p.x>b.east||p.z<b.north||p.z>b.south)p=this.particles[i]=this.spawn();
-   const point=p.history.pop();point[0]=p.x;point[1]=Math.max(0,this.ground(p.x,p.z))+.15;point[2]=p.z;p.history.unshift(point);
+   advanceWindHistory(p,step,firstSample,(x,z)=>Math.max(0,this.ground(x,z))+.15);
    const strength=clamp(Math.hypot(u,v)/25,0,1),colour=new THREE.Color().setRGB(1,1-strength*.35,.85-strength*.8);
    for(let j=0;j<L-1;j++){const k=i*(L-1)+j;attrs.start.setXYZ(k,...p.history[j]);attrs.end.setXYZ(k,...p.history[j+1]);attrs.tint.setXYZ(k,colour.r,colour.g,colour.b);attrs.width.setX(k,1+strength*2);attrs.fade.setX(k,(1-j/L)*.9);}
   }
