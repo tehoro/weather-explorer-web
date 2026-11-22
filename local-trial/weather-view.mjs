@@ -1,6 +1,7 @@
+import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
-import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122h';
+import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122u';
 import {IsobarLines} from './isobar-lines.mjs?v=20261120s';
 import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
@@ -130,7 +131,9 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
  attachSurfaces(){
   for(const mesh of this.context().terrainMeshes()){
    const material=mesh.material;if(material.userData.weather)continue;material.userData.weather=true;
+   const beforeCompile=material.onBeforeCompile;
    material.onBeforeCompile=shader=>{
+    beforeCompile.call(material,shader);
     // Only attach weather inputs. The coarse terrain owns an `extent` vec4;
     // copying all view uniforms replaced it with the weather extent vec2.
     for(const key of ['surfaceA','surfaceB','cloudA','cloudB','blend','mode','isobars','isobarStep','weatherGridSize','weatherBounds'])shader.uniforms[key]=this.surfaceUniforms[key];
@@ -203,14 +206,18 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
   this.accumulator=(this.accumulator||0)+dt;if(this.accumulator<1/30)return;const step=Math.min(.1,this.accumulator);this.accumulator=0;
   this.streaks.update(this,step);
   const b=this.bounds,attrs=this.wind.geometry.attributes,distance=this.liveContext.distance,speed=2*Math.max(.06,distance*.006);
-  if(this.wind.visible)for(let i=0;i<N;i++){
+  const windCount=particleBudget(N,distance);
+  this.wind.geometry.instanceCount=windCount*(L-1);
+  if(this.activeWindCount!==undefined&&windCount>this.activeWindCount)for(let i=this.activeWindCount;i<windCount;i++)this.particles[i]=this.spawn();
+  this.activeWindCount=windCount;
+  if(this.wind.visible)for(let i=0;i<windCount;i++){
    let p=this.particles[i],u=this.sample('u',p.x,p.z),v=this.sample('v',p.x,p.z);p.x+=u*step*speed;p.z-=v*step*speed;p.age+=step;
    if(p.age>18||p.x<b.west||p.x>b.east||p.z<b.north||p.z>b.south)p=this.particles[i]=this.spawn();
    const point=p.history.pop();point[0]=p.x;point[1]=Math.max(0,this.ground(p.x,p.z))+.15;point[2]=p.z;p.history.unshift(point);
    const strength=clamp(Math.hypot(u,v)/25,0,1),colour=new THREE.Color().setRGB(1,1-strength*.35,.85-strength*.8);
    for(let j=0;j<L-1;j++){const k=i*(L-1)+j;attrs.start.setXYZ(k,...p.history[j]);attrs.end.setXYZ(k,...p.history[j+1]);attrs.tint.setXYZ(k,colour.r,colour.g,colour.b);attrs.width.setX(k,1+strength*2);attrs.fade.setX(k,(1-j/L)*.9);}
   }
-  for(const name of ['start','end','tint','width','fade'])attrs[name].needsUpdate=true;
+  if(this.wind.visible)for(const name of ['start','end','tint','width','fade'])updateParticleAttribute(attrs[name],windCount*(L-1));
   if(this.drops.visible){
    const {rain:drops,snow:flakes,overhead,distanceEmphasis}=this.precipitation;
    const view=this.context(),direction=this.cameraDirection??=new THREE.Vector3();
@@ -220,7 +227,7 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
    overhead.value=1-THREE.MathUtils.smoothstep(tilt,.15,.45);
    drops.viewport.set(innerWidth,innerHeight);drops.screenScale.value=4/3;drops.lengthScale.value=.5;flakes.mat.uniforms.pixelRatio.value=Math.min(devicePixelRatio,2);
    let nr=0,ns=0;
-   for(let i=0;i<this.rain.length;i++){
+   for(let i=0;i<particleBudget(this.rain.length,distance);i++){
     let p=this.rain[i];const rain=this.sample('rain',p.x,p.z),snow=this.sample('snow',p.x,p.z),isSnow=(i%100)/100<clamp(snow/Math.max(.001,rain),0,1);
     p.x+=step*this.sample('u',p.x,p.z)*.02;p.z-=step*this.sample('v',p.x,p.z)*.02;
     p.phase-=step*(isSnow?.18:.55);if(p.phase<0){this.rain[i]=this.spawnRain();continue;}

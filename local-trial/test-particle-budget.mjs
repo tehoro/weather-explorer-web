@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
+assert.equal(particleBudget(8000,50),8000);
+const counts=[100,200,500,1000,3200].map(d=>particleBudget(8000,d));
+for(let i=1;i<counts.length;i++)assert.ok(counts[i]<counts[i-1]);
+assert.equal(counts.at(-1),800);
+let range,dirty=false;
+const attr={itemSize:3,clearUpdateRanges(){range=null;},addUpdateRange(start,count){range=[start,count];},set needsUpdate(v){dirty=v;}};
+updateParticleAttribute(attr,12);assert.deepEqual(range,[0,36]);assert.ok(dirty);
+console.log('Zoom particle budgets and bounded buffer uploads passed:',counts);

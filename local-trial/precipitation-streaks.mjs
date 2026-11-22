@@ -1,3 +1,4 @@
+import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 // Dense illustrative precipitation, using the same IFS total/snow amounts as symbols.
 import * as THREE from 'three';
 export class PrecipitationStreaks{
@@ -29,7 +30,9 @@ export class PrecipitationStreaks{
   if(!this.rain.visible)return;
   const c=view.liveContext,b=view.bounds,dist=c.distance,radius=Math.max(2,dist*.75),top=Math.max(.12,Math.min(2,dist*.08)),length=1.5*Math.max(.008,Math.min(.5,dist*.006));
   let nr=0,ns=0;const ra=this.rainGeometry.attributes.start,ea=this.rainGeometry.attributes.end,sa=this.snowGeometry.attributes.position;
-  for(let i=0;i<this.count;i++){
+  const count=particleBudget(this.count,dist);
+  if(this.particles.length>count)this.particles.length=count;
+  for(let i=0;i<count;i++){
    let p=this.particles[i];
    if(!p||p.y<0||Math.hypot(p.x-c.target.x,p.z-c.target.z)>radius*1.3){const angle=Math.random()*Math.PI*2,r=Math.sqrt(Math.random())*radius;p=this.particles[i]={x:c.target.x+r*Math.cos(angle),z:c.target.z+r*Math.sin(angle),y:Math.random()*top,seed:Math.random(),phase:Math.random()*6.28};}
    if(p.x<b.west||p.x>b.east||p.z<b.north||p.z>b.south){p.y=-1;continue;}
@@ -45,6 +48,6 @@ export class PrecipitationStreaks{
    if(isSnow)sa.setXYZ(ns++,p.x,y,p.z);
    else{ra.setXYZ(nr,p.x,y,p.z);ea.setXYZ(nr++,p.x-dx*length/fall,y+length,p.z-dz*length/fall);}
   }
-  this.rainGeometry.instanceCount=nr;this.rain.material.uniforms.viewport.value.set(globalThis.innerWidth||1280,globalThis.innerHeight||720);this.snowGeometry.setDrawRange(0,ns);ra.needsUpdate=ea.needsUpdate=sa.needsUpdate=true;this.snow.material.uniforms.pixelRatio.value=Math.min(devicePixelRatio,2);
+  this.rainGeometry.instanceCount=nr;this.rain.material.uniforms.viewport.value.set(globalThis.innerWidth||1280,globalThis.innerHeight||720);this.snowGeometry.setDrawRange(0,ns);updateParticleAttribute(ra,nr);updateParticleAttribute(ea,nr);updateParticleAttribute(sa,ns);this.snow.material.uniforms.pixelRatio.value=Math.min(devicePixelRatio,2);
  }
 }

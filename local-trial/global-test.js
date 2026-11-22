@@ -1,3 +1,4 @@
+import {shadeWaterConsistently} from './water-material.mjs';
 import {prepareSceneDepth} from './scene-depth.mjs';
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
 import {GlobalRelief} from './global-relief.mjs?v=20261122l';
@@ -7,7 +8,7 @@ import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
 import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122l';
-import {WeatherView} from './weather-view.mjs?v=20261122s';
+import {WeatherView} from './weather-view.mjs?v=20261122u';
 import {setupUI} from './global-ui.mjs?v=20261122o';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
@@ -58,7 +59,7 @@ fetch('/explorer/basemap.json').then(r=>{if(!r.ok)throw Error('Basemap unavailab
  paintLand(ctx,data,4096,2048);
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=THREE.RepeatWrapping;
  const geometry=new THREE.PlaneGeometry(360*111.2,180*111.2);geometry.rotateX(-Math.PI/2);
- backdrop=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({map:texture,roughness:.92,metalness:.04,depthWrite:false,depthTest:false}));backdrop.renderOrder=-100;scene.add(backdrop);positionBackdrop();
+ backdrop=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:texture,depthWrite:false,depthTest:false}));backdrop.renderOrder=-100;scene.add(backdrop);positionBackdrop();
 }).catch(e=>console.warn('Global context map',e.message));
 function cameraFootprint(){
  camera.updateMatrixWorld();const ray=new THREE.Raycaster(),result=[];
@@ -93,9 +94,10 @@ function paint(mesh){
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
   const i=y*size+x,z=ocean?0:sample(a,hn,hn,1+(x+.5)/size*p.cells,1+(y+.5)/size*p.cells),code=water?.[i];
   let c=reliefRGB[Math.min(1800,Math.max(0,Math.round(z/5)))];
-  if(isWater(code??0,z,ocean))c=seaRGB;
+  const waterPixel=isWater(code??0,z,ocean);
+  if(waterPixel)c=seaRGB;
   else if(mode!=='relief'&&coverRGB[code]){const cc=coverRGB[code];c=mode==='cover'?cc:c.map((v,j)=>v*.9+cc[j]*.1);}
-  pixels.set([Math.round(c[0]),Math.round(c[1]),Math.round(c[2]),255],i*4);
+  pixels.set([Math.round(c[0]),Math.round(c[1]),Math.round(c[2]),waterPixel?0:255],i*4);
  }
  const texture=new THREE.DataTexture(pixels,size,size,THREE.RGBAFormat);texture.colorSpace=THREE.SRGBColorSpace;texture.magFilter=THREE.LinearFilter;texture.minFilter=THREE.LinearFilter;texture.needsUpdate=true;
  mesh.material.map?.dispose();mesh.material.map=texture;mesh.material.needsUpdate=true;
@@ -115,7 +117,7 @@ function makeMesh(p,a,ocean){
  positions.set(v.array);uvs.set(uv.array);normals.set(normal.array);const indices=Array.from(geometry.index.array);
  edges.forEach((src,i)=>{const dst=n*n+i;positions.set([v.getX(src),v.getY(src)-.15,v.getZ(src)],dst*3);uvs.set([uv.getX(src),uv.getY(src)],dst*2);normals.set([normal.getX(src),normal.getY(src),normal.getZ(src)],dst*3);const next=(i+1)%edges.length;indices.push(src,edges[next],n*n+next,src,n*n+next,dst);});
  geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));geometry.setAttribute('uv',new THREE.BufferAttribute(uvs,2));geometry.setIndex(indices);geometry.setAttribute('normal',new THREE.BufferAttribute(normals,3));
- const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({roughness:.92,metalness:.04,side:THREE.FrontSide}));mesh.userData={p,a,ocean,edges};paint(mesh);position(mesh,p);return mesh;
+ const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({roughness:.92,metalness:.04,side:THREE.FrontSide}));shadeWaterConsistently(mesh.material);mesh.userData={p,a,ocean,edges};paint(mesh);position(mesh,p);return mesh;
 }
 async function build(p){
  const name=demName(p.south+p.span/2,p.west+p.span/2),ocean=!catalogue.has(name);
