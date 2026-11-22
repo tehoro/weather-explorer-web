@@ -1,3 +1,4 @@
+import {forecastUrl,packedTile} from './forecast-host.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {TerrainCache} from './terrain-cache.mjs';
 // Static IFS tiles: decode to physical units before spatial interpolation.
@@ -35,9 +36,9 @@ export function sampleField(name,a,n,x,y,height=n){
  return weight?sum/weight:-1;
 }
 export class WeatherData{
- constructor(){this.cache=new Map();this.global=new Map();this.disk=new TerrainCache('weather-explorer-forecast-v1',256*1024*1024);}
+ constructor(){this.packIndexes=new Map();this.cache=new Map();this.global=new Map();this.disk=new TerrainCache('weather-explorer-forecast-v1',256*1024*1024);}
  async init(latest=null){latest=latest||await this.json('/global-data/latest.json');this.meta=await this.json('/global-data/'+latest.manifest);return this.meta;}
- async json(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error('IFS manifest unavailable');return r.json();}
+ async json(url){const r=await fetch(await forecastUrl(url),{cache:'no-store'});if(!r.ok)throw Error('IFS manifest unavailable');return r.json();}
  async surfaceCover(frame,name,count){
   const m=this.meta,info=m.surface_cover;
   const result={snowCover:new Float32Array(count).fill(-1),seaIce:new Float32Array(count).fill(-1),snowlineWeighted:new Float32Array(count),snowlineWeight:new Float32Array(count),snowlineRegionalWeighted:new Float32Array(count),snowlineRegionalWeight:new Float32Array(count),snowlineModelHeight:new Float32Array(count)};
@@ -67,8 +68,9 @@ export class WeatherData{
   try{return await promise;}catch(e){this.cache.delete(key);throw e;}
  }
  async bytes(url){
+  url=await forecastUrl(url);
   let compressed=await this.disk.get(url);
-  if(!compressed){const r=await fetch(url);if(!r.ok)throw Error('IFS tile unavailable');compressed=await r.arrayBuffer();void this.disk.put(url,compressed);}
+  if(!compressed){if(this.meta?.packed_tiles)compressed=await packedTile(url,this.packIndexes);else{const r=await fetch(url);if(!r.ok)throw Error('IFS tile unavailable');compressed=await r.arrayBuffer();}void this.disk.put(url,compressed);}
   return new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
  }
  async globalFrame(frame){

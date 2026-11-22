@@ -7,6 +7,7 @@ Outputs and reusable GRIBs stay outside Dropbox. Nothing is uploaded.
 """
 from __future__ import annotations
 import argparse
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import gzip
@@ -17,7 +18,7 @@ import numpy as np
 import eccodes
 from prepare import CACHE_ROOT, ROOTS, download, write
 
-OUTPUT=Path('/private/tmp/weather-explorer-global')
+OUTPUT=Path(os.environ.get('EXPLORE_OUTPUT', '/private/tmp/weather-explorer-global'))
 PARAMS=['10u','10v','2t','msl','tp','sf','lcc','mcc','hcc']
 FIELDS=[('u','<i2',.1),('v','<i2',.1),('temperature','<i2',.1),
         ('pressure','<u2',.1),('rain','<u2',.001),('snow','<u2',.001),

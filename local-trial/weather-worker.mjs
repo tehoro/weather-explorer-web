@@ -1,4 +1,4 @@
-import {WeatherData} from './weather-engine.mjs?v=20261123c';
+import {WeatherData} from './weather-engine.mjs?v=20261123i';
 const data=new WeatherData();let regionKey='';
 onmessage=async({data:message})=>{
  const {id,method,args}=message;

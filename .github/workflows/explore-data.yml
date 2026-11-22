@@ -1,0 +1,27 @@
+name: Prepare Explore forecast data
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '45 23 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: explore-r2-publisher
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: vars.EXPLORE_R2_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      EXPLORE_OUTPUT: /tmp/weather-explorer-global
+      EXPLORE_GRIB_CACHE: /tmp/weather-explorer-ifs-cache
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Prepare and publish complete forecast
+        run: uv run --frozen --with boto3 tools/refresh_explore_r2.py

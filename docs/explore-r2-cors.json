@@ -1,0 +1,9 @@
+[
+  {
+    "AllowedOrigins": ["https://weatherexplorer.neilgordon.me", "https://tehoro.github.io", "http://127.0.0.1:8090", "http://localhost:8090"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range"],
+    "ExposeHeaders": ["Content-Range", "Content-Length", "ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]

@@ -6,6 +6,7 @@ All weather arrays run north to south, matching the Weather3D renderer.
 """
 from __future__ import annotations
 import argparse
+import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -18,7 +19,7 @@ import numpy as np
 import eccodes
 
 HERE = Path(__file__).resolve().parent
-CACHE_ROOT = Path('/private/tmp/weather-explorer-local-ifs-cache')
+CACHE_ROOT = Path(os.environ.get('EXPLORE_GRIB_CACHE', '/private/tmp/weather-explorer-local-ifs-cache'))
 ROOTS = ['https://ecmwf-forecasts.s3.eu-central-1.amazonaws.com', 'https://data.ecmwf.int/forecasts']
 LEVELS = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
 REGIONS = {'otaki': [173.8, 176.8, -42., -39.8], 'alps': [166.5, 173.8, -46.4, -41.6]}
