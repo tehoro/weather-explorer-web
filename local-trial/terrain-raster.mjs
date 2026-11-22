@@ -1,5 +1,5 @@
 import {wrap,demName,waterName} from './terrain-stream.mjs';
-import {TerrainCache,terrainCacheKey} from './terrain-cache.mjs';
+import {TerrainCache,terrainCacheKey} from './terrain-cache.mjs?v=20261122j';
 export const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 export function isWater(code,height,ocean=false){return ocean||code===80||(code===0&&Math.abs(height)<.01);}
 export function sourceName(kind,lat,lon){return kind==='dem'?demName(Math.max(-89.99999999,lat-1e-9),lon+1e-9):waterName(Math.min(89.99999999,lat),lon);}

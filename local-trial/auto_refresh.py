@@ -19,6 +19,7 @@ import numpy as np
 import global_weather as weather
 from prepare import write, ROOTS, CACHE_ROOT
 from prepare_pressure import build as pressure_build
+from prepare_coarse import build as coarse_build
 
 START, END = 3, 84
 STEPS = list(range(START, END+1, 3))
@@ -85,8 +86,10 @@ def discover(current='', now=None):
 def validate(root):
     meta=json.loads((root/'manifest.json').read_text())
     if meta['run']!=root.name or meta['steps']!=STEPS or meta.get('pressure_path')!='pressure':raise ValueError('Incomplete forecast manifest')
+    if meta.get('global_preview',{}).get('width')!=361:raise ValueError('Missing global preview')
     field_bytes=sum(np.dtype(dtype).itemsize for _,dtype,_ in weather.FIELDS)
     for step in STEPS:
+        if len(gzip.decompress((root/'global'/f'{step:03}.bin.gz').read_bytes()))!=361*181*field_bytes:raise ValueError('Invalid global preview')
         for y in range(18):
             for x in range(36):
                 name=f'{x:02}-{y:02}.bin.gz'
@@ -127,6 +130,7 @@ def refresh():
             weather.build(SimpleNamespace(run=run,start=START,end=END,publish=False,progress=progress))
             status('pressure',active_run=current,run=run)
             pressure_build(run)
+            coarse_build(run)
             status('validating',active_run=current,run=run)
             validate(weather.OUTPUT/run)
             # Single atomic pointer change; readers can never discover a partial run.

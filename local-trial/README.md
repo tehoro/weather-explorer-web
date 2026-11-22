@@ -702,3 +702,36 @@ The Play/Pause choice is preserved. Missing weather still holds playback. Browse
 buffering checks cover zero terrain ready, failed cover tiles, terrain-only detail
 changes, missing weather and stale requests. This replaces the earlier requirement
 that both weather and terrain be complete before time playback starts.
+
+### Global previews and quiet refinement (builds J–K)
+
+A worker preloads the complete one-degree global forecast (all nine fields, all
+28 times in the current run: 10.7 MB compressed). Compressed frames and detailed
+weather tiles are reused from IndexedDB, with a 256 MiB weather-cache budget.
+Detailed viewport grids are prepared separately. Loading priority follows the
+selected time, previous frame, remaining future frames, then earlier backfill;
+scrubbing updates that order. Play uses the coarse forecast while detail loads.
+Only an unavailable next weather frame holds the clock, retaining Play and
+retrying automatically. Terrain readiness never gates playback or resets its clock.
+New global previews are built and validated before a refreshed run is published.
+
+Global ETOPO1 fallback terrain is now five arc-minute sampling (about 9.3 km
+north–south), 14.5 MB compressed. It is cached with the terrain grids; their
+combined disk budget is 512 MiB. Browser storage is best-effort and can be evicted.
+This is data reuse, not a complete offline application. The fallback samples
+colour and relief shading per fragment, independently of its 512-square mesh,
+so a distant/slanted footprint does not reduce the colour map to large triangles.
+Fine terrain still replaces the coarse relief as it arrives; fine coastlines and
+fjords cannot be supplied by the global fallback alone.
+
+The map shows only “Refining map detail…” during background terrain loading.
+Patch counts and failures stay in Loading details. Failed visible patches retry
+quietly with a 15-second delay backing off to two minutes. Manual Retry remains
+available; obsolete view failures are discarded. Failed source objects are cleared
+on retry so cached decoder failures cannot prevent recovery.
+
+Checks: global pack values and all times; poles and dateline; native pressure;
+worker/IndexedDB reuse across worker restarts; loading priority; playback with
+partial weather, zero terrain and failed cover; automatic run validation. The
+browser fixture `test-relief-view.html` shows Norway using only the bundled
+fallback, with no detailed terrain downloads.

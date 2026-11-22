@@ -1,4 +1,4 @@
-import {WeatherData} from './weather-data.mjs?v=20261122e';
+import {WeatherData} from './weather-data.mjs?v=20261122j';
 export const nearestTime=(times,time)=>times.reduce((best,t,i)=>Math.abs(Date.parse(t)-time)<Math.abs(Date.parse(times[best])-time)?i:best,0);
 const runLabel=run=>`${run.slice(0,4)}-${run.slice(4,6)}-${run.slice(6,8)} ${run.slice(8)}:00 UTC`;
 // Stage a separate data source. Neither the displayed run nor its playback is
@@ -15,7 +15,7 @@ export class RunRefresh{
     else if(s?.state==='error')this.report('Forecast refresh delayed. Keeping the current run; checking again automatically.');
     else this.report('');return;
    }
-   if(this.candidate?.meta.run!==latest.run){const data=this.create();await data.init(latest);this.candidate=data;this.staged=null;}
+   if(this.candidate?.meta.run!==latest.run){this.candidate?.dispose?.();const data=this.create();await data.init(latest);this.candidate=data;this.staged=null;}
    const data=this.candidate,view=this.view(),key=view.key;
    const valid=()=>this.view()?.key===key&&this.active()===active;
    const grids=this.staged?.key===key?this.staged.grids:new Map();this.staged={key,grids};

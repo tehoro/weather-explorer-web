@@ -1,13 +1,13 @@
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
-import {GlobalRelief} from './global-relief.mjs?v=20261122g';
+import {GlobalRelief} from './global-relief.mjs?v=20261122k';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
-import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122c';
-import {WeatherView} from './weather-view.mjs?v=20261122i';
-import {setupUI} from './global-ui.mjs?v=20261122e';
+import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122k';
+import {WeatherView} from './weather-view.mjs?v=20261122k';
+import {setupUI} from './global-ui.mjs?v=20261122k';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
@@ -74,7 +74,7 @@ function rebase(){
 }
 function preloadStatus(){return {key:terrainKey,...terrainReadiness(needed,tiles,failures,waterMissing)};}
 function status(){const c=centre(),d=detail(camera.position.distanceTo(controls.target)),s=preloadStatus();
- $('status').textContent=`${c.lat.toFixed(4)}°, ${c.lon.toFixed(4)}°\nAutomatic detail · about ${Math.round(d.span*111200/d.cells)} m sampling\nTerrain elevation: ${s.elevation}/${s.total} patches\nWater & land cover: ${s.ready}/${s.total} patches (including ocean)\n${s.failed?s.terrainFailed+' elevation and '+s.coverFailed+' water/land-cover patches need retry.':s.ready===s.total?'All detail for this view is ready.':'Loading detail for this view…'}`;
+ $('status').textContent=`${c.lat.toFixed(4)}°, ${c.lon.toFixed(4)}°\nAutomatic detail · about ${Math.round(d.span*111200/d.cells)} m sampling\nTerrain elevation: ${s.elevation}/${s.total} patches\nWater & land cover: ${s.ready}/${s.total} patches (including ocean)\n${s.failed?s.terrainFailed+' elevation and '+s.coverFailed+' water/land-cover patches waiting for automatic retry.':s.ready===s.total?'All detail for this view is ready.':'Loading detail for this view…'}`;
  $('retry').hidden=s.failed===0;
  if(reader)$('status').textContent+=`\n${reader.saved.hits} terrain/land-cover grids reused from browser storage.`;
 }
@@ -157,7 +157,14 @@ function go(lat=anchor.lat,lon=anchor.lon){if(!Number.isFinite(lat)||!Number.isF
  rebasing=true;controls.target.set(0,0,0);camera.position.set(0,approaching&&!readySent?240:38,approaching&&!readySent?0:55);controls.update();rebasing=false;update();}
 setupSearch($('search'),$('matches'),(lat,lon)=>go(lat,lon));
 $('viewAngle').onchange=()=>{const d=camera.position.distanceTo(controls.target),angle=controls.getAzimuthalAngle(),polar=$('viewAngle').value==='top'?0:Math.atan2(.82,.57);camera.position.copy(controls.target).add(new THREE.Vector3(d*Math.sin(polar)*Math.sin(angle),d*Math.cos(polar),d*Math.sin(polar)*Math.cos(angle)));controls.update();update();};
-$('retry').onclick=()=>{failures.clear();for(const key of waterMissing){const old=tiles.get(key);if(old)waterQueue.push(old);}waterMissing.clear();pumpWater();update();};
+function retryTerrain(){reader?.files.clear();failures.clear();for(const key of waterMissing){const old=tiles.get(key);if(old)waterQueue.push(old);}waterMissing.clear();pumpWater();update();}
+$('retry').onclick=()=>{retryDelay=15000;retryTerrain();};
+let retryDelay=15000;
+function scheduleRetry(){setTimeout(()=>{
+ if(failures.size||waterMissing.size){retryTerrain();retryDelay=Math.min(120000,retryDelay*2);}else retryDelay=15000;
+ scheduleRetry();
+},retryDelay);}
+scheduleRetry();
 $('surfaceStyle').onchange=()=>{for(const {mesh}of tiles.values())paint(mesh);styleNote();};
 function styleNote(){$('styleNote').textContent=$('surfaceStyle').value==='relief'?'Weather3D elevation colours. Pale high ground is a colour convention, not current snow cover.':($('surfaceStyle').value==='hybrid'?'90% relief · 10% land cover. ':'')+'WorldCover 2021; static snow/ice is not a current snow forecast.';}$('north').onclick=()=>{const d=camera.position.distanceTo(controls.target);camera.position.copy(controls.target).add(new THREE.Vector3(0,d*.57,d*.82));controls.update();};
 $('in').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(.55).add(controls.target);controls.update();};$('out').onclick=()=>{camera.position.sub(controls.target).multiplyScalar(1.8).add(controls.target);controls.update();};

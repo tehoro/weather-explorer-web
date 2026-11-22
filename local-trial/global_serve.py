@@ -5,6 +5,7 @@ import re
 import subprocess
 import tempfile
 import sys
+import signal
 import threading
 from urllib.parse import unquote,urlsplit
 from serve import Handler,HERE
@@ -96,6 +97,8 @@ if __name__=='__main__':
     # Independent low-priority global preparation; HTTP requests only serve files.
     log=(HERE/'global-refresh.log').open('a')
     updater=subprocess.Popen([sys.executable,str(HERE/'auto_refresh.py'),'--watch'],stdout=log,stderr=subprocess.STDOUT)
+    def stop(signum,frame):raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM,stop)
     try:ThreadingHTTPServer(('127.0.0.1',8092),GlobalHandler).serve_forever()
     finally:
-        updater.terminate();log.close()
+        updater.terminate();updater.wait(timeout=10);log.close()

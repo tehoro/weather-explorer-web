@@ -3,7 +3,7 @@
 export const terrainCacheKey=(kind,p,size,{halo=0,centres=false}={})=>
  `cop90-wc2021-v1/${kind}/${p.west}/${p.south}/${p.span}/${size}/${halo}/${+centres}`;
 export class TerrainCache{
- constructor(name='weather-explorer-terrain-v1',limit=256*1024*1024){
+ constructor(name='weather-explorer-terrain-v1',limit=512*1024*1024){
   this.limit=limit;this.hits=0;this.writes=Promise.resolve();
   this.db=new Promise(resolve=>{
    if(!globalThis.indexedDB){resolve(null);return;}

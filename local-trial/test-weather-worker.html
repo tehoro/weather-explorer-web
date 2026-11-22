@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>Global weather worker checks</title><pre id="result">Running…</pre>
+<script type="module">
+import {WeatherData} from './weather-data.mjs?v=20261122j';
+const out=document.querySelector('#result'),check=(ok,msg)=>{if(!ok)throw Error(msg);out.textContent+='\nPASS '+msg;};
+const pause=ms=>new Promise(r=>setTimeout(r,ms));let data;
+try{
+ data=new WeatherData();const meta=await data.init();
+ const region={west:20,north:62,lonSpan:2,latSpan:2};
+ const first=await data.grid(0,region,33);check(first.quality==='coarse','immediate global preview returned by worker');
+ const deadline=Date.now()+60000;while(data.preloadProgress?.ready!==meta.times.length){if(Date.now()>deadline||data.preloadProgress?.error)throw Error('Global preload failed');await pause(100);}
+ check(true,'all global times preloaded');
+ const opposite=await data.grid(27,{west:179,north:-40,lonSpan:3,latSpan:2},33);check(opposite.fields.rain.every(Number.isFinite),'opposite hemisphere and dateline available');
+ const detail=await data.detailGrid(0,region,33);check(detail.quality==='fine'&&detail.fields.pressure.every(Number.isFinite),'detailed weather prepared separately with native pressure');
+ await data.rpc('stats',[]);data.dispose();data=new WeatherData();await data.init();await data.grid(0,region,33);
+ const stats=await data.rpc('stats',[]);check(stats.diskHits>0,'new worker reuses compressed forecasts from IndexedDB');
+ out.textContent+='\nAll weather worker checks passed.';
+}catch(e){out.textContent+='\nFAIL '+e.stack;}finally{data?.dispose();}
+</script>

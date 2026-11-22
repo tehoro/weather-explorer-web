@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>Global relief without detail tiles</title>
+<style>body{margin:0}p{position:absolute;color:white;background:#123;padding:10px}</style>
+<script type="importmap">{"imports":{"three":"./assets/three.module.js"}}</script>
+<p>Fallback relief only · Norway · no downloaded detail tiles</p>
+<script type="module">
+import * as THREE from 'three';import {GlobalRelief} from './global-relief.mjs';
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);document.body.append(renderer.domElement);
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,1,12000);camera.position.set(0,400,500);camera.lookAt(0,0,0);
+const relief=new GlobalRelief();await relief.load(scene);relief.update({lat:62,lon:9},{x:0,z:0},[[-1600,-1600],[1600,1600]]);renderer.render(scene,camera);
+</script>

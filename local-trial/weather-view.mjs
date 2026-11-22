@@ -1,11 +1,12 @@
-import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122e';
+import {forecastOrder} from './forecast-order.mjs';
+import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
 import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122h';
 import {IsobarLines} from './isobar-lines.mjs?v=20261120s';
 import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261120e';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122e';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122j';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 const noise=`float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}float fbm(vec2 p){return .57*noise(p)+.28*noise(p*2.03)+.15*noise(p*4.07);}`;
@@ -31,7 +32,7 @@ export class WeatherView{
   const frame=nearestTime(data.meta.times,Date.parse(this.data.meta.times[this.frame]));
   // Invalidate old requests before swapping all fields and the run metadata.
   this.token++;this.prepareId=(this.prepareId||0)+1;this.loading=false;
-  this.data=data;this.prepared={region:key,grids};this.requestedFrame=frame;
+  this.data.dispose?.();this.data=data;this.prepared={region:key,grids};this.requestedFrame=frame;
   $('forecastTime').max=data.meta.times.length-1;
   await this.load(frame);this.prepare();
  }
@@ -42,25 +43,35 @@ export class WeatherView{
   const valid=()=>id===this.prepareId&&region===this.regionKey;
   const grids=this.prepared?.region===region?this.prepared.grids:new Map([[this.frame,this.current]]);this.prepared={region,grids};let done=false,error=null;
   // All times for this viewport, with imminent frames first. Never download a global forecast here.
-  const frames=Array.from({length:this.data.meta.times.length},(_,i)=>(i+this.frame)%this.data.meta.times.length).filter(f=>!grids.has(f));
-  void (async()=>{try{for(const f of frames){if(!valid())return;grids.set(f,await this.data.grid(f,this.region,129,valid));}}catch(e){error=e;}finally{done=true;}})();
+  void (async()=>{try{while(valid()){const f=forecastOrder(this.requestedFrame??this.frame,this.data.meta.times.length).find(f=>!grids.has(f));if(f===undefined)break;grids.set(f,await this.data.grid(f,this.region,129,valid));}}catch(e){error=e;}finally{done=true;}})();
   try{
    while(valid()){
-    const terrain=this.context().preloadStatus();$('prepareStatus').textContent=`Loading detail… Terrain & land cover ${terrain.ready}/${terrain.total} · forecast ${grids.size}/${this.data.meta.times.length}. You can keep moving around.`;
+    const terrain=this.context().preloadStatus();
+    $('prepareStatus').textContent=done?'Refining map detail…':'Loading forecast…';
     if(error)throw error;
-    if(done&&this.preparing){this.preparing=false;this.elapsed=0;}
-    if(done)$('prepareStatus').textContent=`Weather ready · terrain & land cover ${terrain.ready}/${terrain.total} loading in the background. Forecast playback is available.`;
-    // Keep observing after a terrain error: Retry or a changed view can recover
-    // without leaving a stale warning or cancelling the user's Play choice.
-    if(terrain.failed){
-     const missing=[terrain.terrainFailed?`${terrain.terrainFailed} terrain elevation patches`:null,(terrain.coverFailed??terrain.failed)?`${terrain.coverFailed??terrain.failed} water/land-cover patches`:null].filter(Boolean).join(' and ');
-     $('prepareStatus').textContent=`Could not load ${missing}. Use Retry in View & terrain. ${done?'Weather is ready; forecast playback is available.':'Weather is still loading.'}`;
-    }
-    if(done&&!terrain.failed&&terrain.ready===terrain.total&&terrain.total){$('prepareStatus').hidden=true;this.preparing=false;this.elapsed=0;return;}
+    if(done&&!this.detailStartedForPrepare?.has(id)){this.detailStartedForPrepare=new Set([id]);void this.refineWeather(grids,valid,this.region);}
+    if(done)this.preparing=false;
+    // Failures and counts belong in Loading details, not over the map.
+    $('prepareStatus').hidden=done&&(terrain.failed>0||terrain.ready===terrain.total);
+    if(done&&!terrain.failed&&terrain.ready===terrain.total&&terrain.total)return;
     await new Promise(resolve=>setTimeout(resolve,300));
    }
-  }catch(e){if(valid()){$('prepareStatus').textContent=e.message;$('retryBuffer').hidden=false;this.playing=false;this.playLabel();}}
+  }catch(e){if(valid()){$('prepareStatus').textContent=e.message;$('retryBuffer').hidden=false;}}
   finally{if(id===this.prepareId){this.preparing=false;this.monitoringTerrain=false;}}
+ }
+ async refineWeather(grids,valid,region){
+  if(!this.data.detailGrid)return;
+  const data=this.data,total=data.meta.times.length;
+  try{
+   while(valid()&&this.data===data){
+    const f=forecastOrder(this.requestedFrame??this.frame,total).find(f=>grids.get(f)?.quality!=='fine');if(f===undefined)break;
+    const detail=await data.detailGrid(f,region,129,valid);
+    if(!valid()||this.data!==data)return;grids.set(f,detail);
+    if(this.frame===f&&!this.loading){const elapsed=this.elapsed;await this.load(f);this.elapsed=elapsed;}
+    $('weatherDetailStatus').textContent=`Detailed weather ${[...grids.values()].filter(g=>g.quality==='fine').length}/${total} times ready. Global preview remains available.`;
+   }
+   $('weatherDetailStatus').textContent='Detailed weather ready for this view.';
+  }catch(e){if(valid()){$('weatherDetailStatus').textContent='Detailed weather delayed; using the global preview. Retry loading this view to try again.';$('retryBuffer').hidden=false;}}
  }
  playLabel(){$('weatherPlay').textContent=this.playing?'Pause':'Play';}
  error(e){$('weatherLoad').textContent=e.message+' — retry weather.';$('weatherRetry').hidden=false;this.playing=false;this.playLabel();$('prepareStatus').textContent=e.message+' — retry weather in Settings.';}
@@ -69,21 +80,21 @@ export class WeatherView{
   const c=this.context(),r=c.region,key=[r.west,r.north,r.lonSpan,r.latSpan].map(v=>v.toFixed(3)).join('/');
   const terrain=c.preloadStatus(),changed=terrain.key!==this.terrainKey;this.terrainKey=terrain.key;
   if(!force&&key===this.regionKey){if(changed&&!this.monitoringTerrain&&!this.loading&&terrain.ready<terrain.total)this.prepare();return;}
-  this.regionKey=key;this.region=r;this.prepareId=(this.prepareId||0)+1;this.preparing=true;this.prepared=null;$('prepareStatus').hidden=false;$('prepareStatus').textContent='Loading weather for this view… You can keep moving around.';
+  this.data.setRegion?.(JSON.stringify(r));this.regionKey=key;this.region=r;this.prepareId=(this.prepareId||0)+1;this.preparing=true;this.prepared=null;$('prepareStatus').hidden=false;$('prepareStatus').textContent='Loading weather for this view… You can keep moving around.';
   // Keep the previous forecast moving in its own geographic footprint. Rebase
   // its geometry with the camera instead of applying old weather to new land.
   if(this.current){const b=c.bounds(this.current.region);if(!this.bounds||b.west!==this.bounds.west||b.north!==this.bounds.north||b.east!==this.bounds.east)this.build(true);}
   this.load(this.requestedFrame??this.frame,true);
  }
  async load(frame,moved=false){
-  if(!this.data.meta||!this.region)return;const token=++this.token;this.requestedFrame=frame;this.loading=true;
+  if(!this.data.meta||!this.region)return;this.data.prioritise?.(frame);const token=++this.token;this.requestedFrame=frame;this.loading=true;
   $('weatherLoad').textContent='Loading IFS for this view…';$('weatherRetry').hidden=true;
-  try{const prepared=this.prepared?.region===this.regionKey?this.prepared.grids.get(frame):null;const grid=prepared||await this.data.grid(frame,this.region,129,()=>token===this.token);if(token!==this.token)return;
+  try{const prepared=this.prepared?.region===this.regionKey?this.prepared.grids.get(frame):null;let grid=prepared||await this.data.grid(frame,this.region,129,()=>token===this.token);if(token!==this.token)return;const detail=this.prepared?.region===this.regionKey?this.prepared.grids.get(frame):null;if(detail?.quality==='fine')grid=detail;
    const old=this.current;this.current=grid;this.previous=!moved&&old?old:grid;this.frame=frame;this.blend=this.previous===grid?1:0;
    this.build(moved);this.group.visible=true;this.loading=false;this.elapsed=0;
    $('forecastTime').value=frame;updateForecastClock(this.data.meta,frame,this.context().centre);
-   $('weatherLoad').textContent='IFS 0.1° · run '+this.data.meta.initial_utc.slice(0,16).replace('T',' ')+' UTC';this.readout();if(moved||this.prepared?.region!==this.regionKey)this.prepare();
-  }catch(e){if(token===this.token){this.loading=false;this.error(e);}}
+   $('weatherLoad').textContent=(grid.quality==='coarse'?'IFS 1° global preview · run ':'IFS 0.1° · run ')+this.data.meta.initial_utc.slice(0,16).replace('T',' ')+' UTC';this.readout();if(moved||this.prepared?.region!==this.regionKey)this.prepare();
+  }catch(e){if(token===this.token){this.loading=false;if(this.playing){this.elapsed=0;$('weatherLoad').textContent='Waiting for the next weather frame… Retrying automatically.';$('weatherRetry').hidden=false;}else this.error(e);}}
  }
  texture(grid,keys){const pressure=keys.includes('pressure')?pressureAnomalies(grid.fields.pressure,grid.n):null;const a=new Float32Array(grid.n*grid.n*4);for(let i=0;i<grid.n*grid.n;i++)keys.forEach((k,j)=>a[i*4+j]=k==='pressure'?pressure[i]:grid.fields[k][i]);const t=new THREE.DataTexture(a,grid.n,grid.n,THREE.RGBAFormat,THREE.FloatType);t.minFilter=t.magFilter=THREE.LinearFilter;t.needsUpdate=true;return t;}
  build(moved){
@@ -161,9 +172,16 @@ void main(){vec4 c=mix(texture2D(cloudA,vUv),texture2D(cloudB,vUv),blend);float 
 
  options(){if(!this.current)return;this.wind.visible=$('windLayer').checked;this.drops.visible=this.flakes.visible=$('rainLayer').checked&&$('precipitationStyle').value==='symbols';this.streaks.visible($('rainLayer').checked&&$('precipitationStyle').value==='streaks');for(const c of this.clouds)c.visible=$(['cloudLow','cloudMiddle','cloudHigh'][c.userData.layer]).checked;this.uniforms.mode.value=['none','temperature','wind','rain'].indexOf($('surfaceField').value);this.uniforms.isobars.value=+$('pressureLayer').checked;this.surfaceUniforms.mode.value=this.uniforms.mode.value;this.surfaceUniforms.isobars.value=this.uniforms.isobars.value;for(const c of this.clouds)c.material.uniforms.opacity.value=(c.userData.layer===2?.12:.23)*Number($('cloudOpacity').value)/100;}
  readout(){const c=this.context(),b=this.bounds;if(c.target.x<b.west||c.target.x>b.east||c.target.z<b.north||c.target.z>b.south){$('weather').textContent='Loading weather at view centre…';return;}const v=k=>this.sample(k,c.target.x,c.target.z);$('weather').textContent=`At view centre · interpolated IFS\nWind ${Math.hypot(v('u'),v('v')).toFixed(1)} m/s · ${v('temperature').toFixed(1)} °C\nMSL ${v('pressure').toFixed(1)} hPa · precip ${v('rain').toFixed(2)} mm/h\nCloud low / middle / high: ${['low','middle','high'].map(k=>Math.round(v(k)*100)+'%').join(' / ')}`;}
+ advanceTime(dt){
+  this.elapsed+=dt;
+  if(this.playing&&!this.loading&&this.elapsed>3/Number($('playbackSpeed').value)){
+   if(this.frame===this.data.meta.times.length-1){this.playing=false;this.playLabel();}
+   else this.load(this.frame+1);
+  }
+ }
  tick(dt){
   if(!this.current||!this.group.visible)return;this.liveContext=this.context();const viewWidth=2*this.liveContext.distance*Math.tan(this.liveContext.camera.fov*Math.PI/360)*this.liveContext.camera.aspect;this.isobarSpacing=isobarInterval(viewWidth,this.isobarSpacing);this.surfaceUniforms.isobarStep.value=this.isobarSpacing;this.blend=Math.min(1,this.blend+dt/1.2);this.uniforms.blend.value=this.blend;this.surfaceUniforms.blend.value=this.blend;this.uniforms.clock.value+=dt;this.isobarLines?.update(this,dt,this.isobarSpacing,$('pressureLayer').checked);
-  this.elapsed+=dt;if(this.playing&&!this.loading&&!this.preparing&&this.elapsed>3/Number($('playbackSpeed').value)){if(this.frame===this.data.meta.times.length-1){this.playing=false;this.playLabel();}else this.load(this.frame+1);}
+  this.advanceTime(dt);
   this.readClock=(this.readClock||0)+dt;if(this.readClock>.4){this.readClock=0;this.readout();}
   this.terrainClock=(this.terrainClock||0)+dt;
   if(this.terrainClock>2){this.terrainClock=0;this.attachSurfaces();for(const mesh of this.meshes){const g=mesh.geometry,a=g.attributes.position;for(let i=0;i<a.count;i++)a.setY(i,Math.max(0,this.ground(a.getX(i),a.getZ(i)))+g.userData.alt);a.needsUpdate=true;g.computeBoundingSphere();}}
