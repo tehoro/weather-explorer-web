@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {frameAtTime} from './forecast-position.mjs';
+const source=(await readFile(new URL('./globe-surface-cover.mjs',import.meta.url),'utf8')).replace(/^import .*;$/gm,'');
+const {GlobeSurfaceCover}=await import('data:text/javascript,'+encodeURIComponent('const frameAtTime='+frameAtTime.toString()+';\n'+source));
+const cover=Object.create(GlobeSurfaceCover.prototype);
+cover.relief={mesh:{material:{}}};cover.attached=true;
+cover.times=[Date.parse('2026-11-22T00:00Z'),Date.parse('2026-11-22T03:00Z')];
+cover.textures=['first','second'];cover.uniforms={coverReady:{},coverA:{},coverB:{},coverMix:{}};
+cover.tick('2026-11-22T01:30Z');
+assert.equal(cover.uniforms.coverMix.value,.5);assert.equal(cover.uniforms.coverReady.value,1);
+assert.equal(cover.uniforms.coverA.value,'first');assert.equal(cover.uniforms.coverB.value,'second');
+cover.tick('2026-11-23T00:00Z');assert.equal(cover.uniforms.coverReady.value,0);
+cover.textures[1]=null;cover.tick('2026-11-22T01:30Z');assert.equal(cover.uniforms.coverReady.value,0);
+cover.tick('2026-11-22T00:00Z');assert.equal(cover.uniforms.coverReady.value,1);
+console.log('Globe cover follows absolute time and hides unavailable frames.');

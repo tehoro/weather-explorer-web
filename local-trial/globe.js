@@ -1,5 +1,6 @@
 import {globeJourney} from './camera-travel.mjs';
-import {GlobeClouds} from './globe-clouds.mjs?v=20261122an';
+import {GlobeSurfaceCover} from './globe-surface-cover.mjs?v=20261122at';
+import {GlobeClouds} from './globe-clouds.mjs?v=20261122at';
 import {GlobePlaces} from './globe-places.mjs?v=20261120n';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {GlobalRelief} from './global-relief.mjs?v=20261122z';
@@ -23,6 +24,7 @@ $('spinToggle').onclick=()=>spin(!spinning);
 controls.addEventListener('start',()=>{lastInput=performance.now();if(flight)return;spin(false);interacting=true;});controls.addEventListener('end',()=>{lastInput=performance.now();interacting=false;});
 // Share Local's bundled elevation, palette, sea colour and hill shading.
 const relief=new GlobalRelief();
+const surfaceCover=new GlobeSurfaceCover(relief);
 relief.load(globe,true).then(()=>{
  globe.remove(sphere);sphere.geometry.dispose();sphere.material.dispose();sphere=relief.mesh;
 }).catch(()=>{$('status').textContent='Terrain preview unavailable; region selection still works.';});
@@ -79,7 +81,7 @@ addEventListener('resize',resize);resize();let last=performance.now();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,(now-last)/1000);last=now;if(!active)return;
  if(flight){const t=reduced.matches?1:Math.min(1,(now-flight.start)/(flight.journey?6800:2600)),e=t*t*(3-2*t),journey=flight.journey?globeJourney(t):null;const rotation=new THREE.Quaternion().setFromUnitVectors(flight.from.clone().normalize(),flight.to.clone().normalize()),direction=flight.from.clone().normalize().applyQuaternion(new THREE.Quaternion().slerp(rotation,journey?journey.turn:e));camera.position.copy(direction.multiplyScalar(journey?journey.radius:THREE.MathUtils.lerp(flight.from.length(),flight.to.length(),e)));camera.clearViewOffset();camera.updateProjectionMatrix();camera.lookAt(0,0,0);if(t===1&&flight.ready)revealTerrain(flight);}
  else {controls.update();if(spinning&&!interacting&&!reduced.matches)globe.rotation.y+=dt*.035;}
- clouds.tick(dt,reduced.matches);labels.layer.hidden=!!flight;if(!flight)labels.tick(dt);renderer.render(scene,camera);
+ clouds.tick(dt,reduced.matches);surfaceCover.tick(clouds.time());labels.layer.hidden=!!flight;if(!flight)labels.tick(dt);renderer.render(scene,camera);
 }requestAnimationFrame(animate);
 
 const travel=new URLSearchParams(location.search).get('travel');

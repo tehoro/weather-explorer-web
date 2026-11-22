@@ -862,3 +862,25 @@ During automatic orbit, ranking is frozen for the selected set: visible existing
 labels are retained even if a more important town becomes a candidate. Off-screen,
 terrain-occluded or panel-covered labels release slots for nearby replacements.
 Tests cover retention against a stronger challenger and replacement on occlusion.
+
+### Forecast snow and sea ice
+
+The optional `surface-cover-v1` package uses only indexed IFS Open Data `sd`,
+`sithick` and `lsm`. Positive valid sea-ice thickness denotes model ice presence;
+it is not ice concentration. Missing values remain 255 in the package and −1
+in browser arrays. Land snow whitening saturates at 20 mm of lying snow water
+equivalent; it is a display convention, not a physical snow depth or downscaled
+mountain snowline. Coast masking uses the model land-sea mask. Fixed surface
+texture is illustrative. Both covers interpolate with forecast time and can be
+hidden using **Snow & sea ice on the surface**.
+
+`prepare_surface_cover.py` prepares 0.1° tiles and a 1° global preview outside
+the repository. It publishes the manifest entry only after all frames finish.
+The background run builder includes this stage; HTTP requests only serve files.
+Existing packages without the extension retain their ordinary landscape.
+
+The rotating Local chooser globe also uses these cover previews, matched by absolute
+valid time to its cloud animation (including held times during travel). It preloads
+only the small global cover files, about 132 KB compressed for the current 28-frame
+package. Coverage outside the available forecast period is hidden rather than
+showing another time. The 8091 preview serves these existing static files too.

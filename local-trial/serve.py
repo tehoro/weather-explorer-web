@@ -19,7 +19,9 @@ guard=threading.Lock()
 class Handler(SimpleHTTPRequestHandler):
     def translate_path(self,path):
         path=unquote(urlsplit(path).path)
-        if path.startswith('/explorer/'):
+        if path.startswith('/global-data/'):
+            base=Path('/private/tmp/weather-explorer-global');relative=path[len('/global-data/'):]
+        elif path.startswith('/explorer/'):
             base=SITE;relative=path[len('/explorer/'):]
         elif path.startswith('/terrain-assets/adaptive-v1/'):
             base=HERE/'data'/'terrain-assets';relative=path[len('/terrain-assets/'):]
