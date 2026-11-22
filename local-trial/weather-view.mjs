@@ -8,7 +8,7 @@ import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
 import {PrecipitationStreaks} from './precipitation-streaks.mjs?v=20261122u';
-import {IsobarLines} from './isobar-lines.mjs?v=20261120s';
+import {IsobarLines} from './isobar-lines.mjs?v=20261123e';
 import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
@@ -224,7 +224,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
  spawnRain(){const p=this.spawn();return {x:p.x,z:p.z,phase:Math.random()};}
  makeRain(){this.streaks=new PrecipitationStreaks(this.group);this.precipitation=makePrecipitation(this.group,900);this.drops=this.precipitation.rain.obj;this.flakes=this.precipitation.snow.obj;}
 
- options(){if(!this.current)return;this.surfaceUniforms.coverEnabled.value=+$('surfaceCover').checked;$('precipitationLegend').hidden=$('surfaceField').value!=='rain';this.wind.visible=$('windLayer').checked;this.drops.visible=this.flakes.visible=$('rainLayer').checked&&$('precipitationStyle').value==='symbols';this.streaks.visible($('rainLayer').checked&&$('precipitationStyle').value==='streaks');for(const c of this.clouds)c.visible=$(['cloudLow','cloudMiddle','cloudHigh'][c.userData.layer]).checked;this.uniforms.mode.value=['none','temperature','wind','rain'].indexOf($('surfaceField').value);this.uniforms.isobars.value=+$('pressureLayer').checked;this.surfaceUniforms.mode.value=this.uniforms.mode.value;this.surfaceUniforms.isobars.value=this.uniforms.isobars.value;for(const c of this.clouds)c.material.uniforms.opacity.value=(c.userData.layer===2?.12:.23)*Number($('cloudOpacity').value)/100;}
+ options(){if(!$('pressureLayer').checked)this.isobarLines?.hide();if(!this.current)return;this.surfaceUniforms.coverEnabled.value=+$('surfaceCover').checked;$('precipitationLegend').hidden=$('surfaceField').value!=='rain';this.wind.visible=$('windLayer').checked;this.drops.visible=this.flakes.visible=$('rainLayer').checked&&$('precipitationStyle').value==='symbols';this.streaks.visible($('rainLayer').checked&&$('precipitationStyle').value==='streaks');for(const c of this.clouds)c.visible=$(['cloudLow','cloudMiddle','cloudHigh'][c.userData.layer]).checked;this.uniforms.mode.value=['none','temperature','wind','rain'].indexOf($('surfaceField').value);this.uniforms.isobars.value=+$('pressureLayer').checked;this.surfaceUniforms.mode.value=this.uniforms.mode.value;this.surfaceUniforms.isobars.value=this.uniforms.isobars.value;for(const c of this.clouds)c.material.uniforms.opacity.value=(c.userData.layer===2?.12:.23)*Number($('cloudOpacity').value)/100;}
  readout(){this.pointForecast?.update();}
  updateTimeDisplay(){
   this.displayFrame=this.timeTransition?this.fromFrame+(this.frame-this.fromFrame)*this.blend:this.frame;

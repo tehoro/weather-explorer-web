@@ -9,9 +9,9 @@ export class IsobarLines{
 void main(){vec4 a=projectionMatrix*modelViewMatrix*vec4(position,1.),b=projectionMatrix*modelViewMatrix*vec4(other,1.);vec2 d=(b.xy/b.w-a.xy/a.w)*resolution;float len=length(d);vec2 normal=len>0.?vec2(-d.y,d.x)/len:vec2(0.);a.xy+=normal*side*1.4/resolution*a.w;a.z-=.000002*a.w;gl_Position=a;}`,fragmentShader:`void main(){gl_FragColor=vec4(.9,.95,1.,.85);}`}));this.object.frustumCulled=false;group.add(this.object);this.key='';this.elapsed=0;this.anchors=[];
   this.canvas=document.createElement('canvas');this.canvas.id='isobarLabels';this.canvas.setAttribute('aria-label','Pressure contours and high and low centres');this.canvas.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2';document.body.append(this.canvas);this.ctx=this.canvas.getContext('2d');
  }
- hide(){this.canvas.hidden=true;this.object.visible=false;}
+ hide(){this.canvas.hidden=true;this.canvas.style.display='none';this.object.visible=false;this.ctx.clearRect(0,0,this.canvas.width,this.canvas.height);}
  update(view,dt,interval,enabled){
-  this.object.visible=enabled;this.canvas.hidden=!enabled;if(!enabled)return;this.elapsed+=dt;
+  if(!enabled){this.hide();return;}this.object.visible=true;this.canvas.hidden=false;this.canvas.style.display='block';this.elapsed+=dt;
   const key=[view.frame,view.blend.toFixed(3),interval,view.bounds.west,view.bounds.north].join('/');
   if(this.elapsed>=.05&&(key!==this.key||this.elapsed>=2)){
    this.elapsed=0;this.key=key;
