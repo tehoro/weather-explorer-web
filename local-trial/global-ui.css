@@ -38,7 +38,7 @@ footer button{pointer-events:auto;border:0;border-radius:0;background:none;color
 #pointForecast.expanded #pointCoordinates{margin:2px 0}
 #pointForecast.expanded #pointTotal{margin:4px 0;font-size:12px}
 #pointForecast.expanded .pointActions button{padding:6px 10px}
-#pointForecast.expanded #pointChart{flex:1;min-height:0;margin-top:8px;display:grid;grid-template-rows:repeat(4,minmax(0,1fr)) 32px}
+#pointForecast.expanded #pointChart{flex:1;min-height:0;margin-top:8px;display:grid;grid-template-rows:repeat(4,minmax(0,1fr)) 38px 32px}
 #pointForecast.expanded #pointChart svg{width:100%;height:100%;min-height:0}
 #pointForecast.expanded #pointChart p{margin:4px 0;font-size:10px}
 #pointForecast.expanded #pointStatus{margin:3px 0;font-size:10px}

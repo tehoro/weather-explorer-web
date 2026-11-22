@@ -1,7 +1,7 @@
-import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122ai';
+import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261122aj';
 import {displayPoint,snapForecast,windReadout} from './point-values.mjs';
 import {zoneAt,timeParts,forecastMoment} from './local-time.mjs';
-import {typeName} from './precipitation-type.mjs';
+import {typeName,typeColour,typeLegend} from './precipitation-type.mjs?v=20261122aj';
 import {syncUnits} from './shared-units.mjs';
 export class PointForecast{
  constructor(weather,fly){
@@ -44,6 +44,7 @@ export class PointForecast{
   const v=k=>A[k]*(1-t)+B[k]*t,u=v('u'),north=v('v');
   const kind=typeName(t<.5?A.ptype:B.ptype,v('rain'),v('snow'));
   el.textContent=Units.format(v('temperature'),'°C')+(Number.isFinite(v('dewpoint'))?' · Dew point '+Units.format(v('dewpoint'),'°C'):'')+'\n'+windReadout(u,north,v('gust'),Units,compassDirection(u,north))+'\n'+kind+' · '+Units.format(v('rain'),'mm/h')+' total · '+Units.format(v('snow'),'mm/h')+' snow water equivalent\nPressure '+Units.format(v('pressure'),'hPa')+' · '+(Number.isFinite(v('totalCloud'))?'Total cloud '+Math.round(v('totalCloud')*100)+'%':'Cloud low / middle / high '+['low','middle','high'].map(k=>Math.round(v(k)*100)+'%').join(' / '));
+  if(kind!=='Dry'){const lines=el.textContent.split('\n'),swatch=document.createElement('span');swatch.textContent='■ ';swatch.style.color=typeColour(t<.5?A.ptype:B.ptype,v('rain'),v('snow'));swatch.setAttribute('aria-hidden','true');el.replaceChildren(document.createTextNode(lines.slice(0,2).join('\n')+'\n'),swatch,document.createTextNode(lines.slice(2).join('\n')));}
   this.panel.querySelector('#pointStatus').textContent=this.rows.size+'/'+w.data.meta.times.length+' three-hourly times · IFS model values; terrain does not downscale this forecast.';
   this.panel.querySelectorAll('.timeCursor').forEach(line=>{line.setAttribute('x1',chartLayout.left+(frame+1)/w.data.meta.times.length*chartLayout.span);line.setAttribute('x2',chartLayout.left+(frame+1)/w.data.meta.times.length*chartLayout.span);});
  }
@@ -51,7 +52,7 @@ export class PointForecast{
   const host=this.panel.querySelector('#pointChart');if(host.hidden||!this.location||!this.data?.meta)return;
   const times=this.data.meta.times,zone=zoneAt(this.location.lat,this.location.lon);
   const periods=[...new Set((this.data.meta.point_fields?.gust_period_hours||[]).filter(Number.isFinite))],gustNote=periods.length===1?'Gusts are maxima in the preceding '+periods[0]+' '+(periods[0]===1?'hour':'hours')+'.':'Gusts use the model accumulation period at each time.';
-  const box=host.getBoundingClientRect(),height=Math.max(100,(box.height-32)/4*880/Math.max(1,box.width));
-  host.innerHTML=meteogram({height,times,rows:this.rows,zone,location:this.location,frame:this.weather.displayFrame??this.weather.frame,units:Units})+'<p title="Three-hourly spot values joined by straight lines. Click a chart to select a forecast time. Precipitation bars cover the preceding 3 hours; colours show precipitation type. Purple bars alongside show snow water equivalent, already included in the total. '+gustNote+' Grey shading shows approximate night-time.">3-hourly values · precipitation: previous 3 h · click a chart to change time. '+gustNote+'</p>';
+  const box=host.getBoundingClientRect(),height=Math.max(100,(box.height-70)/4*880/Math.max(1,box.width));
+  host.innerHTML=meteogram({height,times,rows:this.rows,zone,location:this.location,frame:this.weather.displayFrame??this.weather.frame,units:Units})+'<p class="precipitationKey"><small>'+typeLegend()+'</small></p><p title="Three-hourly spot values joined by straight lines. Click a chart to select a forecast time. Precipitation bars cover the preceding 3 hours; colours show precipitation type. Pale lavender bars alongside show snow water equivalent, already included in the total. '+gustNote+' Grey shading shows approximate night-time.">3-hourly values · precipitation: previous 3 h · click a chart to change time. '+gustNote+'</p>';
  }
 }

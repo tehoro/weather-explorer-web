@@ -1,4 +1,4 @@
-import {TYPES,precipitationType,typeName} from './precipitation-type.mjs';
+import {TYPES,precipitationType,typeName} from './precipitation-type.mjs?v=20261122aj';
 export const chartLayout={width:880,left:52,span:810};
 export const compassDirection=(u,v)=>['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round((Math.atan2(-u,-v)*180/Math.PI+360)/22.5)%16];
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -17,7 +17,7 @@ export function meteogram({times,rows,zone,location,frame,units,height=174}){
  const available=k=>[...rows.values()].some(r=>Number.isFinite(r[k]));
  const specs=[
   {title:'Temperature (green) / dew point (orange)',unit:'°C',series:[['Temperature',r=>r.temperature,'#39c5a1'],...(available('dewpoint')?[['Dew point',r=>r.dewpoint,'#f18b43']]:[])]},
-  {title:'Precipitation · preceding 3 hours · water equivalent',unit:'mm',rain:true,series:[['Total',r=>r.rain*3,'#55b8ff'],['Snow water (included)',r=>r.snow*3,'#bc8cf0']]},
+  {title:'Precipitation · preceding 3 hours · water equivalent',unit:'mm',rain:true,series:[['Total',r=>r.rain*3,TYPES[1][1]],['Snow water (included)',r=>r.snow*3,TYPES[5][1]]]},
   {title:'Wind (gold) / gust (salmon) · arrows show flow (N ↑)',unit:'m/s',wind:true,series:[['Wind',r=>Math.hypot(r.u,r.v),'#f1c56c'],...(available('gust')?[['Gust',r=>r.gust,'#f69980']]:[])]},
   ...(available('totalCloud')?[{title:'Total cloud',unit:'%',cloud:true,series:[['Cloud',r=>r.totalCloud*100,'#c6d9ee']]}]:[])];
  return specs.map(panel=>{

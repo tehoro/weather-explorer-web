@@ -14,3 +14,8 @@ const grid=await data.coarseGrid(0,{west:.4,north:90,lonSpan:.2,latSpan:0},3);
 assert.equal(grid.fields.ptype[0],1);assert.equal(grid.fields.ptype[2],5);
 assert(!grid.fields.ptype.includes(3),'interpolation must never invent freezing rain');
 console.log('Actual categorical types, dry threshold, mixture fallback and nearest-neighbour sampling passed.');
+
+const {TYPES,typeColour,typeLegend,typeShader}=await import('./precipitation-type.mjs');
+assert.equal(typeColour(1,1,0),'#3264ff');
+assert.equal(typeColour(5,1,1),'#cfb9f4');
+for(const [id,[name,hex]]of Object.entries(TYPES)){if(+id)assert.ok(typeLegend().includes(hex));const rgb=[1,3,5].map(i=>(parseInt(hex.slice(i,i+2),16)/255).toFixed(6)).join(',');assert.ok(typeShader.includes('vec3('+rgb+')'));}

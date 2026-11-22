@@ -1,5 +1,6 @@
-// Same deterministic precipitation-type hues as Highlights' ECMWF chart palette.
-export const TYPES={0:['Dry','#000000'],1:['Rain','#3ce213'],3:['Freezing rain','#ff044b'],5:['Snow','#9d68ee'],6:['Wet snow','#4543fa'],7:['Rain and snow','#1fb8a6'],8:['Ice pellets','#ff8000'],12:['Freezing drizzle','#fb6ec0']};
+// Local terrain palette: distinct from green land and muted sea colours.
+// Shared by the terrain shader, meteogram and point forecast.
+export const TYPES={0:['Dry','#000000'],1:['Rain','#3264ff'],3:['Freezing rain','#ff478b'],5:['Snow','#cfb9f4'],6:['Wet snow','#9355e8'],7:['Rain and snow','#7564ed'],8:['Ice pellets','#ff8000'],12:['Freezing drizzle','#d94fcb']};
 export function precipitationType(type,rain,snow){
  if(rain<.05)return 0;
  if(type>=0&&TYPES[type])return type;
@@ -7,16 +8,13 @@ export function precipitationType(type,rain,snow){
  return fraction>.8?5:fraction>.2?7:1;
 }
 export function typeName(type,rain,snow){return TYPES[precipitationType(type,rain,snow)]?.[0]||'Unknown';}
+export function typeColour(type,rain,snow){return TYPES[precipitationType(type,rain,snow)][1];}
+export function typeLegend(){return Object.entries(TYPES).filter(([id])=>id!=='0').map(([, [name,colour]])=>`${name} <span style="color:${colour}" aria-hidden="true">■</span>`).join(' · ');}
+const rgb=hex=>[1,3,5].map(i=>(parseInt(hex.slice(i,i+2),16)/255).toFixed(6)).join(',');
 export const typeShader=`
 vec3 precipitationColour(float type){
- if(type<.5)return vec3(.3,.5,.6);
- if(type<2.)return vec3(.235,.886,.075);
- if(type<4.)return vec3(1.,.016,.294);
- if(type<5.5)return vec3(.616,.408,.933);
- if(type<6.5)return vec3(.271,.263,.98);
- if(type<7.5)return vec3(.122,.722,.651);
- if(type<10.)return vec3(1.,.502,0.);
- return vec3(.984,.431,.753);
+ ${Object.entries(TYPES).map(([id,[,colour]])=>`if(abs(type-${Number(id).toFixed(1)})<.5)return vec3(${rgb(colour)});`).join('\n ')}
+ return vec3(.3,.5,.6);
 }
 float precipitationKind(vec4 p){
  if(p.r<.05)return 0.;

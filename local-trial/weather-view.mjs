@@ -1,6 +1,6 @@
-import {typeShader} from './precipitation-type.mjs';
+import {typeShader,typeLegend} from './precipitation-type.mjs?v=20261122aj';
 import {replayFrame} from './playback-loop.mjs';
-import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261122ai';
+import {updateCloudTerrain} from './cloud-terrain.mjs?v=20261122aj';
 import {particleBudget,updateParticleAttribute} from './particle-budget.mjs';
 import {forecastOrder} from './forecast-order.mjs';
 import {RunRefresh,nearestTime} from './run-refresh.mjs?v=20261122j';
@@ -10,7 +10,7 @@ import {isobarInterval,pressureAnomalies} from './isobars.mjs?v=20261120o';
 import {makePrecipitation,precipitationDensity} from './precipitation-display.mjs?v=20261120h';
 import {updateForecastClock} from './local-time.mjs?v=20261122l';
 import * as THREE from 'three';
-import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122ai';
+import {WeatherData,bilinear,clamp} from './weather-data.mjs?v=20261122aj';
 const $=id=>document.getElementById(id);
 const N=1300,L=24;
 
@@ -133,7 +133,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
   if(!this.wind)this.makeWind();if(!this.drops)this.makeRain();
   if(moved)this.streaks?.reset();
   if(moved||!this.particles.length){this.particles=Array.from({length:N},()=>this.spawn());this.rain=Array.from({length:900},()=>this.spawnRain());}
-  $('precipitationLegend')?.remove();const legend=document.createElement('p');legend.id='precipitationLegend';legend.innerHTML='<small>Rain <span style="color:#3ce213">■</span> · Snow <span style="color:#9d68ee">■</span> · Wet snow <span style="color:#4543fa">■</span> · Rain/snow <span style="color:#1fb8a6">■</span> · Freezing rain <span style="color:#ff044b">■</span> · Ice pellets <span style="color:#ff8000">■</span> · Freezing drizzle <span style="color:#fb6ec0">■</span><br>Fainter shading means lighter precipitation. '+(this.data.meta.ptype_path?'IFS surface precipitation type.':'Type estimated from rain/snow amounts; detailed categories unavailable.')+'</small>';$('surfaceField').after(legend);
+  $('precipitationLegend')?.remove();const legend=document.createElement('p');legend.id='precipitationLegend';legend.innerHTML='<small>'+typeLegend()+'<br>Colour shows type; stronger shading means a higher total precipitation rate (water equivalent). '+(this.data.meta.ptype_path?'IFS surface precipitation type.':'Type estimated from rain/snow amounts; detailed categories unavailable.')+'</small>';$('surfaceField').after(legend);
   this.isobarLines??=new IsobarLines(this.group);this.isobarLines.key='';this.isobarLines.elapsed=2;this.options();
  }
  attachSurfaces(){
@@ -165,13 +165,14 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
       if(mode>.5&&mode<1.5){colour=mix(vec3(.10,.35,.85),vec3(.95,.27,.08),clamp((s.r+10.)/45.,0.,1.));alpha=.48;}
       else if(mode>1.5&&mode<2.5){colour=mix(vec3(.18,.65,.72),vec3(1.,.38,.04),clamp(length(s.ba)/25.,0.,1.));alpha=.48;}
       else if(mode>2.5){vec4 pa=texture2D(ptypeA,sampleUV),pb=texture2D(ptypeB,sampleUV);
-       colour=mix(precipitationColour(precipitationKind(pa)),precipitationColour(precipitationKind(pb)),blend);
-       colour=pow(colour,vec3(2.2));alpha=rain<.05?0.:clamp(sqrt(rain)*.20,0.,.55);}
+       float ka=precipitationKind(pa),kb=precipitationKind(pb);
+       colour=ka<.5?precipitationColour(kb):kb<.5?precipitationColour(ka):mix(precipitationColour(ka),precipitationColour(kb),blend);
+       colour=pow(colour,vec3(2.2))*clamp(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))*2.+.45,.55,1.15);alpha=rain<.05?0.:clamp(sqrt(rain)*.23,0.,.68);}
       diffuseColor.rgb=mix(diffuseColor.rgb,colour,alpha);
 
      }`);
    };
-   material.customProgramCacheKey=()=> 'local-weather-type-ab-'+Boolean(material.userData.coarseRelief);material.needsUpdate=true;
+   material.customProgramCacheKey=()=> 'local-weather-type-aj-'+Boolean(material.userData.coarseRelief);material.needsUpdate=true;
   }
  }
  sample(name,x,z){if(!this.current)return NaN;const b=this.bounds,n=this.current.n,px=(x-b.west)/(b.east-b.west)*(n-1),py=(z-b.north)/(b.south-b.north)*(n-1);return bilinear(this.previous.fields[name],n,px,py)*(1-this.blend)+bilinear(this.current.fields[name],n,px,py)*this.blend;}
