@@ -36,12 +36,16 @@ try{
  check(view.playing,'failed detail refinement leaves coarse forecast playing');
  check(document.querySelector('#weatherDetailStatus').textContent.includes('global preview'),'detail failure reports usable preview');
  let requested=-1;
- const clock={playing:true,loading:false,preparing:true,elapsed:0,frame:0,data:{meta:{times:[0,1,2]}},load(f){requested=f;this.loading=true;},playLabel(){}};
+ const clock={blend:1,playing:true,loading:false,preparing:true,elapsed:0,frame:0,data:{meta:{times:[0,1,2]}},load(f){requested=f;this.loading=true;},playLabel(){}};
  WeatherView.prototype.advanceTime.call(clock,4);
  check(requested===1&&clock.playing,'Play requests next frame even with incomplete overall buffer');
  WeatherView.prototype.advanceTime.call(clock,4);check(clock.frame===0&&clock.playing,'unavailable next frame holds time without cancelling Play');
  clock.frame=1;clock.loading=false;clock.elapsed=0;WeatherView.prototype.advanceTime.call(clock,4);
  check(requested===2,'next frame resumes after awaited weather becomes available');
+ clock.timeTransition=true;clock.blend=0;clock.frame=1;clock.loading=false;clock.playing=true;
+ WeatherView.prototype.advanceTime.call(clock,1);check(Math.abs(clock.blend-1/3)<1e-9,'one second advances one forecast hour at 1×');
+ clock.playing=false;WeatherView.prototype.advanceTime.call(clock,1);check(Math.abs(clock.blend-1/3)<1e-9,'Pause freezes interpolated weather time');
+ clock.playing=true;document.querySelector('#playbackSpeed').value=2;WeatherView.prototype.advanceTime.call(clock,.5);check(Math.abs(clock.blend-2/3)<1e-9,'speed changes preserve progress and accelerate time');
  out.textContent+='\nAll buffering checks passed.';
 }catch(e){out.textContent+='\nFAIL '+e.stack;}
 </script>

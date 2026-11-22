@@ -1,13 +1,13 @@
 import {terrainReadiness} from './terrain-readiness.mjs?v=20261122f';
-import {GlobalRelief} from './global-relief.mjs?v=20261122k';
+import {GlobalRelief} from './global-relief.mjs?v=20261122l';
 import {setupSearch} from './location-search.mjs?v=20261120j';
 import {paintLand} from './basemap-texture.mjs?v=20261120g';
 import * as THREE from 'three';
 import {OrbitControls} from './assets/OrbitControls.js';
 import {wrap,demName,detail,viewTiles} from './terrain-stream.mjs?v=20261120l';
-import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122k';
-import {WeatherView} from './weather-view.mjs?v=20261122k';
-import {setupUI} from './global-ui.mjs?v=20261122k';
+import {RasterReader,sample,isWater} from './terrain-raster.mjs?v=20261122l';
+import {WeatherView} from './weather-view.mjs?v=20261122l';
+import {setupUI} from './global-ui.mjs?v=20261122l';
 import {PlaceLabels} from './place-labels.mjs?v=20261120s';
 setupUI();
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');

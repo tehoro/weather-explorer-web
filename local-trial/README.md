@@ -735,3 +735,15 @@ worker/IndexedDB reuse across worker restarts; loading priority; playback with
 partial weather, zero terrain and failed cover; automatic run validation. The
 browser fixture `test-relief-view.html` shows Norway using only the bundled
 fallback, with no detailed terrain downloads.
+
+### Synchronous forecast clock (build L)
+
+Playback now uses the full three seconds per three-hour interval at 1× to blend
+weather continuously. The clock, date, forecast lead and fractional slider follow
+that same interpolation. The clock displays minutes (one forecast hour per real
+second at 1×). Pause freezes temporal interpolation, while illustrative particles
+continue moving. Changing playback speed preserves progress. Manual scrubbing
+snaps to the nearest source frame; the previous/next buttons retain three-hour
+steps. Detail upgrades do not replace a frame partway through a time transition.
+Browser checks cover interpolation speed, pause/resume, missing-frame holds and
+partial terrain; time tests cover intermediate timestamps and local time zones.
