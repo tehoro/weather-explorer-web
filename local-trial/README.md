@@ -894,3 +894,24 @@ In Local's relief/land-cover blend, WorldCover snow/ice retains its mapped white
 appearance, and bare/sparse land has stronger rock/soil colouring. These static
 classes are separate from the forecast snow overlay; they do not establish a
 universal treeline. The globe retains its coarse relief base.
+
+### Global land-cover base (23 November)
+
+Globe and Local's coarse fallback now use a bundled 5-arc-minute WorldCover 2021
+class overview. `prepare_global_landcover.py` reads only the internal overviews
+of all 2,651 official 3-degree COGs, then samples 36×36 display cells per tile.
+The reproducible builder runs with `uv run --with rasterio --no-project python
+local-trial/prepare_global_landcover.py`; intermediate samples remain in /private/tmp.
+No browser requests the worldwide full-resolution map or an external map service.
+
+`land-cover-palette.mjs` supplies the same colours/weights to the detailed terrain
+worker and globe: mapped snow/ice fully replaces the elevation colour, bare/sparse
+vegetation blends at 65%, other classes at 10%. Premultiplied colour filtering
+softens class transitions without inventing intermediate category numbers. Missing
+coverage and water retain the relief/coast base. These are static 2021 classes,
+not evidence of present seasonal snow. Forecast snow and sea ice remain separate.
+The texture loads in the background, is cached on disk, and preserves hill shading.
+
+Source: https://esa-worldcover.org/en/data-access · © ESA WorldCover project 2021 /
+Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover
+consortium; CC BY 4.0. The packaged raster is resampled for display.

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {WeatherData} from './weather-engine.mjs?v=20261123a';
+import {WeatherData} from './weather-engine.mjs?v=20261123b';
 import {frameAtTime} from './forecast-position.mjs';
 // Only the small global cover previews are needed; no detailed weather tiles.
 export class GlobeSurfaceCover{

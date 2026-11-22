@@ -1,7 +1,7 @@
-import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261123a';
+import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261123b';
 import {displayPoint,snapForecast,windReadout} from './point-values.mjs';
 import {zoneAt,timeParts,forecastMoment} from './local-time.mjs';
-import {typeName,typeColour,typeLegend} from './precipitation-type.mjs?v=20261123a';
+import {typeName,typeColour,typeLegend} from './precipitation-type.mjs?v=20261123b';
 import {syncUnits} from './shared-units.mjs';
 export class PointForecast{
  constructor(weather,fly){

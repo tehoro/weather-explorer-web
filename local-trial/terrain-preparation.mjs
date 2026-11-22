@@ -1,7 +1,7 @@
 import * as THREE from './assets/three.module.js';
 import {sample,isWater} from './terrain-raster.mjs';
 const terrainStops=[[0,'#234e45'],[200,'#477353'],[700,'#7a8960'],[1400,'#9b9b80'],[2200,'#969187'],[3000,'#a39d94']].map(([z,c])=>[z,new THREE.Color(c)]);
-const coverColours={10:'#315d3c',20:'#78834e',30:'#81985c',40:'#a0a56a',50:'#a49a90',60:'#a7a18e',70:'#e4ecee',90:'#547a67',95:'#315d50',100:'#989578'};
+import {coverColours,coverWeight} from './land-cover-palette.mjs';
 const rgb=c=>{const v=new THREE.Color(c).convertLinearToSRGB();return [v.r*255,v.g*255,v.b*255];};
 const coverRGB=Object.fromEntries(Object.entries(coverColours).map(([k,c])=>[k,rgb(c)])),seaRGB=rgb('#12384e');
 const reliefRGB=Array.from({length:1801},(_,i)=>{const z=i*5;let c=terrainStops.at(-1)[1].clone();for(let j=1;j<terrainStops.length;j++)if(z<=terrainStops[j][0]){const [a,ca]=terrainStops[j-1],[b,cb]=terrainStops[j];c=ca.clone().lerp(cb,Math.max(0,(z-a)/(b-a)));break;}return rgb(c);});
@@ -12,7 +12,7 @@ export function colourTile({p,a,water,ocean},mode){
   let c=reliefRGB[Math.min(1800,Math.max(0,Math.round(z/5)))];
   const waterPixel=isWater(code??0,z,ocean);
   if(waterPixel)c=seaRGB;
-  else if(mode!=='relief'&&coverRGB[code]){const cc=coverRGB[code];c=mode==='cover'?cc:c.map((v,j)=>{const weight=code===70?1:code===60?.65:.1;return v*(1-weight)+cc[j]*weight;});}
+  else if(mode!=='relief'&&coverRGB[code]){const cc=coverRGB[code];c=mode==='cover'?cc:c.map((v,j)=>{const weight=coverWeight(code);return v*(1-weight)+cc[j]*weight;});}
   pixels.set([Math.round(c[0]),Math.round(c[1]),Math.round(c[2]),waterPixel?0:255],i*4);
  }
  return {pixels,size};

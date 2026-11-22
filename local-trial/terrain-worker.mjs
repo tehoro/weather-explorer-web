@@ -1,6 +1,6 @@
 import './assets/geotiff-2.1.3.js';
 import {RasterReader} from './terrain-raster.mjs?v=20261122l';
-import {colourTile,terrainGeometry} from './terrain-preparation.mjs?v=20261123a';
+import {colourTile,terrainGeometry} from './terrain-preparation.mjs?v=20261123b';
 let reader;
 onmessage=async({data:{id,method,args}})=>{
  try{

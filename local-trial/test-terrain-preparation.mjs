@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {colourTile,terrainGeometry} from './terrain-preparation.mjs?v=20261123a';
+import {colourTile,terrainGeometry} from './terrain-preparation.mjs?v=20261123b';
 const p={west:0,south:0,span:1,cells:4,background:true},a=new Float32Array(49).fill(200);
 const g=terrainGeometry(p,a,false);
 assert.equal(g.positions.length,g.normals.length);assert.equal(g.uvs.length,g.positions.length/3*2);

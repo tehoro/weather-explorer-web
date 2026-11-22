@@ -1,9 +1,9 @@
 import {globeJourney} from './camera-travel.mjs';
-import {GlobeSurfaceCover} from './globe-surface-cover.mjs?v=20261123a';
-import {GlobeClouds} from './globe-clouds.mjs?v=20261123a';
+import {GlobeSurfaceCover} from './globe-surface-cover.mjs?v=20261123b';
+import {GlobeClouds} from './globe-clouds.mjs?v=20261123b';
 import {GlobePlaces} from './globe-places.mjs?v=20261120n';
 import {setupSearch} from './location-search.mjs?v=20261120j';
-import {GlobalRelief} from './global-relief.mjs?v=20261123a';
+import {GlobalRelief} from './global-relief.mjs?v=20261123b';
 import * as THREE from 'three';
 import {OrbitControls} from '/terrain-assets/OrbitControls.js';
 const $=id=>document.getElementById(id),host=$('globe');

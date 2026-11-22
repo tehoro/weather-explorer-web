@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {gunzipSync} from 'node:zlib';
+import {coverColours,coverWeight} from './land-cover-palette.mjs';
+const a=gunzipSync(await readFile(new URL('./assets/worldcover-2021-5min.bin.gz',import.meta.url)));
+assert.equal(a.length,4320*2160);
+const valid=new Set([0,10,20,30,40,50,60,70,80,90,95,100]);assert.ok(a.every(v=>valid.has(v)));
+const at=(lat,lon)=>a[Math.min(2159,Math.floor((90-lat)*12))*4320+Math.min(4319,Math.floor((lon+180)*12))];
+assert.equal(at(72,-40),70,'Greenland interior is mapped ice');
+assert.equal(at(25,15),60,'Central Sahara is bare');
+assert.equal(at(-4,-63),10,'Amazon forest is mapped vegetation');
+assert.equal(coverWeight(70),1);assert.equal(coverWeight(60),.65);assert.ok(coverColours[70]);
+console.log('Global land cover: size, classes, orientation and shared palette passed.');
