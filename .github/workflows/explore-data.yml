@@ -1,6 +1,9 @@
 name: Prepare Explore forecast data
 on:
   workflow_dispatch:
+  push:
+    branches: [development/local-worldwide-trial-2026-11-20]
+    paths: [.github/workflows/explore-data.yml]
   schedule:
     - cron: '45 23 * * *'
 permissions:
