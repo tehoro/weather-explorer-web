@@ -17,6 +17,7 @@ export class WeatherData extends Engine{
   if(!current())throw Error('Superseded weather view');
   const result=await this.rpc('coarse',[frame,region,n]);if(!current())throw Error('Superseded weather view');return result;
  }
+ temperature(frame,lat,lon){return this.worker?this.rpc('temperature',[frame,lat,lon]):super.temperature(frame,lat,lon);}
  point(frame,lat,lon){return this.worker?this.rpc('point',[frame,lat,lon]):super.point(frame,lat,lon);}
  prioritise(frame){this.worker?.postMessage({method:'priority',args:[frame]});}
  setRegion(key){this.worker?.postMessage({method:'region',args:[key]});}

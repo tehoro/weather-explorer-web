@@ -60,3 +60,6 @@ body.clean #playback{left:50%}
 .placeLabel::before{content:"";position:absolute;left:50%;top:calc(100% + 7px);width:5px;height:5px;margin:0;border-radius:50%;background:currentColor;transform:translate(-50%,-50%);box-shadow:0 1px 3px #07131f}
 
 #pointMarkerName{position:absolute;left:50%;bottom:calc(100% + 5px);transform:translateX(-50%);white-space:nowrap;color:#ff9b91;font:600 13px/18px system-ui;text-shadow:0 1px 3px #07131f,0 0 4px #07131f}
+
+.placeTemperature{position:absolute;left:50%;top:calc(100% + 15px);transform:translateX(-50%);font:inherit;white-space:nowrap;pointer-events:none}
+#pointMarkerName .placeTemperature{top:calc(100% + 23px)}

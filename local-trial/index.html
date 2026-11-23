@@ -3,7 +3,7 @@
 <title>Weather Explorer · Explore preview</title>
 <link rel="stylesheet" href="local.css?v=20261123c">
 <script type="importmap">{"imports":{"three":"/terrain-assets/three.module.js"}}</script>
-</head><body>
+<script src="/explorer/units.js"></script></head><body>
 <header><div><strong>Weather Explorer</strong><span class="private">Private trial</span></div>
 <nav aria-label="Weather Explorer views"><button data-tab="now">Highlights</button><button data-tab="past">Past events</button><button data-tab="local" aria-current="page">Explore</button></nav>
 <button id="back" hidden>← Globe</button></header>
@@ -13,6 +13,7 @@
 <p>Choose a place to explore its weather over the landscape.</p>
 <label for="search">Find a location</label><input id="search" type="search" placeholder="Town, place or latitude, longitude" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="matches" aria-autocomplete="list">
 <div id="matches" role="listbox" aria-label="Matching locations"></div>
+<details><summary>Advanced settings</summary><label><input id="placeTemperatures" type="checkbox" checked>Place temperatures</label></details>
 <p id="status" role="status">Drag to stop and turn the globe. Scroll to approach. Click a named place or double-click anywhere on the globe.</p>
 <p class="note">Double-click anywhere on the globe for streaming terrain, wind trails and IFS weather layers. Terrain refines automatically towards 90 m.</p>
 </section><footer>Data: © 2026 ECMWF, CC BY 4.0. Regridded and unit-converted. Places: GeoNames, CC BY 4.0. Terrain: NOAA ETOPO1, public domain. <a href="https://esa-worldcover.org/en/data-access" target="_blank" rel="noopener">Land cover: © ESA WorldCover project 2021</a>, CC BY 4.0. Contains modified Copernicus Sentinel data (2021), processed by ESA WorldCover consortium.</footer></main>

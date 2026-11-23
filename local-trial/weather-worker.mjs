@@ -10,6 +10,7 @@ onmessage=async({data:message})=>{
    value=await data.init(args[0]);
    const requested=value.steps.indexOf(args[1]?.step),time=args[1]?.time||Date.now(),first=requested>=0?requested:value.times.reduce((best,t,i)=>Math.abs(Date.parse(t)-time)<Math.abs(Date.parse(value.times[best])-time)?i:best,0);
    void data.preload((ready,total)=>postMessage({progress:{ready,total}}),first).catch(()=>postMessage({progress:{error:true}}));
+  }else if(method==='temperature'){value=await data.temperature(...args);
   }else if(method==='point'){value=await data.point(...args);
   }else if(method==='stats'){await data.disk.writes;value={diskHits:data.disk.hits,globalFrames:data.global.size};
   }else if(method==='fine'){

@@ -38,7 +38,7 @@ let pointForecast,flight=null,zoomFocus=null,focusRevision=-1,orbit=null,lastOrb
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
-renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();placeTemperatures.tick(dt);if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
+renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();placeTemperatures.tick(dt);sendViewTime(now);if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(ARRIVAL.height-240)*e;camera.position.copy(controls.target).add(new THREE.Vector3(0,d,ARRIVAL.south*e));controls.update();if(t===1){approachStart=null;focusRevision=-1;syncZoomFocus();update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
@@ -353,3 +353,10 @@ $('shareView').onclick=async()=>{
  const url=viewURL(location.href,state,time),field=$('shareLink');field.value=url;field.hidden=false;
  try{await navigator.clipboard.writeText(url);$('shareStatus').textContent='View link copied.';}catch{$('shareStatus').textContent='Copy the view link below.';field.focus();field.select();}
 };
+
+let lastViewTimeSent=0;
+function sendViewTime(now){
+ if(parent===window||now-lastViewTimeSent<500||!weatherView?.data.meta)return;lastViewTimeSent=now;
+ const times=weatherView.data.meta.times,f=weatherView.displayFrame??weatherView.frame,a=Math.floor(f),b=Math.min(a+1,times.length-1);
+ parent.postMessage({type:'local-view-time',time:new Date(Date.parse(times[a])+(Date.parse(times[b])-Date.parse(times[a]))*(f-a)).toISOString()},'http://127.0.0.1:8091');
+}

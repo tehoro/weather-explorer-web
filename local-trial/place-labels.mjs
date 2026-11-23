@@ -32,7 +32,7 @@ export class PlaceLabels{
   this.elapsed+=dt;if(this.elapsed<.2)return;this.elapsed=0;
   this.layer.hidden=!document.getElementById('placeNames').checked;if(this.layer.hidden)return;
   const c=this.context(),width=innerWidth,height=innerHeight,blocked=[];
-  for(const element of document.querySelectorAll('#pointMarkerName,#settingsPanel,#pointForecast,.brand,#mapClock,#timeline,#playback,footer')){const rect=element.getBoundingClientRect();if(rect.width&&rect.height)blocked.push(rect);}
+  for(const element of document.querySelectorAll('#pointMarkerName,#settingsPanel,#pointForecast,.brand,#mapClock,#timeline,#playback,footer')){const rect=element.getBoundingClientRect();if(rect.width&&rect.height)blocked.push(element.id==='pointMarkerName'?{left:rect.left-4,right:rect.right+4,top:rect.top,bottom:rect.bottom+45}:rect);}
   this.camera.updateMatrixWorld();
   const key=[...this.camera.matrixWorld.elements,...this.camera.projectionMatrix.elements,c.centre.lat,c.centre.lon,c.terrainRevision,c.focusedPlace?.lat,c.focusedPlace?.lon,c.markedPlace?.lat,c.markedPlace?.lon,document.getElementById('placeTemperatures').checked,width,height,...blocked.flatMap(r=>[r.left,r.top,r.right,r.bottom])].join('/');
   if(key===this.layoutKey)return;this.layoutKey=key;
@@ -48,7 +48,7 @@ export class PlaceLabels{
    if(Math.abs(position.x-c.target.x)>Math.max(25,c.distance*3)||Math.abs(position.z-c.target.z)>Math.max(25,c.distance*3))continue;
    const ground=groundAt(position.x,position.z),y=ground+.015;
    v.set(position.x,y,position.z).project(this.camera);if(v.z<-1||v.z>1||Math.abs(v.x)>1||Math.abs(v.y)>1)continue;
-   const x=(v.x+1)*width/2,screenY=(1-v.y)*height/2,labelWidth=this.widths.get(name)??(this.widths.set(name,this.measure.measureText(name).width+4),this.widths.get(name)),box={left:x-labelWidth/2-(document.getElementById('placeTemperatures').checked?22:0),right:x+labelWidth/2+(document.getElementById('placeTemperatures').checked?22:0),top:screenY-26,bottom:screenY+4};
+   const x=(v.x+1)*width/2,screenY=(1-v.y)*height/2,labelWidth=this.widths.get(name)??(this.widths.set(name,this.measure.measureText(name).width+4),this.widths.get(name)),box={left:x-labelWidth/2,right:x+labelWidth/2,top:screenY-26,bottom:screenY+(document.getElementById('placeTemperatures').checked?28:4)};
    if(box.left<8||box.right>width-8||box.top<8||box.bottom>height-8)continue;
    candidates.push({fixed:!!focus&&Math.abs(lat-focus.lat)<.0001&&Math.abs(lon-focus.lon)<.0001,id,name,lat,lon,population,capital,x,y:screenY,box,proximity:Math.hypot(position.x-c.target.x,position.z-c.target.z)/Math.max(10,c.distance*.5),world:new THREE.Vector3(position.x,ground,position.z)});
   }
