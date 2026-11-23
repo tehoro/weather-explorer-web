@@ -323,7 +323,8 @@ function updateCameraSettings(now=performance.now(),force=false){
  lastCameraSettings=now;
  const distance=Math.hypot(camera.position.x-controls.target.x,camera.position.z-controls.target.z);
  const height=camera.position.y,clearance=height-groundHeight(camera.position.x,camera.position.z);
- const format=km=>km<1?`${Math.round(km*1000)} m`:`${km.toFixed(1)} km`;
+ const miles=Units.unit('m/s')==='mph',format=km=>`${(miles?km/1.609344:km).toFixed(km<1?2:1)} ${miles?'mi':'km'}`;
+ $('resetViewDescription').textContent=`Default: ${format(ARRIVAL.south)} south, ${format(ARRIVAL.height)} above the centred location, facing north.`;
  $('cameraDistance').value=kmSlider(distance);$('cameraAltitude').value=kmSlider(height);
  $('cameraDistanceValue').textContent=format(distance);$('cameraAltitudeValue').textContent=format(height);
  $('cameraClearance').textContent=`Above terrain beneath camera: ${format(clearance)} · Direct distance to centre: ${format(camera.position.distanceTo(controls.target))}`;
@@ -344,6 +345,15 @@ function adjustCameraSetting(id){
 }
 for(const id of ['cameraDistance','cameraAltitude'])$(id).addEventListener('input',()=>adjustCameraSetting(id));
 $('viewSettings').addEventListener('toggle',()=>updateCameraSettings(performance.now(),true));
+addEventListener('local-units-change',()=>updateCameraSettings(performance.now(),true));
+$('resetView').onclick=()=>{
+ stopOrbit();flight=null;approachStart=null;
+ controls.target.y=groundHeight(controls.target.x,controls.target.z);
+ camera.position.copy(controls.target).add(new THREE.Vector3(0,ARRIVAL.height,ARRIVAL.south));
+ camera.up.set(0,1,0);keepAboveTerrain();controls.update();centreViewport();
+ $('viewAngle').value='slanted';focusRevision=-1;
+ updateCameraSettings(performance.now(),true);update();
+};
 // Zoom and orbit share the selected ground point. Update its height when finer
 // terrain arrives, moving the camera by the same amount to preserve the view.
 function syncZoomFocus(dt){
