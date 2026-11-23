@@ -1,3 +1,4 @@
+import {readView,captureControls,restoreControls,viewURL} from './share-view.mjs';
 import {localPreviewReady} from './preview-readiness.mjs';
 import {ARRIVAL,ease,bezier,distanceKm,globeTravel} from './camera-travel.mjs';
 import {orbitStep,orbitOffset} from './camera-orbit.mjs';
@@ -18,6 +19,7 @@ import {WeatherView} from './weather-view.mjs?v=20261123g';
 import {setupUI} from './global-ui.mjs?v=20261123h';
 import {PlaceLabels} from './place-labels.mjs?v=20261123c';
 setupUI();
+const sharedView=readView(location.hash);if(sharedView)restoreControls(document,sharedView.settings);
 const terrainScale=()=>Number(document.getElementById("terrainScale").value);
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
@@ -35,7 +37,7 @@ let pointForecast,flight=null,zoomFocus=null,focusRevision=-1,orbit=null,lastOrb
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
-renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
+renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(ARRIVAL.height-240)*e;camera.position.copy(controls.target).add(new THREE.Vector3(0,d,ARRIVAL.south*e));controls.update();if(t===1){approachStart=null;focusRevision=-1;syncZoomFocus();update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
@@ -316,7 +318,35 @@ renderer.domElement.addEventListener('pointerdown',e=>{if(e.button===2||(e.butto
 renderer.domElement.addEventListener('touchstart',e=>{if(e.touches.length>1)zoomFocus=null;},{capture:true,passive:true});
 
 const params=new URLSearchParams(location.search);if(params.has('lat')&&params.has('lon')&&Number.isFinite(Number(params.get('lat')))&&Math.abs(Number(params.get('lat')))<=89.85&&Number.isFinite(Number(params.get('lon'))))anchor={lat:Number(params.get('lat')),lon:wrap(Number(params.get('lon')))};
-go();zoomFocus.name=params.get('name')||undefined;if(params.get('searchFlight')==='1'){pointForecast.select(anchor.lat,anchor.lon,zoomFocus.name);centreViewport();}
+if(sharedView)anchor={...sharedView.anchor};
+go();zoomFocus.name=params.get('name')||undefined;
+if(sharedView){
+ rebasing=true;camera.position.fromArray(sharedView.eye);controls.target.fromArray(sharedView.target);controls.update();rebasing=false;
+ zoomFocus=sharedView.focus&&Number.isFinite(sharedView.focus.lat)&&Number.isFinite(sharedView.focus.lon)?sharedView.focus:null;focusRevision=terrainRevision;
+ document.body.classList.toggle('clean',!!sharedView.clean);$('cleanView').textContent=sharedView.clean?'Show controls':'Clean view';
+ $('settingsPanel').hidden=!!sharedView.settingsHidden;document.body.classList.toggle('panelClosed',!!sharedView.settingsHidden);$('settingsToggle').setAttribute('aria-expanded',String(!sharedView.settingsHidden));
+ for(const [k,v] of Object.entries(sharedView.units||{}))if(Units.CHOICES[k]?.some(c=>c[0]===v)||v==='auto'&&['temperature','wind','rain'].includes(k))Units.setChoice(k,v);
+ update();
+}if(params.get('searchFlight')==='1'){pointForecast.select(anchor.lat,anchor.lon,zoomFocus.name);centreViewport();}
 fetch('/dem/tileList.txt').then(r=>{if(!r.ok)throw Error('Terrain catalogue unavailable');return r.text();}).then(text=>{const available=new Set(text.split(/\s+/).map(s=>s.replace(/\/$/,'')));reader=new TerrainWorker(available);reader.ready.then(()=>{catalogue=available;styleNote();update();}).catch(e=>$('status').textContent=e.message);}).catch(e=>$('status').textContent=e.message);
 
 $('terrainScale').addEventListener('input',()=>{globalRelief.setScale(terrainScale());for(const {mesh}of tiles.values())mesh.scale.y=terrainScale()/1.5;terrainRevision++;focusRevision=-1;syncZoomFocus();keepAboveTerrain();});
+
+let sharedPlaybackRestored=false;
+function restoreSharedPlayback(){
+ if(!sharedView||sharedPlaybackRestored||!weatherView?.current||weatherView.loading)return;
+ sharedPlaybackRestored=true;weatherView.playing=sharedView.playing===true;weatherView.playLabel();
+ if(sharedView.orbit)$('orbitToggle').click();
+ const p=sharedView.point;
+ if(p&&Number.isFinite(p.lat)&&Math.abs(p.lat)<=90&&Number.isFinite(p.lon)){
+  pointForecast.select(p.lat,p.lon,typeof p.name==='string'?p.name:undefined);
+  if(sharedView.meteogram)$('pointExpand').click();
+ }
+}
+$('shareView').onclick=async()=>{
+ const times=weatherView?.data.meta?.times,f=weatherView?.displayFrame??0,lo=Math.floor(f),hi=Math.min(lo+1,(times?.length||1)-1);
+ const time=times?new Date(Date.parse(times[lo])+(Date.parse(times[hi])-Date.parse(times[lo]))*(f-lo)).toISOString():null;
+ const state={anchor,eye:camera.position.toArray(),target:controls.target.toArray(),focus:zoomFocus,settings:captureControls(document),clean:document.body.classList.contains('clean'),settingsHidden:$('settingsPanel').hidden,playing:!!weatherView?.playing,orbit:!!orbit,point:pointForecast.location,meteogram:pointForecast.panel.classList.contains('expanded'),units:Object.fromEntries(['temperature','wind','rain'].map(k=>[k,Units.choice(k)]))};
+ const url=viewURL(location.href,state,time),field=$('shareLink');field.value=url;field.hidden=false;
+ try{await navigator.clipboard.writeText(url);$('shareStatus').textContent='View link copied.';}catch{$('shareStatus').textContent='Copy the view link below.';field.focus();field.select();}
+};

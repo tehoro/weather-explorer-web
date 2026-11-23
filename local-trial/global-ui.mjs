@@ -48,7 +48,7 @@ export function setupUI(){
  $('creditsOpen').onclick=()=>{help.showModal();credits.focus();credits.scrollIntoView({block:'start'});};
  aside.replaceChildren();const panelHeader=document.createElement('div');panelHeader.className='panelHeading';panelHeader.innerHTML='<h2>Settings</h2><button id="closeSettings" aria-label="Close settings">×</button>';aside.append(panelHeader);
  const hint=document.createElement('p');hint.id='pointHint';hint.className='glass';hint.textContent='Click for a forecast · double-click the landscape or click a town to centre';document.body.append(hint);
- const body=document.createElement('div');body.className='panelBody';body.append(location,weather,view,advanced,diagnostics);aside.append(body);
+ const body=document.createElement('div');body.className='panelBody';const share=document.createElement('section');share.innerHTML='<button id="shareView">Share view</button><p id="shareStatus" role="status"></p><input id="shareLink" aria-label="View link" readonly hidden><small>Includes camera, forecast time, layers and animation settings. Forecast availability changes as runs expire.</small>';body.append(share,location,weather,view,advanced,diagnostics);aside.append(body);
  function panel(open){aside.hidden=!open;document.body.classList.toggle('panelClosed',!open);$('settingsToggle').setAttribute('aria-expanded',String(open));}
  $('closeSettings').onclick=()=>panel(false);$('settingsToggle').onclick=()=>{document.body.classList.remove('clean');panel(aside.hidden);};
  $('cleanView').onclick=()=>{const clean=document.body.classList.toggle('clean');$('cleanView').textContent=clean?'Show controls':'Clean view';};
