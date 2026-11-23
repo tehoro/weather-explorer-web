@@ -42,7 +42,7 @@ let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,read
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
 let exporting=false;
-function liveFrame(now){const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();placeTemperatures.tick(dt);sendViewTime(now);if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
+function liveFrame(now){const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();updateCameraSettings(now);weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();placeTemperatures.tick(dt);sendViewTime(now);if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(ARRIVAL.height-240)*e;camera.position.copy(controls.target).add(new THREE.Vector3(0,d,ARRIVAL.south*e));controls.update();if(t===1){approachStart=null;focusRevision=-1;syncZoomFocus();update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
@@ -314,6 +314,36 @@ function keepAboveTerrain(){
  const floor=groundHeight(camera.position.x,camera.position.z)+.5*terrainScale();
  if(camera.position.y<floor){camera.position.y=floor;if(orbit){stopOrbit();$("status").textContent="Orbit stopped: terrain crosses the camera altitude.";}controls.update();}
 }
+// Logarithmic sliders give useful control near the ground and at continental scale.
+let lastCameraSettings=0;
+const sliderKm=value=>Math.expm1(Number(value)/1000*Math.log1p(3200));
+const kmSlider=value=>1000*Math.log1p(Math.max(0,value))/Math.log1p(3200);
+function updateCameraSettings(now=performance.now(),force=false){
+ if(!force&&(!$('advancedSettings').open||now-lastCameraSettings<200))return;
+ lastCameraSettings=now;
+ const distance=Math.hypot(camera.position.x-controls.target.x,camera.position.z-controls.target.z);
+ const height=camera.position.y,clearance=height-groundHeight(camera.position.x,camera.position.z);
+ const format=km=>km<1?`${Math.round(km*1000)} m`:`${km.toFixed(1)} km`;
+ $('cameraDistance').value=kmSlider(distance);$('cameraAltitude').value=kmSlider(height);
+ $('cameraDistanceValue').textContent=format(distance);$('cameraAltitudeValue').textContent=format(height);
+ $('cameraClearance').textContent=`Above terrain beneath camera: ${format(clearance)} · Direct distance to centre: ${format(camera.position.distanceTo(controls.target))}`;
+ for(const id of ['cameraDistance','cameraAltitude'])$(id).setAttribute('aria-valuetext',$(id+'Value').textContent);
+}
+function adjustCameraSetting(id){
+ stopOrbit();flight=null;approachStart=null;
+ const value=sliderKm($(id).value),target=controls.target;
+ if(id==='cameraDistance'){
+  const dx=camera.position.x-target.x,dz=camera.position.z-target.z,bearing=Math.atan2(dx,dz);
+  const distance=Math.min(value,Math.sqrt(Math.max(0,3200**2-(camera.position.y-target.y)**2)));
+  camera.position.x=target.x+Math.sin(bearing)*distance;camera.position.z=target.z+Math.cos(bearing)*distance;
+ }else{
+  const distance=Math.hypot(camera.position.x-target.x,camera.position.z-target.z);
+  camera.position.y=Math.min(value,target.y+Math.sqrt(Math.max(0,3200**2-distance**2)));
+ }
+ keepAboveTerrain();controls.update();updateCameraSettings(performance.now(),true);update();
+}
+for(const id of ['cameraDistance','cameraAltitude'])$(id).addEventListener('input',()=>adjustCameraSetting(id));
+$('advancedSettings').addEventListener('toggle',()=>updateCameraSettings(performance.now(),true));
 // Zoom and orbit share the selected ground point. Update its height when finer
 // terrain arrives, moving the camera by the same amount to preserve the view.
 function syncZoomFocus(dt){

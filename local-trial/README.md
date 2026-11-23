@@ -1014,3 +1014,12 @@ rather than a single daily check. Discovery requires every necessary field at
 all +3 to +84 h steps before building; only a newer complete run is uploaded.
 GitHub scheduling can be delayed. Publication keeps the preceding complete run
 and changes latest.json only after all objects have uploaded successfully.
+
+New-place arrivals use a north-facing camera 75 km south and 32 km above the
+centre's terrain. Advanced settings has two live camera sliders: horizontal
+centre distance and MSL altitude. They retain the target and bearing, pause
+Orbit when adjusted, and respect camera distance and terrain-clearance limits.
+Readings also show straight-line distance and clearance above the displayed
+terrain beneath the camera (including terrain exaggeration). Values refresh
+at 5 Hz while Advanced settings is open; logarithmic slider spacing allows
+fine adjustment near the ground without losing the wide-view range.

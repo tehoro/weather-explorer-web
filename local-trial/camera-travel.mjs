@@ -1,5 +1,5 @@
 // Camera travel uses kilometres; forecast time is independent of the journey.
-export const ARRIVAL={height:38,south:55};
+export const ARRIVAL={height:32,south:75};
 export const ease=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
 export function distanceKm(a,b){const r=Math.PI/180,dlat=(b.lat-a.lat)*r,dlon=(b.lon-a.lon)*r,h=Math.sin(dlat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dlon/2)**2;return 12742*Math.asin(Math.sqrt(Math.min(1,h)));}
 export const globeTravel=(a,b)=>distanceKm(a,b)>800||Math.max(Math.abs(a.lat),Math.abs(b.lat))>75;
