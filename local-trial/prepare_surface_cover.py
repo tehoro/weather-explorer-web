@@ -6,7 +6,7 @@ import numpy as np
 import eccodes
 from global_weather import OUTPUT,fetch_fields,index
 from prepare import write
-PATH='surface-cover-v5'
+PATH='surface-cover-v6'
 FIELDS=[{'name':n,'dtype':'<u2','scale':s} for n,s in [('snowCover',1/65534),('seaIce',1/65534),('snowlineWeighted',.0002),('snowlineWeight',1/65534),('snowlineRegionalWeighted',.0002),('snowlineRegionalWeight',1/65534),('snowlineModelHeight',.0002)]]
 def read(path):
     g=eccodes.codes_new_from_message(path.read_bytes())
@@ -122,7 +122,19 @@ def nz_reference(line,strength):
     if len(estimates)<3 or np.std(estimates)>.3:return None
     return float(np.quantile(estimates,.75))
 
+def bridge_nz_references(raw,steps):
+    """Bridge only one missing three-hour sample bounded by agreeing estimates."""
+    result=list(raw)
+    for i in range(1,len(raw)-1):
+        left,right=raw[i-1],raw[i+1]
+        if raw[i] is None and left is not None and right is not None:
+            span=steps[i+1]-steps[i-1]
+            if span<=6 and abs(right-left)<=.3:
+                result[i]=left+(right-left)*(steps[i]-steps[i-1])/span
+    return result
+
 def smooth_nz_references(raw,steps):
+    raw=bridge_nz_references(raw,steps)
     result=[];previous=None;previous_step=None
     for value,step in zip(raw,steps):
         if value is None:
@@ -159,22 +171,24 @@ def pack_cover(sd,ice,land,z,nz=None):
     arrays.extend([np.rint(np.clip(regional,0,13)*5000).astype('<u2'),np.rint(regional_weight*65534).astype('<u2'),np.rint(np.clip(np.nan_to_num(z)/1000,0,13)*5000).astype('<u2')])
     return arrays
 
-def build(run=None):
+def build(run=None, references=None, selected_steps=None):
     run=run or json.loads((OUTPUT/'latest.json').read_text())['run'];root=OUTPUT/run
     meta=json.loads((root/'manifest.json').read_text())
     if 'z' not in {r['param'] for r in index(run,0)[1] if r['levtype']=='sfc'}:raise ValueError('Official model orography unavailable')
     z=read(fetch_fields(run,0,['z'])[0][1])/9.80665
-    for step in meta['steps']:
+    steps=meta['steps'] if selected_steps is None else selected_steps
+    for step in steps:
         available={r['param'] for r in index(run,step)[1]}
         if not {'sd','sithick','lsm'}<=available:raise ValueError(f'Official surface cover fields unavailable at {step}')
     # Each frame supplies its own snow evidence; only the borrowed NZ reference
     # is damped in time, so an isolated southern snowfall cannot cause a jump.
-    raw=[]
-    for step in meta['steps']:
-        fields={p:read(path) for p,path,_ in fetch_fields(run,step,['sd','lsm'])}
-        line,strength=snowline(fields['sd'],fields['lsm'],z)
-        raw.append(nz_reference(line,strength))
-    references=dict(zip(meta['steps'],smooth_nz_references(raw,meta['steps'])))
+    if references is None:
+        raw=[]
+        for step in meta['steps']:
+            fields={p:read(path) for p,path,_ in fetch_fields(run,step,['sd','lsm'])}
+            line,strength=snowline(fields['sd'],fields['lsm'],z)
+            raw.append(nz_reference(line,strength))
+        references=dict(zip(meta['steps'],smooth_nz_references(raw,meta['steps'])))
     print('NZ snowline references at 44 S (km): '+str(references),flush=True)
     def frame(step):
         out=root/PATH/f'{step:03}'
@@ -195,6 +209,6 @@ def build(run=None):
             preview.append(np.where(weight>0,np.rint(mean),65535 if i<2 else 0).astype('<u2'))
         save('global.bin.gz',np.arange(0,1801,10),np.arange(0,3601,10)%3600,preview)
         (out/'complete').touch();print(f'Snow and sea ice +{step:03} h ready',flush=True)
-    with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(frame,meta['steps']))
-    meta['surface_cover']={'path':PATH,'fields':FIELDS,'format':3,'bytes_per_point':14,'missing':65535,'source':['sd','sithick','lsm','z (step 0)'],'nz_reference_km':references,'snowline':'NZ-only illustrative Southern Alps fallback adjusted 150 m per degree north, with local evidence taking priority. Illustrative elevation boundary from nearby snowy/bare points and actual model terrain heights; regional fallback uses agreeing boundaries within 150–300 km, gated by rendered terrain above model terrain'};write(root/'manifest.json',meta)
+    with ThreadPoolExecutor(max_workers=2) as pool:list(pool.map(frame,steps))
+    meta['surface_cover']={'path':PATH,'fields':FIELDS,'format':3,'bytes_per_point':14,'missing':65535,'source':['sd','sithick','lsm','z (step 0)'],'nz_reference_km':references,'snowline':'NZ-only illustrative Southern Alps fallback; isolated missing three-hour references bridged between agreeing neighbours; adjusted 150 m per degree north, with local evidence taking priority. Illustrative elevation boundary from nearby snowy/bare points and actual model terrain heights; regional fallback uses agreeing boundaries within 150–300 km, gated by rendered terrain above model terrain'};write(root/'manifest.json',meta)
 if __name__=='__main__':build()

@@ -68,4 +68,10 @@ class NzFallback(unittest.TestCase):
   self.assertAlmostEqual(smooth[1],1.1);self.assertAlmostEqual(smooth[2],1.2)
   self.assertIsNone(smooth[3]);self.assertEqual(smooth[4],1.5)
 
+ def test_isolated_reference_gap(self):
+  from prepare_surface_cover import bridge_nz_references
+  self.assertEqual(bridge_nz_references([1.2,None,1.28],[6,9,12]),[1.2,1.24,1.28])
+  for raw,steps in [([None,1.2,1.3],[3,6,9]),([1.2,1.3,None],[3,6,9]),([1.2,None,None,1.3],[3,6,9,12]),([1.2,None,2],[3,6,9]),([1.2,None,1.3],[3,9,15])]:
+   self.assertEqual(bridge_nz_references(raw,steps),raw)
+
 if __name__=='__main__':unittest.main()

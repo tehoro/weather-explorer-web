@@ -2,6 +2,10 @@ name: Prepare Explore forecast data
 on:
   workflow_dispatch:
     inputs:
+      repair_snow:
+        description: Repair isolated snowline gaps in the current published run
+        type: boolean
+        default: false
       temperatures_only:
         description: Prepare named-place temperatures for the current published run
         type: boolean
@@ -31,9 +35,12 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: Prepare and publish complete forecast
         env:
+          REPAIR_SNOW: ${{ inputs.repair_snow }}
           TEMPERATURES_ONLY: ${{ inputs.temperatures_only }}
         run: |
-          if [ "$TEMPERATURES_ONLY" = "true" ]; then
+          if [ "$REPAIR_SNOW" = "true" ]; then
+            uv run --frozen --with boto3 tools/repair_explore_snow.py
+          elif [ "$TEMPERATURES_ONLY" = "true" ]; then
             uv run --frozen --with boto3 tools/backfill_place_temperatures.py
           else
             uv run --frozen --with boto3 tools/refresh_explore_r2.py
