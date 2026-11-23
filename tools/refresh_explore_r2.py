@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import boto3
 from publish_explore_r2 import PREFIX, read_json, publish
+from verify_explore_publication import verify_publication
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'local-trial'))
 import auto_refresh
 from prepare_place_temperatures import build as build_temperatures
@@ -23,3 +24,6 @@ else:
     source = auto_refresh.weather.OUTPUT / run
     meta = build_temperatures(source, auto_refresh.validate(source))
     publish(client, bucket, source, meta)
+
+# Check what browsers actually receive, including when no newer run was found.
+verify_publication(run)

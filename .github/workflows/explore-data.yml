@@ -12,7 +12,12 @@ on:
         default: false
   schedule:
     # Probe all four IFS cycles; build only when a newer complete +84 h run exists.
-    - cron: '37 * * * *'
+    - cron: '17,47 * * * *'
+  workflow_run:
+    # A separate event path also catches up after pushes and backend-triggered syncs.
+    workflows: ['Sync and deploy']
+    types: [completed]
+    branches: [main]
 permissions:
   contents: read
 concurrency:

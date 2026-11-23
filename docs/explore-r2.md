@@ -1,7 +1,7 @@
 # Explore forecast storage in Cloudflare R2
 
-Status: publishing code prepared on development; no bucket or credentials created,
-no forecast uploaded and no production website changed by this setup.
+Status: live on Cloudflare R2, with preparation in GitHub Actions and the unlisted
+viewer at `/explore/`. The setup steps below are retained for recovery.
 
 ## Owner setup
 
@@ -38,7 +38,9 @@ to activate scheduling before the wider Explore release is ready.
 
 ## Retention and publishing
 
-`explore-data.yml` prepares once daily at 23:45 UTC and also supports manual runs.
+`explore-data.yml` checks at minutes 17 and 47 of every UTC hour, after each
+completed main-branch “Sync and deploy” workflow, and on manual request. It builds
+only when a newer complete IFS cycle is available through +84 hours.
 It is disabled unless `EXPLORE_R2_ENABLED` is `true`. Runs are serialised and a
 new invocation cannot cancel an upload halfway through. Preparation fetches only
 indexed official ECMWF Open Data messages, shared by all viewers.
@@ -98,5 +100,27 @@ its own request allowance, separate from R2. Browser disk caching reuses terrain
 
 The first R2 publication was verified on 23 November 2026 (NZDT), for IFS
 2026112212: 28 forecast frames, with packed tile ranges verified against local
-source files. Forecast preparation runs daily at 23:45 UTC and can also be
+source files. Forecast preparation checks twice hourly and after site syncs, and can also be
 started manually through Actions. Publication keeps the previous complete run.
+
+## Missed schedule investigation, 24 November 2026 NZDT
+
+The 23 November 13:33 UTC scheduled job successfully published 2026112300 at
+13:52 UTC. No later hourly run was created before the manual catch-up at 20:25 UTC,
+even though the workflow was active on main and newer Open Data was available.
+There was no failed forecast build or R2 upload in that interval. GitHub does not
+expose the exact cause of a missing schedule event. Its documentation permits
+delayed/dropped scheduled events; this is consistent with the evidence, not a
+confirmed platform incident.
+
+The schedule now checks twice hourly, away from the hour boundary. Completion of
+the main-branch site sync is a second event path, including backend-dispatched
+syncs and code pushes. All triggers share the existing publisher concurrency
+group; no running build is cancelled, and a follow-up checks the latest pointer
+before doing any preparation. This is recovery redundancy, not a punctuality
+guarantee if GitHub Actions itself is unavailable.
+
+Each ordinary check also verifies the public latest pointer and manifest against
+the selected run, with bounded retries, and records the served run in the Actions
+summary. A stale public response fails the job instead of silently reporting
+success. The previous complete run remains available during preparation.
