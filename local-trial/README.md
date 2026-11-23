@@ -985,3 +985,32 @@ and explicitly requests each completed frame where supported, avoiding two
 independent capture timers. This targets 30 fps, not a guarantee on every device.
 Globe destination clicks and searches start the local timeline at Now; local
 recentre actions retain their forecast time and playback.
+
+### Smooth video export (23 November 2026)
+
+Explore's Video panel also offers a 5–300 second, fixed 1920×1080 / 30 fps MP4
+export through WebCodecs and mp4-muxer 5.1.5 (the same pinned encoder packaging
+used by Highlights). It takes the current Orbit and Play states and playback
+speed. Every frame advances simulation by 1/30 second; slow encoding never drops
+simulation steps. Forecast time holds at the final forecast value. Other aspect
+ratios are fitted within 1080p without changing the camera framing.
+
+Export snapshots camera and forecast state, suspends live rendering and terrain
+installation, prepares the required weather grids, and prevents background run
+adoption/refinement from replacing the snapshot. Wind, precipitation, clouds,
+labels and orbit advance on simulated time. Encoder backpressure bounds queued
+frames. Progress and Cancel are in a modal dialog; cancel also works during data
+preparation. Completion, cancellation and errors restore the camera, forecast and
+playback state. Existing terrain detail is retained, with coarse relief outside
+loaded patches. Live recording remains available separately. Nothing is uploaded.
+
+Weather controls now order Clouds before Isobars (on/off defaults respectively).
+Snow & sea ice remains enabled by default under Advanced settings. Navigation
+instructions explain zooming in or out from the centred place; the redundant
+globe link has been removed from Settings.
+
+The R2 workflow now probes hourly at minute 37 UTC, covering all four IFS cycles
+rather than a single daily check. Discovery requires every necessary field at
+all +3 to +84 h steps before building; only a newer complete run is uploaded.
+GitHub scheduling can be delayed. Publication keeps the preceding complete run
+and changes latest.json only after all objects have uploaded successfully.

@@ -35,7 +35,7 @@ export class WeatherView{
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)this.runRefresh.check();});
  }
  async adoptRun(data,grids,key){
-  if(key!==this.regionKey)return;
+  if(this.exporting||key!==this.regionKey)return;
   const time=timeAtFrame(this.data.meta.times,this.heldFrame??this.displayFrame??this.frame);if(this.heldFrame!=null)this.heldFrame=frameAtTime(data.meta.times,time);const frame=nearestTime(data.meta.times,time);
   // Invalidate old requests before swapping all fields and the run metadata.
   this.token++;this.prepareId=(this.prepareId||0)+1;this.loading=false;
@@ -44,10 +44,10 @@ export class WeatherView{
   await this.load(frame);this.prepare();
  }
  async prepare(){
-  if(!this.current||this.loading||this.context().travelling)return;
+  if(this.exporting||!this.current||this.loading||this.context().travelling)return;
   const id=this.prepareId=(this.prepareId||0)+1,region=this.regionKey;
   this.preparing=true;this.monitoringTerrain=true;$('prepareStatus').hidden=false;$('retryBuffer').hidden=true;
-  const valid=()=>id===this.prepareId&&region===this.regionKey;
+  const valid=()=>!this.exporting&&id===this.prepareId&&region===this.regionKey;
   const grids=this.prepared?.region===region?this.prepared.grids:new Map([[this.frame,this.current]]);this.prepared={region,grids};let done=false,error=null;
   // All times for this viewport, with imminent frames first. Never download a global forecast here.
   void (async()=>{try{while(valid()){const f=forecastOrder(this.requestedFrame??this.frame,this.data.meta.times.length).find(f=>!grids.has(f));if(f===undefined)break;grids.set(f,await this.data.grid(f,this.region,129,valid));}}catch(e){error=e;}finally{done=true;}})();
@@ -90,6 +90,7 @@ export class WeatherView{
  playLabel(){$('weatherPlay').textContent=this.playing?'Pause':'Play';}
  error(e){$('weatherLoad').textContent=e.message+' — retry weather.';$('weatherRetry').hidden=false;this.playing=false;this.playLabel();$('prepareStatus').textContent=e.message+' — retry weather in Settings.';}
  refresh(force=false){
+  if(this.exporting)return;
   if(!this.data.meta)return;updateForecastClock(this.data.meta,this.displayFrame??this.frame,(this.pointForecast?.location||this.context().centre));
   const c=this.context(),r=c.region,key=[r.west,r.north,r.lonSpan,r.latSpan].map(v=>v.toFixed(3)).join('/');
   const terrain=c.preloadStatus(),changed=terrain.key!==this.terrainKey;this.terrainKey=terrain.key;
@@ -232,6 +233,7 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
   updateForecastClock(this.data.meta,this.displayFrame,(this.pointForecast?.location||this.context().centre));
  }
  advanceTime(dt){
+  if(this.exporting)return;
   this.elapsed+=dt;
   if(this.timeTransition){if(this.playing)this.blend=Math.min(1,this.blend+dt*Number($('playbackSpeed').value)/3);}
   else this.blend=Math.min(1,this.blend+dt/1.2);

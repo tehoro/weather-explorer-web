@@ -7,7 +7,8 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '45 23 * * *'
+    # Probe all four IFS cycles; build only when a newer complete +84 h run exists.
+    - cron: '37 * * * *'
 permissions:
   contents: read
 concurrency:

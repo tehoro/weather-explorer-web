@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {setupRecording} from './video-recording.mjs';
-const elements=new Map(),element=id=>{if(!elements.has(id))elements.set(id,{value:'720',textContent:id,hidden:false,setAttribute(){}});return elements.get(id);};
+const elements=new Map(),element=id=>{if(!elements.has(id))elements.set(id,{value:'720',textContent:id,hidden:false,setAttribute(){},removeAttribute(){}});return elements.get(id);};
 let requests=0,stops=0,begins=[],ends=0;
 const context=new Proxy({}, {get:()=>()=>{}}),track={requestFrame(){requests++;},stop(){stops++;}};
 globalThis.document={getElementById:element,querySelectorAll:()=>[],createElement:()=>({getContext:()=>context,captureStream:fps=>{assert.equal(fps,0);return {getVideoTracks:()=>[track],getTracks:()=>[track]};}})};

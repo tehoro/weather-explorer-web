@@ -95,3 +95,8 @@ dialog#helpDialog{width:min(650px,calc(100vw - 36px));font-size:14px}#helpDialog
 @media(max-width:700px){#timeline,.panelClosed #timeline{bottom:55px}#pointHint{display:none}#pointForecast.expanded{top:94px;height:calc(100dvh - 110px);max-height:calc(100dvh - 110px)}}
 
 .actionPanel{z-index:30}#recordingStop{z-index:40}
+#videoPanel{max-height:calc(100dvh - 90px);overflow:auto}
+#exportProgress{max-width:420px;padding:24px;border:1px solid #45606e;border-radius:14px;color:#e8f3fa;background:#102633}
+#exportProgress::backdrop{background:rgba(0,0,0,.35)}
+#exportMeter{width:100%;accent-color:#7adac2}
+#exportDuration{width:85px;margin:0 8px 12px 0}
