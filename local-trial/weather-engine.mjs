@@ -95,6 +95,10 @@ export class WeatherData{
   }
   return {fields:out,n,region,frame,quality:'coarse'};
  }
+ async temperature(frame,lat,lon){
+  const p=tilePoint(lat,lon),a=await this.tile(frame,p.x,p.y);
+  return sampleField('temperature',a.temperature,101,p.col,p.row);
+ }
  async point(frame,lat,lon){
   const p=tilePoint(lat,lon),a=await this.tile(frame,p.x,p.y),out={};
   for(const k of FIELDS)out[k]=sampleField(k,a[k],101,p.col,p.row);

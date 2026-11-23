@@ -1,5 +1,5 @@
 // Versioned, self-contained view links. Only recognised controls are restored.
-export const shareControls=['windLayer','rainLayer','cloudLow','cloudMiddle','cloudHigh','pressureLayer','surfaceCover','cloudOpacity','surfaceField','surfaceStyle','placeNames','precipitationStyle','terrainScale','cloudScale','windDensity','windSpeed','orbitPeriod','playbackSpeed'];
+export const shareControls=['placeTemperatures','windLayer','rainLayer','cloudLow','cloudMiddle','cloudHigh','pressureLayer','surfaceCover','cloudOpacity','surfaceField','surfaceStyle','placeNames','precipitationStyle','terrainScale','cloudScale','windDensity','windSpeed','orbitPeriod','playbackSpeed'];
 export function readView(hash){
  try{
   const s=JSON.parse(new URLSearchParams(hash.replace(/^#/, '')).get('view'));

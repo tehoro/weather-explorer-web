@@ -1,3 +1,4 @@
+import {PlaceTemperatures} from './place-temperatures.mjs';
 import {readView,captureControls,restoreControls,viewURL} from './share-view.mjs';
 import {localPreviewReady} from './preview-readiness.mjs';
 import {ARRIVAL,ease,bezier,distanceKm,globeTravel} from './camera-travel.mjs';
@@ -37,7 +38,7 @@ let pointForecast,flight=null,zoomFocus=null,focusRevision=-1,orbit=null,lastOrb
 let weatherView,placeLabels,lastRender=performance.now(),approachStart=null,readySent=false;
 const approaching=new URLSearchParams(location.search).has('approach'),approachLoadStart=performance.now();
 addEventListener('message',event=>{if(event.origin==='http://127.0.0.1:8091'&&event.source===parent&&event.data?.type==='local-terrain-approach')approachStart=performance.now();});
-renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
+renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();placeTemperatures.tick(dt);if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(ARRIVAL.height-240)*e;camera.position.copy(controls.target).add(new THREE.Vector3(0,d,ARRIVAL.south*e));controls.update();if(t===1){approachStart=null;focusRevision=-1;syncZoomFocus();update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
@@ -205,9 +206,10 @@ placeLabels=new PlaceLabels(camera,weatherContext,(lat,lon)=>({x:wrap(lon-anchor
 pointForecast=new PointForecast(weatherView,flyToPoint);weatherView.pointForecast=pointForecast;
 // Panel visibility never changes the camera. Reframe only on explicit centring.
 const pointMarker=document.createElement('div');pointMarker.id='pointMarker';pointMarker.hidden=true;const pointMarkerName=document.createElement('span');pointMarkerName.id='pointMarkerName';pointMarker.append(pointMarkerName);document.body.append(pointMarker);
+const placeTemperatures=new PlaceTemperatures(weatherView,placeLabels,()=>{const p=zoomFocus||pointForecast?.location;return p&&!pointMarker.hidden?{...p,name:p.name||'Selected location',element:pointMarkerName}:null;});
 function updatePointMarker(){
  const p=zoomFocus||pointForecast?.location;if(!p){if(typeof pointMarker!=='undefined')pointMarker.hidden=true;return;}
- const name=p.name||'Selected location';if(pointMarkerName.textContent!==name)pointMarkerName.textContent=name;
+ const name=p.name||'Selected location';if(pointMarkerName.dataset.name!==name){pointMarkerName.dataset.name=name;pointMarkerName.textContent=name;}
  const v=weatherContext().projectPlace(p.lat,p.lon),q=new THREE.Vector3(v.x,groundHeight(v.x,v.z)+.01,v.z).project(camera);
  pointMarker.hidden=q.z< -1||q.z>1||Math.abs(q.x)>1||Math.abs(q.y)>1;pointMarker.style.transform=`translate(${(q.x+1)*innerWidth/2}px,${(1-q.y)*innerHeight/2}px)`;
 }
