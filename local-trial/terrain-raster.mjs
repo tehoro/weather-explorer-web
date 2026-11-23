@@ -1,5 +1,5 @@
 import {wrap,demName,waterName} from './terrain-stream.mjs';
-import {TerrainCache,terrainCacheKey} from './terrain-cache.mjs?v=20261122j';
+import {TerrainCache,terrainCacheKey} from './terrain-cache.mjs?v=20261124a';
 export const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 export function isWater(code,height,ocean=false){return ocean||code===80||(code===0&&Math.abs(height)<.01);}
 export function sourceName(kind,lat,lon){return kind==='dem'?demName(Math.max(-89.99999999,lat-1e-9),lon+1e-9):waterName(Math.min(89.99999999,lat),lon);}
@@ -13,6 +13,17 @@ export function sample(a,w,h,x,y,nearest=false){
  const i=Math.floor(x),j=Math.floor(y),u=x-i,v=y-j,ii=Math.min(i+1,w-1),jj=Math.min(j+1,h-1);
  return (a[j*w+i]*(1-u)+a[j*w+ii]*u)*(1-v)+(a[jj*w+i]*(1-u)+a[jj*w+ii]*u)*v;
 }
+// Bound both the response and its body: suspended/mobile connections can stall either.
+export async function terrainRange(url,start,end,timeoutMs=25000){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),timeoutMs);
+ try{
+  const r=await fetch(url,{headers:{Range:`bytes=${start}-${end}`},signal:controller.signal});
+  if(r.status!==206)throw Error('Source range HTTP '+r.status);
+  return await r.arrayBuffer();
+ }catch(e){if(controller.signal.aborted)throw Error('Terrain download timed out; retrying automatically');throw e;}
+ finally{clearTimeout(timer);}
+}
 // Browser byte cache + GeoTIFF decoded-block cache; reuse image objects as well.
 export class RasterReader{
  constructor(G,base='',catalogue=new Set()){this.G=G;this.base=base;this.catalogue=catalogue;this.files=new Map();this.saved=new TerrainCache();}
@@ -23,7 +34,7 @@ export class RasterReader{
   const source={fetch:async ranges=>Promise.all(ranges.map(async({offset,length})=>{
    const start=Math.floor(offset/65536)*65536,end=Math.ceil((offset+length)/65536)*65536-1,key=start+'-'+end;
    let request=bytes.get(key);
-   if(!request){request=fetch(url,{headers:{Range:`bytes=${start}-${end}`}}).then(async r=>{if(r.status!==206)throw Error('Source range HTTP '+r.status);return r.arrayBuffer();});bytes.set(key,request);request.catch(()=>bytes.delete(key));}
+   if(!request){request=terrainRange(url,start,end);bytes.set(key,request);request.catch(()=>bytes.delete(key));}
    const b=await request;while(bytes.size>32)bytes.delete(bytes.keys().next().value);
    return b.slice(offset-start,offset-start+length);
   }))};
