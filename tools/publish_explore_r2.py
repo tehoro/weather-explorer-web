@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import shutil
 
 PREFIX = 'global-data/'
 RUN = re.compile(r'^\d{10}$')
@@ -39,6 +40,8 @@ def pack(source, target, meta):
         if not index:
             raise ValueError(f'Empty tile directory: {directory}')
         (dest / 'tiles.json').write_text(json.dumps(index, separators=(',', ':')))
+    if meta.get('place_temperatures'):
+        shutil.copytree(source / meta['place_temperatures'], target / meta['place_temperatures'])
     manifest = dict(meta, packed_tiles=True)
     (target / 'manifest.json').write_text(json.dumps(manifest, separators=(',', ':')))
     return manifest

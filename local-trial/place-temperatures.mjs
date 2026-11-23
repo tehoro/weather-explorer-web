@@ -1,3 +1,5 @@
+import {forecastUrl} from './forecast-host.mjs';
+import {tilePoint} from './weather-data.mjs';
 import {TerrainCache} from './terrain-cache.mjs';
 // Whole point timelines are tiny; retain them across Local/globe visits.
 export function temperatureText(name,a,b,t,units){
@@ -7,6 +9,7 @@ export function temperatureText(name,a,b,t,units){
 export class PlaceTemperatures{
  constructor(weather,labels,centre=()=>null){
   Object.assign(this,{weather,labels,centre});this.cache=new Map();this.active=0;this.elapsed=0;
+  this.precomputed=new Map();
   this.disk=new TerrainCache('weather-explorer-place-temperatures-v1',4*1024*1024);
  }
  entry(data,p){
@@ -14,9 +17,19 @@ export class PlaceTemperatures{
   let e=this.cache.get(key);if(e)return e;
   e={key,data,lat:p.lat,lon:p.lon,values:Array(data.meta.times.length).fill(null),pending:new Set(),loading:true,retry:0};
   this.cache.set(key,e);
-  this.disk.get(key).then(buffer=>{
+  const pkey=p.lat.toFixed(5)+'/'+p.lon.toFixed(5),tile=tilePoint(p.lat,p.lon);
+  const path=data.meta.place_temperatures||'place-temperatures-v1';
+  const url=path?`/global-data/${data.meta.run}/${path}/${String(tile.x).padStart(2,'0')}-${String(tile.y).padStart(2,'0')}.json`:null;
+  (async()=>{
+   const overviewUrl=`/global-data/${data.meta.run}/${path}/overview.json`;
+   if(this.labels.overviewTemperatures&&!this.precomputed.has(overviewUrl))this.precomputed.set(overviewUrl,forecastUrl(overviewUrl).then(u=>fetch(u)).then(r=>r.ok?r.json():null).catch(()=>null));
+   const overview=this.labels.overviewTemperatures?await this.precomputed.get(overviewUrl):null;
+   if(!overview?.places?.[pkey]&&url&&!this.precomputed.has(url))this.precomputed.set(url,forecastUrl(url).then(u=>fetch(u)).then(r=>r.ok?r.json():null).catch(()=>null));
+   const ready=overview?.places?.[pkey]?overview:(url?await this.precomputed.get(url):null),values=ready?.places?.[pkey];
+   if(ready?.run===data.meta.run&&JSON.stringify(ready.steps)===JSON.stringify(data.meta.steps)&&values?.length===e.values.length&&values.every(Number.isFinite)){e.values=values;e.complete=true;return;}
+   const buffer=await this.disk.get(key);
    if(buffer&&buffer.byteLength===e.values.length*4){const values=[...new Float32Array(buffer)];if(values.every(Number.isFinite)){e.values=values;e.complete=true;}}
-  }).finally(()=>e.loading=false);
+  })().finally(()=>e.loading=false);
   return e;
  }
  tick(dt){

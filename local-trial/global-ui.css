@@ -63,3 +63,5 @@ body.clean #playback{left:50%}
 
 .placeTemperature{position:absolute;left:50%;top:calc(100% + 15px);transform:translateX(-50%);font:inherit;white-space:nowrap;pointer-events:none}
 #pointMarkerName .placeTemperature{top:calc(100% + 23px)}
+
+#clockLead{display:inline-block;font-size:12px;margin-right:5px;padding:5px 7px;border-radius:6px;background:#071827de;color:#f3fbff}

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {selectPlaces,placeTiles} from './place-selection.mjs';
 export class GlobePlaces{
  constructor(host,globe,camera,vector,choose){
-  Object.assign(this,{host,globe,camera,vector,choose});this.visible=[];this.rows=[];this.cache=new Map();this.selected=new Set();this.elapsed=0;this.region='';this.positions=new Map();
+  Object.assign(this,{host,globe,camera,vector,choose});this.overviewTemperatures=true;this.visible=[];this.rows=[];this.cache=new Map();this.selected=new Set();this.elapsed=0;this.region='';this.positions=new Map();
   this.layer=document.createElement('div');this.layer.id='globePlaces';host.append(this.layer);
   this.measure=document.createElement('canvas').getContext('2d');this.measure.font='600 13px system-ui';
   fetch('data/places/overview.json').then(r=>r.json()).then(r=>this.rows=r);

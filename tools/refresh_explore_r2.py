@@ -6,6 +6,7 @@ import boto3
 from publish_explore_r2 import PREFIX, read_json, publish
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'local-trial'))
 import auto_refresh
+from prepare_place_temperatures import build as build_temperatures
 from prepare import write
 
 client = boto3.client('s3', endpoint_url=os.environ['R2_ENDPOINT'], region_name='auto',
@@ -20,4 +21,5 @@ if latest and run == latest['run']:
     print('No newer complete forecast available.')
 else:
     source = auto_refresh.weather.OUTPUT / run
-    publish(client, bucket, source, auto_refresh.validate(source))
+    meta = build_temperatures(source, auto_refresh.validate(source))
+    publish(client, bucket, source, meta)
