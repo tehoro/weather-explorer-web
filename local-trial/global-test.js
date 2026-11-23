@@ -319,7 +319,7 @@ let lastCameraSettings=0;
 const sliderKm=value=>Math.expm1(Number(value)/1000*Math.log1p(3200));
 const kmSlider=value=>1000*Math.log1p(Math.max(0,value))/Math.log1p(3200);
 function updateCameraSettings(now=performance.now(),force=false){
- if(!force&&(!$('advancedSettings').open||now-lastCameraSettings<200))return;
+ if(!force&&(!$('viewSettings').open||now-lastCameraSettings<200))return;
  lastCameraSettings=now;
  const distance=Math.hypot(camera.position.x-controls.target.x,camera.position.z-controls.target.z);
  const height=camera.position.y,clearance=height-groundHeight(camera.position.x,camera.position.z);
@@ -343,7 +343,7 @@ function adjustCameraSetting(id){
  keepAboveTerrain();controls.update();updateCameraSettings(performance.now(),true);update();
 }
 for(const id of ['cameraDistance','cameraAltitude'])$(id).addEventListener('input',()=>adjustCameraSetting(id));
-$('advancedSettings').addEventListener('toggle',()=>updateCameraSettings(performance.now(),true));
+$('viewSettings').addEventListener('toggle',()=>updateCameraSettings(performance.now(),true));
 // Zoom and orbit share the selected ground point. Update its height when finer
 // terrain arrives, moving the camera by the same amount to preserve the view.
 function syncZoomFocus(dt){
