@@ -31,3 +31,7 @@ await load.call(owner,2,true);assert.equal(owner.playing,true,'Recentring does n
 const cameraSource=await readFile(new URL('./global-test.js',import.meta.url),'utf8');
 const centreBody=cameraSource.slice(cameraSource.indexOf('function flyToPoint('),cameraSource.indexOf('function searchFlight('));assert(!centreBody.includes('pauseForTravel'),'Only search controls playback state');
 console.log('Centre here retains active playback and the interpolated forecast time.');
+
+const entrySource=await readFile(new URL('./globe.js',import.meta.url),'utf8');
+const chooseBody=entrySource.slice(entrySource.indexOf('function choose('),entrySource.indexOf("addEventListener('message'"));
+assert(chooseBody.includes('const selectedTime=new Date().toISOString();'),'Globe destination starts at Now, not the decorative cloud animation time');

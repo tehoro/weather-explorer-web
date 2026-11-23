@@ -364,4 +364,12 @@ function sendViewTime(now){
  parent.postMessage({type:'local-view-time',time:new Date(Date.parse(times[a])+(Date.parse(times[b])-Date.parse(times[a]))*(f-a)).toISOString()},'http://127.0.0.1:8091');
 }
 
-const recordFrame=setupRecording(renderer.domElement);
+// Render only the pixels the video needs, rather than a Retina canvas downsampled
+// again by the recorder. CSS size and camera framing stay unchanged.
+let recordingResolution=null;
+function recordingPixelRatio(){return Math.min(devicePixelRatio,2,recordingResolution.width/innerWidth,recordingResolution.height/innerHeight);}
+const recordFrame=setupRecording(renderer.domElement,{
+ begin:(width,height)=>{recordingResolution={width,height};renderer.setPixelRatio(recordingPixelRatio());},
+ end:()=>{recordingResolution=null;renderer.setPixelRatio(Math.min(devicePixelRatio,2));},
+});
+addEventListener('resize',()=>{if(recordingResolution)renderer.setPixelRatio(recordingPixelRatio());});

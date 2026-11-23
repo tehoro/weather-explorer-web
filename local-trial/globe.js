@@ -48,7 +48,7 @@ function choose(lat,lon,name='Selected location',journey=null){
  if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>89.85){$('status').textContent='Enter a valid latitude and longitude.';return;}
  if(journey){active=true;$('local').hidden=false;$('local').classList.remove('departing');camera.position.copy(vector(journey.from.lat,journey.from.lon,1.2).applyQuaternion(globe.quaternion));resize();}
  returnPosition=camera.position.clone();spin(false);controls.enabled=false;$('status').textContent='Flying to '+name+' · detail will refine in the background.';
- const selectedTime=journey?.time||clouds.time();clouds.hold(selectedTime);
+ const selectedTime=new Date().toISOString();clouds.hold(selectedTime);
  const point=vector(lat,lon,1.2).applyQuaternion(globe.quaternion);
  flight={start:performance.now(),from:camera.position.clone(),to:point,lat,lon,name,journey:!!journey,ready:false,revealing:false};
  const f=flight,url='http://127.0.0.1:8092/global-test.html?'+new URLSearchParams({lat,lon,name,approach:'1',searchFlight:journey?'1':'0',time:selectedTime});

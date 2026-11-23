@@ -975,3 +975,13 @@ MediaRecorder at up to 1920×1080 and 30 fps, preferring MP4 and falling back to
 WebM. No screen-capture permission, audio or server upload is used. Panels are
 omitted. A download link is offered when recording stops. Browser support is
 checked before enabling Record; capture/encoder errors are reported in its panel.
+
+
+Recording defaults to 720p for smoother orbit/forecast playback, with a 1080p
+option for more detail. During capture the renderer uses the selected video pixel
+budget (the CSS viewport and camera are unchanged), then restores normal display
+resolution on stop or error. Capture preserves the 30 Hz fractional remainder
+and explicitly requests each completed frame where supported, avoiding two
+independent capture timers. This targets 30 fps, not a guarantee on every device.
+Globe destination clicks and searches start the local timeline at Now; local
+recentre actions retain their forecast time and playback.

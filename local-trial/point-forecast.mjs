@@ -8,7 +8,7 @@ export class PointForecast{
   this.weather=weather;this.fly=fly;this.token=0;this.rows=new Map();this.panel=document.createElement('section');this.panel.id='pointForecast';this.panel.className='glass';this.panel.hidden=true;
   this.panel.innerHTML='<div class="panelHeading"><h2 id="pointTitle">Point forecast</h2><button id="pointClose" aria-label="Close point forecast">×</button></div><div id="pointCoordinates"></div><div id="pointTime"></div><div id="pointTotal"></div><div id="pointValues"></div><div class="pointActions"><button id="pointFly">Centre here</button><button id="pointExpand" aria-expanded="false">Show meteogram</button></div><div id="pointChart" hidden></div><p id="pointStatus"></p>';
   document.body.append(this.panel);const $=id=>this.panel.querySelector('#'+id);
-  $('pointClose').onclick=()=>{this.token++;this.location=null;this.panel.hidden=true;$('pointChart').hidden=true;this.panel.classList.remove('expanded');$('pointExpand').textContent='Show meteogram';$('pointExpand').setAttribute('aria-expanded','false');this.panel.style.width='';this.panel.style.height='';this.panel.style.top='';document.getElementById('pointHint').hidden=false;dispatchEvent(new Event('point-selection-change'));};
+  $('pointClose').onclick=()=>{this.token++;this.location=null;this.panel.hidden=true;$('pointChart').hidden=true;this.panel.classList.remove('expanded');$('pointExpand').textContent='Show meteogram';$('pointExpand').setAttribute('aria-expanded','false');this.panel.style.width='';this.panel.style.height='';this.panel.style.top='';dispatchEvent(new Event('point-selection-change'));};
   $('pointFly').onclick=()=>this.fly(this.location);
   $('pointExpand').onclick=()=>{const open=$('pointChart').hidden;$('pointChart').hidden=!open;this.panel.classList.toggle('expanded',open);$('pointExpand').textContent=open?'Hide meteogram':'Show meteogram';$('pointExpand').setAttribute('aria-expanded',String(open));if(open){this.panel.style.top=innerWidth<=700?'94px':'70px';}else{this.panel.style.width='';this.panel.style.height='';}this.chart();};
   $('pointChart').onclick=e=>{const svg=e.target.closest('svg');if(!svg)return;const b=svg.getBoundingClientRect(),f=Math.max(0,Math.min(1,((e.clientX-b.left)/b.width*chartLayout.width-chartLayout.left)/chartLayout.span));const w=this.weather;w.heldFrame=null;w.playing=false;w.elapsed=0;w.endHold=0;w.playLabel();const bar=e.target.closest('[data-forecast-frame]');w.load(bar?Number(bar.dataset.forecastFrame):snapForecast(f,w.data.meta.times.length));};
@@ -20,7 +20,7 @@ export class PointForecast{
   addEventListener('local-units-change',()=>{this.key=null;this.update();this.chart();});syncUnits();
  }
  select(lat,lon,name){
-  this.location={lat,lon,name:name||'Selected point'};this.panel.hidden=false;document.getElementById('pointHint').hidden=true;
+  this.location={lat,lon,name:name||'Selected point'};this.panel.hidden=false;
   this.panel.querySelector('#pointTitle').textContent=this.location.name;this.panel.querySelector('#pointCoordinates').textContent=Math.abs(lat).toFixed(3)+'°'+(lat<0?'S':'N')+', '+Math.abs(lon).toFixed(3)+'°'+(lon<0?'W':'E');this.load();dispatchEvent(new Event('point-selection-change'));
  }
  async load(){
