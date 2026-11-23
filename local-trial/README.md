@@ -865,7 +865,7 @@ Tests cover retention against a stronger challenger and replacement on occlusion
 
 ### Forecast snow and sea ice
 
-The optional `surface-cover-v5` package uses indexed IFS Open Data `sd`, `sithick`,
+The optional `surface-cover-v6` package uses indexed IFS Open Data `sd`, `sithick`,
 `lsm` and surface `z` at **step 0**. Model terrain height is `z / 9.80665` metres;
 no temperature/pressure estimate is used. Positive valid ice thickness denotes
 ice presence, not concentration. Snow whitening saturates at 20 mm SWE (a display
@@ -1068,3 +1068,19 @@ credits. Text uses safe margins and bounded widths independently of browser size
 Verified with a five-second orbit/playback MP4: 1920×1080, 30 fps, 150 frames.
 All 46 local-trial checks pass, including layout bounds at landscape, square and
 portrait sizes. Existing downloaded videos are not modified.
+
+
+### Isolated NZ snowline gaps (23 November 2026)
+
+A missing Southern Alps reference at +9 h in run 2026112218 disabled the NZ
+fallback, although +6 h and +12 h both supported it. Preparation now bridges a
+single interior missing reference only when its neighbours are no more than six
+hours apart and differ by at most 300 m. End gaps, multiple gaps and disagreeing
+neighbours remain unsupported. Existing local snow and regional evidence keep
+priority; the terrain shader is unchanged.
+
+The manual `repair_snow` option in the serialised Explore data workflow rebuilds
+only affected frames from official IFS fields. It copies unaffected surface packs
+unchanged to a new immutable namespace and publishes a versioned manifest only
+after all tiles validate and upload. Old cached URLs are never overwritten.
+Reload Explore to adopt a same-run repair; ordinary new-run refresh is unchanged.
