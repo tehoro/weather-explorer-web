@@ -63,18 +63,19 @@ export function setupUI(){
  const body=document.createElement('div');body.className='panelBody';const share=document.createElement('section');share.id='sharePanel';share.className='glass actionPanel';share.hidden=true;share.innerHTML='<button id="shareClose" aria-label="Close sharing">×</button><p id="shareStatus" role="status"></p><input id="shareLink" aria-label="View link" readonly hidden><small>Includes camera, forecast time, layers and animation settings. Forecast availability changes as runs expire.</small>';document.body.append(share);$('shareClose').onclick=()=>share.hidden=true;advanced.append(diagnostics);diagnostics.append($('modelRun'));for(const note of [...weather.querySelectorAll('p:not([id]),small')])help.insertBefore(note,credits);body.append(location,weather,view,advanced);aside.append(body);
  function panel(open){document.body.classList.toggle('cleanSettings',open&&document.body.classList.contains('clean'));aside.hidden=!open;document.body.classList.toggle('panelClosed',!open);$('settingsToggle').setAttribute('aria-expanded',String(open));}
  $('closeSettings').onclick=()=>panel(false);$('settingsToggle').onclick=()=>{const clean=document.body.classList.contains('clean');panel(clean?!document.body.classList.contains('cleanSettings'):aside.hidden);};
- function setClean(clean){document.body.classList.remove('cleanSettings');document.body.classList.toggle('clean',clean);$('settingsToggle').setAttribute('aria-expanded',String(!clean&&!aside.hidden));$('cleanView').textContent=clean?'Restore Controls':'Clean View';if(clean){share.hidden=true;video.hidden=true;$('exploreUnitsPanel').hidden=true;}}
+ const notifyClean=()=>{if(parent!==window)parent.postMessage({type:'explore-clean-state',clean:document.body.classList.contains('clean')},UI_HOST_ORIGIN);};
+ function setClean(clean){document.body.classList.remove('cleanSettings');document.body.classList.toggle('clean',clean);$('settingsToggle').setAttribute('aria-expanded',String(!clean&&!aside.hidden));$('cleanView').textContent=clean?'Restore Controls':'Clean View';if(clean){share.hidden=true;video.hidden=true;$('exploreUnitsPanel').hidden=true;}notifyClean();}
  $('cleanView').onclick=()=>setClean(!document.body.classList.contains('clean'));
  addEventListener('message',event=>{
   if(event.source!==parent||event.origin!==UI_HOST_ORIGIN)return;
   if(event.data?.type==='explore-host-controls'){
    document.body.classList.add('hostControls');
-   const notify=()=>parent.postMessage({type:'explore-clean-state',clean:document.body.classList.contains('clean')},UI_HOST_ORIGIN);
+   const notify=notifyClean;
    if(!$('cleanView').dataset.host){$('cleanView').dataset.host='1';new MutationObserver(notify).observe(document.body,{attributes:true,attributeFilter:['class']});}notify();
   }
   if(event.data?.type==='explore-toggle-clean')setClean(!document.body.classList.contains('clean'));
  });
  $('helpOpen').onclick=()=>{help.showModal();help.scrollTop=0;};$('helpClose').onclick=()=>help.close();
- document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!help.open){document.body.classList.remove('clean');$('cleanView').textContent='Clean View';panel(false);}});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!help.open){document.body.classList.remove('clean');$('cleanView').textContent='Clean View';panel(false);notifyClean();}});
  if(matchMedia('(max-width:700px)').matches)panel(false);
 }
