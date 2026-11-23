@@ -93,3 +93,5 @@ dialog#helpDialog{width:min(650px,calc(100vw - 36px));font-size:14px}#helpDialog
 #timeline,.panelClosed #timeline{bottom:59px}
 #pointForecast.expanded{top:70px;height:calc(100dvh - 90px);max-height:calc(100dvh - 90px)}
 @media(max-width:700px){#timeline,.panelClosed #timeline{bottom:55px}#pointHint{display:none}#pointForecast.expanded{top:94px;height:calc(100dvh - 110px);max-height:calc(100dvh - 110px)}}
+
+.actionPanel{z-index:30}#recordingStop{z-index:40}
