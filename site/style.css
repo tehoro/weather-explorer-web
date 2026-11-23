@@ -391,3 +391,6 @@ button { font: inherit; color: inherit; }
 .hz-key span { display: inline-flex; align-items: center; gap: 6px; }
 .hz-key i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,0.6); }
 .globe-clock { font-size: 13px; white-space: nowrap; padding: 5px 12px; font-variant-numeric: tabular-nums; }
+
+.sw-explore { background: linear-gradient(140deg,#477353 10%,#7a8960 48%,#969187 72%,#e0ebef 85%); }
+.layers-panel { max-width:calc(100vw - 82px); flex-wrap:wrap; }

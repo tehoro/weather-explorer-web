@@ -7,7 +7,7 @@ export class SharedGlobe{
  constructor(field,ready,unprojectShader){
   this.renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
   this.canvas=this.renderer.domElement;this.canvas.id='globeTerrain';this.canvas.style.pointerEvents='none';field.before(this.canvas);
-  this.scene=new THREE.Scene();this.camera=new THREE.Camera();this.relief=new GlobalRelief();this.cover=new GlobeSurfaceCover(this.relief);
+  this.scene=new THREE.Scene();this.camera=new THREE.Camera();this.relief=new GlobalRelief();this.cover=new GlobeSurfaceCover(this.relief,ready);
   this.relief.load(this.scene,true).then(()=>{
    const m=this.relief.mesh.material;
    Object.assign(m.uniforms,{centre:{value:new THREE.Vector3()},size:{value:new THREE.Vector2(1,1)},scale:{value:1},globe:{value:1}});
@@ -21,14 +21,20 @@ export class SharedGlobe{
    m.needsUpdate=true;this.loaded=true;ready();
   }).catch(()=>{this.canvas.hidden=true;this.canvas.style.display='none';});
  }
- draw(view,w,h,dpr,time,showCover,overview){
-  const g=view?.g||0;this.canvas.hidden=!this.loaded||(!overview&&g<.001);
+ draw(view,w,h,dpr,time,showCover,overview,landscape=false){
+  const g=view?.g||0;this.canvas.hidden=!this.loaded||(!overview&&!landscape&&g<.001);
   // Three.js sets inline display:block, which overrides the HTML hidden attribute.
   this.canvas.style.display=this.canvas.hidden?'none':'block';
   if(this.canvas.hidden)return;
   if(this.width!==w||this.height!==h||this.dpr!==dpr){this.renderer.setPixelRatio(dpr);this.renderer.setSize(w,h);this.width=w;this.height=h;this.dpr=dpr;}
   const u=this.relief.mesh.material.uniforms;u.centre.value.set(view.lon,Math.sin(view.lat*Math.PI/180),Math.cos(view.lat*Math.PI/180));u.size.value.set(this.canvas.width,this.canvas.height);u.scale.value=view.s*dpr;u.globe.value=g;
-  this.canvas.style.opacity=String(overview?1:Math.min(1,g*2));
+  this.canvas.style.opacity=String(overview||landscape?1:Math.min(1,g*2));
+  // A scene's landscape uses a frozen snapshot nearest the opening time.
+  // Historical scenes retain the landscape without present-day cover.
+  if(landscape&&!overview&&this.cover.times?.length){
+   if(!this.landscapeTime)this.landscapeTime=new Date(this.cover.times.reduce((a,b)=>Math.abs(b-Date.parse(time))<Math.abs(a-Date.parse(time))?b:a)).toISOString();
+   time=this.landscapeTime;
+  }
   this.cover.tick(showCover?time:'1900-01-01T00:00:00Z');
   this.renderer.render(this.scene,this.camera);
  }

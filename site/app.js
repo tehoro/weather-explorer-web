@@ -446,6 +446,7 @@ const MAP_STYLES = {
             line: "rgba(255,255,255,0.85)", streak: "rgba(255,255,255,0.8)",
             tiles: RELIEF + "{z}/{x}/{y}.webp", maxZoom: 6, credit: "Relief: NOAA ETOPO 2022" },
 };
+MAP_STYLES.explore = {...MAP_STYLES.relief, credit: "ETOPO1 / ESA WorldCover · snow/ice fixed near now"};
 const STYLE_KEY = "weather-explorer-map";
 let mapStyle = "dark";
 try { mapStyle = MAP_STYLES[localStorage.getItem(STYLE_KEY)] ? localStorage.getItem(STYLE_KEY) : "dark"; } catch { /* default */ }
@@ -1170,13 +1171,14 @@ function bracket(list, pos) {
 }
 
 let sharedGlobe,sharedGlobeAsked=false;
+const landscapeCoverTime=new Date().toISOString();
 function drawSharedGlobe(){
  if(OFFLINE||!S.view)return;
  const p=projection(S.view);
- if(p.g>.001&&!sharedGlobeAsked){sharedGlobeAsked=true;import('./shared-globe.mjs?v='+VERSION).then(({SharedGlobe})=>{sharedGlobe=new SharedGlobe(field,drawField,UNPROJECT_GLSL);}).catch(()=>{});}
+ if((p.g>.001||mapStyle==='explore')&&!sharedGlobeAsked){sharedGlobeAsked=true;import('./shared-globe.mjs?v='+VERSION).then(({SharedGlobe})=>{sharedGlobe=new SharedGlobe(field,drawField,UNPROJECT_GLSL);}).catch(()=>{});}
  const f=Math.floor(clouds.pos),a=clouds.times?.[f],b=clouds.times?.[Math.min(f+1,clouds.last)]??a;
  const time=Number.isFinite(a)?new Date(a+(b-a)*(clouds.pos-f)).toISOString():new Date().toISOString();
- sharedGlobe?.draw({...S.view,g:p.g},W,H,DPR,time,S.overview!=='past'&&!S.entry?.past,!!S.overview);
+ sharedGlobe?.draw({...S.view,g:p.g},W,H,DPR,!S.overview&&mapStyle==='explore'?landscapeCoverTime:time,S.overview!=='past'&&!S.entry?.past,!!S.overview,mapStyle==='explore');
 }
 function drawField() {
   drawSharedGlobe();
@@ -3274,6 +3276,7 @@ async function makeVideo(format) {
       stepParticles(1 / VIDEO_FPS);
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.drawImage(base, 0, 0);
+      if(sharedGlobe&&!sharedGlobe.canvas.hidden)g.drawImage(sharedGlobe.canvas,0,0);
       g.drawImage(field, 0, 0);
       g.drawImage(coast, 0, 0);
       g.drawImage(particles, 0, 0);

@@ -4,8 +4,8 @@ import {WeatherData} from './weather-engine.mjs?v=20261123c';
 import {frameAtTime} from './forecast-position.mjs';
 // Only the small global cover previews are needed; no detailed weather tiles.
 export class GlobeSurfaceCover{
- constructor(relief){
-  this.relief=relief;this.textures=[];this.regionalTextures=[];
+ constructor(relief,ready=()=>{}){
+  this.relief=relief;this.ready=ready;this.textures=[];this.regionalTextures=[];
   this.uniforms={regionalA:{value:null},regionalB:{value:null},coverA:{value:null},coverB:{value:null},coverMix:{value:0},coverReady:{value:0}};
   this.load().catch(()=>{}); // Optional on older forecast packages.
  }
@@ -21,7 +21,7 @@ export class GlobeSurfaceCover{
     const regional=new Float32Array(361*181*4);
     for(let j=0;j<361*181;j++){regional[j*4]=fields.snowlineRegionalWeighted[j];regional[j*4+1]=fields.snowlineRegionalWeight[j];regional[j*4+2]=fields.snowlineModelHeight[j];}
     const rt=new THREE.DataTexture(regional,361,181,THREE.RGBAFormat,THREE.FloatType);
-    rt.minFilter=rt.magFilter=THREE.LinearFilter;rt.needsUpdate=true;this.regionalTextures[i]=rt;
+    rt.minFilter=rt.magFilter=THREE.LinearFilter;rt.needsUpdate=true;this.regionalTextures[i]=rt;this.ready();
    }catch{} // A missing frame must not replace another time's cover.
   }
  }
