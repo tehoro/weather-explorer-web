@@ -49,7 +49,7 @@ footer button{pointer-events:auto;border:0;border-radius:0;background:none;color
 #windDensity,#windSpeed{display:block;margin:8px 0 14px}
 
 /* Clean view changes overlays only; retain their open state for restoration. */
-.clean #settingsPanel,.clean #pointForecast,.clean #prepareStatus,.clean #pointHint,.clean .brand strong,.clean #helpOpen{display:none!important}
+.clean:not(.cleanSettings) #settingsPanel,.clean #pointForecast,.clean #prepareStatus,.clean #pointHint,.clean .brand strong,.clean #helpOpen{display:none!important}
 body.clean #mapClock{right:22px;top:18px}
 @media(max-width:700px){body.clean #mapClock{right:14px;top:78px}}
 
@@ -83,7 +83,7 @@ footer{bottom:165px}.panelBody label{line-height:1.5}.layers [hidden]{display:no
 .actionPanel{position:fixed;right:20px;top:62px;padding:16px;width:min(380px,calc(100vw - 32px));z-index:12}.actionPanel p{font-size:13px}.actionPanel h2{font-size:17px}.actionPanel input{width:100%}.actionPanel[hidden]{display:none}
 #shareClose{float:right;padding:2px 9px}#videoDownload{display:inline-block;padding:10px}#videoDownload[hidden]{display:none}
 #recordingStop{position:fixed;left:50%;top:65px;transform:translateX(-50%);z-index:15;background:#6b2026;color:white;font-size:13px}#recordingStop[hidden]{display:none}
-.clean .brand{left:16px;right:auto;top:14px;border:1px solid var(--edge);border-radius:8px;padding:5px}.clean .brand #shareView,.clean .brand #videoOpen{display:none}
+.clean .brand{left:auto;right:14px;top:6px;border:1px solid var(--edge);border-radius:8px;padding:5px}body.clean #mapClock{top:68px}.clean .brand #shareView,.clean .brand #videoOpen{display:none}
 dialog#helpDialog{width:min(650px,calc(100vw - 36px));font-size:14px}#helpDialog h3{font-size:15px;margin-top:24px}
 @media(max-width:700px){.brand{padding:8px;gap:4px}.brand strong{font-size:12px}.brand strong span{display:none}.brand button{font-size:11px;padding:6px}.brand{justify-content:normal}.brand strong{margin-right:auto}#mapClock,.panelClosed #mapClock{top:66px}aside{top:150px;bottom:150px}#playback button,#playback select{padding:7px 5px;font-size:11px}#playback{gap:3px}#timeline,.panelClosed #timeline{bottom:61px}.timelineEnds{font-size:9px}body.clean #mapClock{top:68px}}
 .brand svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;vertical-align:middle;margin-right:5px}
@@ -100,3 +100,5 @@ dialog#helpDialog{width:min(650px,calc(100vw - 36px));font-size:14px}#helpDialog
 #exportProgress::backdrop{background:rgba(0,0,0,.35)}
 #exportMeter{width:100%;accent-color:#7adac2}
 #exportDuration{width:85px;margin:0 8px 12px 0}
+
+@media(max-width:700px){.clean .brand{right:2px;top:2px;padding:5px}}

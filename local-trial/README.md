@@ -964,8 +964,9 @@ computation. Narrow summit caps can remain unresolved by the globe's coarse DEM.
 ### Explore controls and recording (23 November 2026)
 
 Explore uses the Highlights/Past Events action styling, a compact timeline, one
-Clouds switch and view-specific Help. Settings exits Clean view without moving
-the camera. Closing a point forecast also resets the meteogram's expanded state.
+Clouds switch and view-specific Help. Show controls stays at the top right and
+restores the interface. Settings toggles only the sidebar, including during Clean
+view. Neither action moves the camera. Closing a point forecast also resets the meteogram's expanded state.
 Units remain shared with the other modes; `explore-time-mode` independently
 selects view location (default), browser time or UTC. View links include this mode.
 
