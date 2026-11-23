@@ -960,3 +960,18 @@ not assimilated measurements or fixed snowline heights.
 
 The same prepared fields feed Local and the globe without additional browser
 computation. Narrow summit caps can remain unresolved by the globe's coarse DEM.
+
+### Explore controls and recording (23 November 2026)
+
+Explore uses the Highlights/Past Events action styling, a compact timeline, one
+Clouds switch and view-specific Help. Settings exits Clean view without moving
+the camera. Closing a point forecast also resets the meteogram's expanded state.
+Units remain shared with the other modes; `explore-time-mode` independently
+selects view location (default), browser time or UTC. View links include this mode.
+
+`video-recording.mjs` composites the WebGL scene immediately after rendering with
+place labels, the forecast clock and data credits. Record / Stop & save uses
+MediaRecorder at up to 1920×1080 and 30 fps, preferring MP4 and falling back to
+WebM. No screen-capture permission, audio or server upload is used. Panels are
+omitted. A download link is offered when recording stops. Browser support is
+checked before enabling Record; capture/encoder errors are reported in its panel.

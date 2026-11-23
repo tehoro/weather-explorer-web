@@ -65,3 +65,31 @@ body.clean #playback{left:50%}
 #pointMarkerName .placeTemperature{top:calc(100% + 23px)}
 
 #clockLead{display:inline-block;font-size:12px;margin-right:5px;padding:5px 7px;border-radius:6px;background:#071827de;color:#f3fbff}
+/* Shared Weather Explorer palette and compact scene controls. */
+:root{--panel:310px;--edge:#29343d;--mint:#82baff}
+.glass,aside{background:#101a22ed;border-color:var(--edge);border-radius:8px}
+button,select,input:not([type=range]):not([type=checkbox]){background:#17222b;border-color:#29343d;border-radius:7px}
+button:hover{background:#22323f}
+.brand{inset:0 0 auto 0;border-radius:0;padding:12px 20px;gap:8px;z-index:6;background:#0d151bed;border-width:0 0 1px}
+.brand strong{margin-right:auto;font-size:17px}.brand strong span{color:#aebbc6;font-size:11px}
+.brand button{font-size:13px;padding:7px 10px}
+aside{top:70px;bottom:160px;right:16px}
+#mapClock{top:76px}#clockHour{font-size:clamp(26px,3vw,44px)}
+#timeline,.panelClosed #timeline{left:50%;right:auto;transform:translateX(-50%);width:min(680px,calc(100% - 32px));bottom:65px;padding:9px 12px;border-radius:8px 8px 0 0;border-bottom:0}
+.timelineHeading{font-size:12px}.timelineEnds{font-size:10px}#forecastTime{margin:7px 0}.timelineHeading #forecastLead{display:none}
+#playback,.panelClosed #playback,body.clean #playback{left:50%;bottom:14px;width:min(680px,calc(100% - 32px));justify-content:center;border-radius:0 0 8px 8px;padding:6px;border-top:0;gap:5px}
+#playback button,#playback select{font-size:12px;padding:7px 9px}body.clean #playback{border-radius:8px;border-top:1px solid var(--edge)}
+footer{bottom:165px}.panelBody label{line-height:1.5}.layers [hidden]{display:none!important}
+.actionPanel{position:fixed;right:20px;top:62px;padding:16px;width:min(380px,calc(100vw - 32px));z-index:12}.actionPanel p{font-size:13px}.actionPanel h2{font-size:17px}.actionPanel input{width:100%}.actionPanel[hidden]{display:none}
+#shareClose{float:right;padding:2px 9px}#videoDownload{display:inline-block;padding:10px}#videoDownload[hidden]{display:none}
+#recordingStop{position:fixed;left:50%;top:65px;transform:translateX(-50%);z-index:15;background:#6b2026;color:white;font-size:13px}#recordingStop[hidden]{display:none}
+.clean .brand{left:16px;right:auto;top:14px;border:1px solid var(--edge);border-radius:8px;padding:5px}.clean .brand #shareView,.clean .brand #videoOpen{display:none}
+dialog#helpDialog{width:min(650px,calc(100vw - 36px));font-size:14px}#helpDialog h3{font-size:15px;margin-top:24px}
+@media(max-width:700px){.brand{padding:8px;gap:4px}.brand strong{font-size:12px}.brand strong span{display:none}.brand button{font-size:11px;padding:6px}.brand{justify-content:normal}.brand strong{margin-right:auto}#mapClock,.panelClosed #mapClock{top:66px}aside{top:150px;bottom:150px}#playback button,#playback select{padding:7px 5px;font-size:11px}#playback{gap:3px}#timeline,.panelClosed #timeline{bottom:61px}.timelineEnds{font-size:9px}body.clean #mapClock{top:68px}}
+.brand svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;vertical-align:middle;margin-right:5px}
+#exploreUnits{font-size:12px}#exploreUnitsPanel label{display:flex;align-items:center;justify-content:space-between;margin:12px 0;gap:15px}#exploreUnitsPanel select{min-width:140px}.clean #exploreUnits{display:none}
+@media(max-width:700px){.brand{flex-wrap:wrap}.brand strong{flex:1}#exploreUnits{font-size:10px}#mapClock,.panelClosed #mapClock{top:94px}.brand #exploreUnits{order:6}.brand #helpOpen{order:7}.brand #cleanView{order:8}}
+#weatherControls>label{display:block;margin:12px 0 5px}#weatherControls .layers{margin:14px 0}#pointHint{top:66px;font-size:11px;padding:6px 9px}
+#timeline,.panelClosed #timeline{bottom:59px}
+#pointForecast.expanded{top:70px;height:calc(100dvh - 90px);max-height:calc(100dvh - 90px)}
+@media(max-width:700px){#timeline,.panelClosed #timeline{bottom:55px}#pointHint{display:none}#pointForecast.expanded{top:94px;height:calc(100dvh - 110px);max-height:calc(100dvh - 110px)}}

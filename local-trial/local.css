@@ -15,3 +15,5 @@
 .placeTemperature{position:absolute;left:50%;top:calc(100% + 15px);transform:translateX(-50%);font:inherit;white-space:nowrap;pointer-events:none}
 
 #chooser input[type="checkbox"]{width:auto;margin-right:8px}
+#exploreUnitsPanel{position:fixed;right:18px;top:65px;background:#101a22f5;border:1px solid #29343d;border-radius:8px;padding:18px;width:min(360px,calc(100vw - 36px));z-index:20}#exploreUnitsPanel label{display:flex;justify-content:space-between;gap:12px}#exploreUnitsPanel select{font:inherit;background:#17222b;color:#fff;padding:7px}#exploreUnits{font-size:12px}
+dialog{background:#101a22;color:#e7f1f7;border:1px solid #29343d;border-radius:8px;max-width:550px;padding:22px}dialog::backdrop{background:#0008}

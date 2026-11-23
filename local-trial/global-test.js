@@ -1,3 +1,5 @@
+import {timeMode,setTimeMode} from './local-time.mjs';
+import {setupRecording} from './video-recording.mjs';
 import {PlaceTemperatures} from './place-temperatures.mjs';
 import {readView,captureControls,restoreControls,viewURL} from './share-view.mjs';
 import {localPreviewReady} from './preview-readiness.mjs';
@@ -43,7 +45,7 @@ renderer.setAnimationLoop(now=>{const dt=Math.min(.1,(now-lastRender)/1000);last
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
  if(Math.abs(camera.near-near)>near*.01){camera.near=near;camera.updateProjectionMatrix();}
- globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);renderer.render(scene,camera);});
+ globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);renderer.render(scene,camera);recordFrame(now);});
 const cos=()=>Math.max(.015,Math.cos(anchor.lat*Math.PI/180));
 function centre(){return {lat:Math.max(-89.85,Math.min(89.85,anchor.lat-controls.target.z/111.2)),lon:wrap(anchor.lon+controls.target.x/(111.2*cos()))};}
 function position(mesh,p){
@@ -326,10 +328,10 @@ go();zoomFocus.name=params.get('name')||undefined;
 if(sharedView){
  rebasing=true;camera.position.fromArray(sharedView.eye);controls.target.fromArray(sharedView.target);controls.update();rebasing=false;
  zoomFocus=sharedView.focus&&Number.isFinite(sharedView.focus.lat)&&Number.isFinite(sharedView.focus.lon)?sharedView.focus:null;focusRevision=terrainRevision;
- document.body.classList.toggle('clean',!!sharedView.clean);$('cleanView').textContent=sharedView.clean?'Show controls':'Clean view';
+ if(sharedView.timeMode)setTimeMode(sharedView.timeMode);document.body.classList.toggle('clean',!!sharedView.clean);$('cleanView').textContent=sharedView.clean?'Show controls':'Clean view';
  $('settingsPanel').hidden=!!sharedView.settingsHidden;document.body.classList.toggle('panelClosed',!!sharedView.settingsHidden);$('settingsToggle').setAttribute('aria-expanded',String(!sharedView.settingsHidden));
  for(const [k,v] of Object.entries(sharedView.units||{}))if(Units.CHOICES[k]?.some(c=>c[0]===v)||v==='auto'&&['temperature','wind','rain'].includes(k))Units.setChoice(k,v);
- update();
+ dispatchEvent(new Event('local-units-change'));update();
 }if(params.get('searchFlight')==='1'){pointForecast.select(anchor.lat,anchor.lon,zoomFocus.name);centreViewport();}
 fetch('/dem/tileList.txt').then(r=>{if(!r.ok)throw Error('Terrain catalogue unavailable');return r.text();}).then(text=>{const available=new Set(text.split(/\s+/).map(s=>s.replace(/\/$/,'')));reader=new TerrainWorker(available);reader.ready.then(()=>{catalogue=available;styleNote();update();}).catch(e=>$('status').textContent=e.message);}).catch(e=>$('status').textContent=e.message);
 
@@ -347,9 +349,10 @@ function restoreSharedPlayback(){
  }
 }
 $('shareView').onclick=async()=>{
+ $('sharePanel').hidden=false;
  const times=weatherView?.data.meta?.times,f=weatherView?.displayFrame??0,lo=Math.floor(f),hi=Math.min(lo+1,(times?.length||1)-1);
  const time=times?new Date(Date.parse(times[lo])+(Date.parse(times[hi])-Date.parse(times[lo]))*(f-lo)).toISOString():null;
- const state={anchor,eye:camera.position.toArray(),target:controls.target.toArray(),focus:zoomFocus,settings:captureControls(document),clean:document.body.classList.contains('clean'),settingsHidden:$('settingsPanel').hidden,playing:!!weatherView?.playing,orbit:!!orbit,point:pointForecast.location,meteogram:pointForecast.panel.classList.contains('expanded'),units:Object.fromEntries(['temperature','wind','rain'].map(k=>[k,Units.choice(k)]))};
+ const state={anchor,eye:camera.position.toArray(),target:controls.target.toArray(),focus:zoomFocus,settings:captureControls(document),clean:document.body.classList.contains('clean'),settingsHidden:$('settingsPanel').hidden,playing:!!weatherView?.playing,orbit:!!orbit,point:pointForecast.location,meteogram:pointForecast.panel.classList.contains('expanded'),timeMode:timeMode(),units:Object.fromEntries(['temperature','wind','rain'].map(k=>[k,Units.choice(k)]))};
  const url=viewURL(location.href,state,time),field=$('shareLink');field.value=url;field.hidden=false;
  try{await navigator.clipboard.writeText(url);$('shareStatus').textContent='View link copied.';}catch{$('shareStatus').textContent='Copy the view link below.';field.focus();field.select();}
 };
@@ -360,3 +363,5 @@ function sendViewTime(now){
  const times=weatherView.data.meta.times,f=weatherView.displayFrame??weatherView.frame,a=Math.floor(f),b=Math.min(a+1,times.length-1);
  parent.postMessage({type:'local-view-time',time:new Date(Date.parse(times[a])+(Date.parse(times[b])-Date.parse(times[a]))*(f-a)).toISOString()},'http://127.0.0.1:8091');
 }
+
+const recordFrame=setupRecording(renderer.domElement);

@@ -1,3 +1,6 @@
+export function timeMode(){try{return ['location','browser','utc'].includes(localStorage.getItem('explore-time-mode'))?localStorage.getItem('explore-time-mode'):'location';}catch{return 'location';}}
+export function setTimeMode(mode){if(['location','browser','utc'].includes(mode))try{localStorage.setItem('explore-time-mode',mode);}catch{}}
+export function displayZone(lat,lon){const mode=timeMode();return mode==='utc'?'UTC':mode==='browser'?Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC':zoneAt(lat,lon);}
 // Coordinate lookup stays local; Intl applies the zone's rules at forecast time.
 export function zoneAt(lat,lon,lookup=globalThis.tzlookup){
  try{return lookup(Math.max(-90,Math.min(90,lat)),((lon+180)%360+360)%360-180);}catch{return 'UTC';}
@@ -17,10 +20,10 @@ export function forecastMoment(meta,frame){
 }
 let lastClockKey='';
 export function updateForecastClock(meta,frame,centre){
- if(!meta)return;const zone=zoneAt(centre.lat,centre.lon),moment=forecastMoment(meta,frame),key=meta.initial_utc+'/'+Math.floor(moment.time/60000)+'/'+zone;if(key===lastClockKey)return;lastClockKey=key;const p=timeParts(moment.time,zone),$=id=>document.getElementById(id);
+ if(!meta)return;const zone=displayZone(centre.lat,centre.lon),moment=forecastMoment(meta,frame),key=meta.initial_utc+'/'+Math.floor(moment.time/60000)+'/'+zone+'/'+timeMode();if(key===lastClockKey)return;lastClockKey=key;const p=timeParts(moment.time,zone),$=id=>document.getElementById(id);
  $('clockDate').textContent=p.date;$('clockHour').textContent=p.day+' '+p.hour;
  $('clockLead').textContent=`T+${Math.round(moment.lead)}`;
- $('clockZone').textContent=`${p.zone} · ${zone.replaceAll('_',' ')}`;$('mapClock').title=`Forecast time in this location’s time zone · ${p.offset}. Time-zone boundaries are approximate.`;
+ $('clockZone').textContent=zone==='UTC'?'UTC':`${p.zone} · ${zone.replaceAll('_',' ')}`;$('mapClock').title=`Forecast time · ${timeMode()==='location'?'view location':timeMode()==='browser'?'browser time':'UTC'} · ${p.offset}. Time-zone boundaries are approximate.`;
  $('validTime').textContent=p.full;$('forecastLead').textContent=`+${Math.floor(moment.lead)} h ${String(Math.floor((moment.lead%1)*60+1e-6)).padStart(2,'0')} min · ${p.zone}`;
  $('timelineStart').textContent=timeParts(meta.times[0],zone).full;$('timelineEnd').textContent=timeParts(meta.times.at(-1),zone).full;
  $('modelRun').textContent='Model run: '+new Date(meta.initial_utc).toISOString().slice(0,16).replace('T',' ')+' UTC';

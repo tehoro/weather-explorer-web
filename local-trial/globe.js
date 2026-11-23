@@ -1,3 +1,5 @@
+import {displayZone,timeParts} from './local-time.mjs';
+import {setupExploreUnits} from './explore-units.mjs';
 import {PlaceTemperatures} from './place-temperatures.mjs';
 import {WeatherData} from './weather-engine.mjs';
 import {frameAtTime} from './forecast-position.mjs';
@@ -38,7 +40,7 @@ const labelWeather={data:new WeatherData(),displayFrame:0},temperatures=new Plac
 labelWeather.data.init().catch(()=>{});
 try{$('placeTemperatures').checked=localStorage.getItem('local-placeTemperatures')!=='false';}catch{}
 $('placeTemperatures').onchange=()=>{try{localStorage.setItem('local-placeTemperatures',String($('placeTemperatures').checked));}catch{}};
-let localViewTime=null;
+let localViewTime=null,clockElapsed=0,globeClockText='';
 // A subtle atmospheric rim, matching the highlights globe's blue halo.
 const halo=new THREE.Mesh(new THREE.SphereGeometry(1.035,96,64),new THREE.ShaderMaterial({side:THREE.BackSide,transparent:true,depthWrite:false,vertexShader:'varying vec3 n,v;void main(){vec4 p=modelViewMatrix*vec4(position,1.);n=normalize(normalMatrix*normal);v=normalize(-p.xyz);gl_Position=projectionMatrix*p;}',fragmentShader:'varying vec3 n,v;void main(){float a=pow(1.-abs(dot(normalize(n),normalize(v))),3.);gl_FragColor=vec4(.3,.55,.7,a*.35);}'}));globe.add(halo);
 function choose(lat,lon,name='Selected location',journey=null){
@@ -91,8 +93,12 @@ addEventListener('resize',resize);resize();let last=performance.now();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,(now-last)/1000);last=now;if(!active)return;
  if(flight){const t=reduced.matches?1:Math.min(1,(now-flight.start)/(flight.journey?6800:2600)),e=t*t*(3-2*t),journey=flight.journey?globeJourney(t):null;const rotation=new THREE.Quaternion().setFromUnitVectors(flight.from.clone().normalize(),flight.to.clone().normalize()),direction=flight.from.clone().normalize().applyQuaternion(new THREE.Quaternion().slerp(rotation,journey?journey.turn:e));camera.position.copy(direction.multiplyScalar(journey?journey.radius:THREE.MathUtils.lerp(flight.from.length(),flight.to.length(),e)));camera.clearViewOffset();camera.updateProjectionMatrix();camera.lookAt(0,0,0);if(t===1&&flight.ready)revealTerrain(flight);}
  else {controls.update();if(spinning&&!interacting&&!reduced.matches)globe.rotation.y+=dt*.035;}
- clouds.tick(dt,reduced.matches);surfaceCover.tick(clouds.time());labels.layer.hidden=!!flight;if(!flight){labels.tick(dt);if(labelWeather.data.meta){const times=labelWeather.data.meta.times,time=Date.parse(clouds.time());labelWeather.temperatureTimeAvailable=time>=Date.parse(times[0])&&time<=Date.parse(times.at(-1));labelWeather.displayFrame=frameAtTime(times,time);temperatures.tick(dt);}}renderer.render(scene,camera);
+ clouds.tick(dt,reduced.matches);clockElapsed+=dt;if(clockElapsed>.5){clockElapsed=0;const c=camera.position.clone().normalize().applyQuaternion(globe.quaternion.clone().invert()),zone=displayZone(Math.asin(c.y)*180/Math.PI,Math.atan2(-c.z,c.x)*180/Math.PI);globeClockText=(clouds.mesh.visible?'Cloud forecast · ':'Cloud forecast unavailable for ')+timeParts(clouds.time(),zone).full;}if(globeClockText)$('globeClock').textContent=globeClockText;surfaceCover.tick(clouds.time());labels.layer.hidden=!!flight;if(!flight){labels.tick(dt);if(labelWeather.data.meta){const times=labelWeather.data.meta.times,time=Date.parse(clouds.time());labelWeather.temperatureTimeAvailable=time>=Date.parse(times[0])&&time<=Date.parse(times.at(-1));labelWeather.displayFrame=frameAtTime(times,time);temperatures.tick(dt);}}renderer.render(scene,camera);
 }requestAnimationFrame(animate);
 
 const travel=new URLSearchParams(location.search).get('travel');
 if(travel){try{const journey=JSON.parse(travel);if(journey.from&&journey.to)choose(journey.to.lat,journey.to.lon,journey.to.name,journey);}catch{}history.replaceState(null,'',location.pathname);}
+
+setupExploreUnits(document.querySelector('header'));
+
+const globeHelp=document.createElement('dialog');globeHelp.innerHTML='<h2>Explore Help</h2><p>Drag to turn the globe and scroll to zoom. Click a named place or double-click the surface to explore its local weather. Search finds a new place and resets forecast time to Now.</p><p>Use the units menu to choose temperature, wind and precipitation units, and View location, Browser time or UTC. View location uses the centre of the globe; its timezone changes as the globe rotates.</p><p>In the landscape view, Help explains centring, orbiting, the meteogram, sharing and video recording.</p><button>Close</button>';document.body.append(globeHelp);globeHelp.querySelector('button').onclick=()=>globeHelp.close();const globeHelpButton=document.createElement('button');globeHelpButton.textContent='ⓘ Help';globeHelpButton.onclick=()=>globeHelp.showModal();document.querySelector('header').append(globeHelpButton);
