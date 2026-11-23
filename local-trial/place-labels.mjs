@@ -32,9 +32,9 @@ export class PlaceLabels{
   this.elapsed+=dt;if(this.elapsed<.2)return;this.elapsed=0;
   this.layer.hidden=!document.getElementById('placeNames').checked;if(this.layer.hidden)return;
   const c=this.context(),width=innerWidth,height=innerHeight,blocked=[];
-  for(const element of document.querySelectorAll('#settingsPanel,#pointForecast,.brand,#mapClock,#timeline,#playback,footer')){const rect=element.getBoundingClientRect();if(rect.width&&rect.height)blocked.push(rect);}
+  for(const element of document.querySelectorAll('#pointMarkerName,#settingsPanel,#pointForecast,.brand,#mapClock,#timeline,#playback,footer')){const rect=element.getBoundingClientRect();if(rect.width&&rect.height)blocked.push(rect);}
   this.camera.updateMatrixWorld();
-  const key=[...this.camera.matrixWorld.elements,...this.camera.projectionMatrix.elements,c.centre.lat,c.centre.lon,c.terrainRevision,c.focusedPlace?.lat,c.focusedPlace?.lon,width,height,...blocked.flatMap(r=>[r.left,r.top,r.right,r.bottom])].join('/');
+  const key=[...this.camera.matrixWorld.elements,...this.camera.projectionMatrix.elements,c.centre.lat,c.centre.lon,c.terrainRevision,c.focusedPlace?.lat,c.focusedPlace?.lon,c.markedPlace?.lat,c.markedPlace?.lon,width,height,...blocked.flatMap(r=>[r.left,r.top,r.right,r.bottom])].join('/');
   if(key===this.layoutKey)return;this.layoutKey=key;
   const gridMap=new Map(c.terrainMeshes().filter(m=>m.visible&&m.userData.p).map(m=>[m,meshSightGrid(m)])),grids=[...gridMap.values()];
   const groundAt=(x,z)=>{const g=gridMap.get(c.placeMesh(x,z));return g?g.height(x,z):c.ground(x,z);};
@@ -42,6 +42,8 @@ export class PlaceLabels{
   const focus=c.focusedPlace,rows=[...this.rows];
   if(focus?.name&&!rows.some(r=>Math.abs(r[2]-focus.lat)<.0001&&Math.abs(r[3]-focus.lon)<.0001))rows.push([-1,focus.name,focus.lat,focus.lon,0,0,false]);
   for(const row of rows){const [id,name,lat,lon,population,elevation,capital]=row,position=c.projectPlace(lat,lon);
+   // The selected centre has its own persistent red marker and name.
+   if(c.markedPlace&&Math.abs(lat-c.markedPlace.lat)<.0001&&Math.abs(lon-c.markedPlace.lon)<.0001)continue;
    // Cheap spatial rejection before projection or terrain sampling.
    if(Math.abs(position.x-c.target.x)>Math.max(25,c.distance*3)||Math.abs(position.z-c.target.z)>Math.max(25,c.distance*3))continue;
    const ground=groundAt(position.x,position.z),y=ground+.015;

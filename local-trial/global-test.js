@@ -196,7 +196,7 @@ function weatherContext(){
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
  const coarseSightGrid={left:-180*scale-anchor.lon*scale,right:180*scale-anchor.lon*scale,top:(anchor.lat-90)*111.2,bottom:(anchor.lat+90)*111.2,stepX:scale/12,stepZ:111.2/12,
    height:(x,z)=>globalRelief.height(anchor.lat-z/111.2,anchor.lon+x/scale)};
-  return {travelling:!!flight,cloudScale:Number($("cloudScale").value),focusedPlace:zoomFocus,orbiting:!!orbit,placeMesh:(x,z)=>{groundHeight(x,z);return terrainIndex.find(anchor.lat-z/111.2,anchor.lon+x/scale)?.mesh;},coarseSightGrid,preloadStatus,terrainRevision,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
+  return {travelling:!!flight,cloudScale:Number($("cloudScale").value),focusedPlace:zoomFocus,markedPlace:zoomFocus||pointForecast?.location,orbiting:!!orbit,placeMesh:(x,z)=>{groundHeight(x,z);return terrainIndex.find(anchor.lat-z/111.2,anchor.lon+x/scale)?.mesh;},coarseSightGrid,preloadStatus,terrainRevision,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};
 }
@@ -204,11 +204,12 @@ weatherView=new WeatherView(scene,weatherContext);
 placeLabels=new PlaceLabels(camera,weatherContext,(lat,lon)=>({x:wrap(lon-anchor.lon)*111.2*cos(),z:(anchor.lat-lat)*111.2}));
 pointForecast=new PointForecast(weatherView,flyToPoint);weatherView.pointForecast=pointForecast;
 // Panel visibility never changes the camera. Reframe only on explicit centring.
-const pointMarker=document.createElement('div');pointMarker.id='pointMarker';pointMarker.hidden=true;document.body.append(pointMarker);
+const pointMarker=document.createElement('div');pointMarker.id='pointMarker';pointMarker.hidden=true;const pointMarkerName=document.createElement('span');pointMarkerName.id='pointMarkerName';pointMarker.append(pointMarkerName);document.body.append(pointMarker);
 function updatePointMarker(){
- const p=pointForecast?.location;if(!p){if(typeof pointMarker!=='undefined')pointMarker.hidden=true;return;}
+ const p=zoomFocus||pointForecast?.location;if(!p){if(typeof pointMarker!=='undefined')pointMarker.hidden=true;return;}
+ const name=p.name||'Selected location';if(pointMarkerName.textContent!==name)pointMarkerName.textContent=name;
  const v=weatherContext().projectPlace(p.lat,p.lon),q=new THREE.Vector3(v.x,groundHeight(v.x,v.z)+.01,v.z).project(camera);
- pointMarker.hidden=q.z< -1||q.z>1;pointMarker.style.transform=`translate(${(q.x+1)*innerWidth/2}px,${(1-q.y)*innerHeight/2}px)`;
+ pointMarker.hidden=q.z< -1||q.z>1||Math.abs(q.x)>1||Math.abs(q.y)>1;pointMarker.style.transform=`translate(${(q.x+1)*innerWidth/2}px,${(1-q.y)*innerHeight/2}px)`;
 }
 addEventListener('local-place-select',e=>{pointForecast.select(e.detail.lat,e.detail.lon,e.detail.name);flyToPoint(pointForecast.location);});
 let clickStart,pointClickTimer,lastPicked,lastPickTime=0;
