@@ -33,7 +33,7 @@ const surfaceCover=new GlobeSurfaceCover(relief);
 relief.load(globe,true).then(()=>{
  globe.remove(sphere);sphere.geometry.dispose();sphere.material.dispose();sphere=relief.mesh;
 }).catch(()=>{$('status').textContent='Terrain preview unavailable; region selection still works.';});
-const clouds=new GlobeClouds(globe,$('globeClock'));
+const clouds=new GlobeClouds(globe,$('globeClock'),{externalClock:true});
 const requestedTime=new URLSearchParams(location.search).get('time');if(requestedTime)clouds.hold(requestedTime);
 const labels=new GlobePlaces(host,globe,camera,vector,choose);
 const labelWeather={data:new WeatherData(),displayFrame:0},temperatures=new PlaceTemperatures(labelWeather,labels);
@@ -57,6 +57,7 @@ function choose(lat,lon,name='Selected location',journey=null){
 }
 addEventListener('message',event=>{
  if(event.origin!=='http://127.0.0.1:8092'||event.source!==$('viewer').contentWindow )return;
+ if(event.data?.type==='explore-clean-state'){globeHelpButton.textContent=event.data.clean?'Restore Controls':'Clean View';return;}
  if(event.data?.type==='local-view-time'){localViewTime=event.data.time;return;}
  if(event.data?.type==='local-search-flight'){const m=event.data;if(m.from&&m.to&&Number.isFinite(m.from.lat)&&Number.isFinite(m.from.lon))choose(m.to.lat,m.to.lon,m.to.name,m);return;}
  if(event.data?.type==='local-terrain-ready'&&flight)flight.ready=true;
@@ -83,7 +84,7 @@ renderer.domElement.addEventListener('dblclick',e=>{
 function showTab(tab){
  flight=null;controls.enabled=true;if(returnPosition){camera.position.copy(returnPosition);controls.update();returnPosition=null;}$('viewer').inert=false;$('viewer').classList.remove('preparing','revealing');$('local').classList.remove('departing');
  document.querySelectorAll('[data-tab]').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
- active=tab==='local';$('local').hidden=!active;$('viewer').hidden=active;$('back').hidden=true;
+ active=tab==='local';$('local').hidden=!active;$('viewer').hidden=active;$('back').hidden=true;globeHelpButton.textContent='ⓘ Help';
  if(active){if(localViewTime)clouds.hold(localViewTime);try{$('placeTemperatures').checked=localStorage.getItem('local-placeTemperatures')!=='false';}catch{}$('viewer').removeAttribute('src');$('status').textContent='Drag to turn the globe. Scroll to approach. Click a named place or double-click anywhere on the globe.';resize();}
  else $('viewer').src='/explorer/#'+tab;
 }
@@ -101,4 +102,6 @@ if(travel){try{const journey=JSON.parse(travel);if(journey.from&&journey.to)choo
 
 setupExploreUnits(document.querySelector('header'));
 
-const globeHelp=document.createElement('dialog');globeHelp.innerHTML='<h2>Explore Help</h2><p>Drag to turn the globe and scroll to zoom. Click a named place or double-click the surface to explore its local weather. Search finds a new place and resets forecast time to Now.</p><p>Use the units menu to choose temperature, wind and precipitation units, and View location, Browser time or UTC. View location uses the centre of the globe; its timezone changes as the globe rotates.</p><p>In the landscape view, Help explains centring, orbiting, the meteogram, sharing and video recording.</p><button>Close</button>';document.body.append(globeHelp);globeHelp.querySelector('button').onclick=()=>globeHelp.close();const globeHelpButton=document.createElement('button');globeHelpButton.textContent='ⓘ Help';globeHelpButton.onclick=()=>globeHelp.showModal();document.querySelector('header').append(globeHelpButton);
+const globeHelp=document.createElement('dialog');globeHelp.innerHTML='<h2>Explore Help</h2><p>Drag to turn the globe and scroll to zoom. Click a named place or double-click the surface to explore its local weather. Search finds a new place and resets forecast time to Now.</p><p>Use the units menu to choose temperature, wind and precipitation units, and View location, Browser time or UTC. View location uses the centre of the globe; its timezone changes as the globe rotates.</p><p>In the landscape view, Help explains centring, orbiting, the meteogram, sharing and video recording.</p><button>Close</button>';document.body.append(globeHelp);globeHelp.querySelector('button').onclick=()=>globeHelp.close();const globeHelpButton=document.createElement('button');globeHelpButton.textContent='ⓘ Help';globeHelpButton.id='globeViewControls';globeHelpButton.onclick=()=>{if($('viewer').hidden)globeHelp.showModal();else $('viewer').contentWindow.postMessage({type:'explore-toggle-clean'},'http://127.0.0.1:8092');};document.querySelector('header').append(globeHelpButton);
+
+$('viewer').addEventListener('load',()=>{if($('viewer').hidden)return;globeHelpButton.textContent='Clean View';$('viewer').contentWindow.postMessage({type:'explore-host-controls'},'http://127.0.0.1:8092');});

@@ -2,7 +2,8 @@ import {frameAtTime,timeAtFrame} from './forecast-position.mjs';
 import * as THREE from 'three';
 // Same OLR frames, opacity transfer and three forecast hours/second as app.js.
 export class GlobeClouds{
- constructor(globe,clock){
+ constructor(globe,clock,{externalClock=false}={}){
+  this.externalClock=externalClock;
   this.clock=clock;this.textures=[];this.pending=new Map();this.heldTime=null;this.pos=0;this.held=0;
   this.uniforms={A:{value:null},B:{value:null},mixT:{value:0},grid:{value:new THREE.Vector2(720,361)}};
   const material=new THREE.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,uniforms:this.uniforms,
@@ -38,13 +39,13 @@ export class GlobeClouds{
    const outside=this.heldTime<this.times[0]||this.heldTime>this.times.at(-1),position=frameAtTime(this.times,this.heldTime),a=Math.floor(position),b=Math.ceil(position);
    this.mesh.visible=!outside&&!!this.textures[a]&&!!this.textures[b];
    if(this.mesh.visible){this.uniforms.A.value=this.textures[a];this.uniforms.B.value=this.textures[b];this.uniforms.mixT.value=position-a;}
-   this.clock.textContent=(outside?'Cloud forecast unavailable for ':this.mesh.visible?'Cloud forecast · ':'Loading cloud forecast · ')+new Date(this.heldTime).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+   if(!this.externalClock)this.clock.textContent=(outside?'Cloud forecast unavailable for ':this.mesh.visible?'Cloud forecast · ':'Loading cloud forecast · ')+new Date(this.heldTime).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
    return;
   }
   const i=Math.floor(this.pos),a=this.textures[i];if(!a)return;
   if(!reduced){if(this.pos>=this.last){this.held+=dt;if(this.held>1.5){this.held=0;this.pos=this.first;}}
    else if(this.textures[i+1])this.pos=Math.min(this.last,this.pos+dt*3/((this.times[i+1]-this.times[i])/3600000));}
   const f=Math.floor(this.pos);this.uniforms.A.value=this.textures[f];this.uniforms.B.value=this.textures[Math.min(this.last,f+1)]||this.textures[f];this.uniforms.mixT.value=this.pos-f;this.mesh.visible=true;
-  this.clock.textContent='Cloud forecast · '+new Date(this.times[f]+(this.times[Math.min(this.last,f+1)]-this.times[f])*(this.pos-f)).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+  if(!this.externalClock)this.clock.textContent='Cloud forecast · '+new Date(this.times[f]+(this.times[Math.min(this.last,f+1)]-this.times[f])*(this.pos-f)).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
  }
 }

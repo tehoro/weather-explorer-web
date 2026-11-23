@@ -26,7 +26,7 @@ export class RunRefresh{
     if(!grids.has(f))grids.set(f,await data.grid(f,view.region,129,valid));
    }
    if(!valid())return;
-   await this.apply(data,grids,key);this.candidate=null;this.staged=null;this.report('');
+   if(await this.apply(data,grids,key)===false)return;this.candidate=null;this.staged=null;this.report('');
   }catch(e){this.report('New forecast is not ready for this view yet. Keeping the current weather and retrying automatically.');}
   finally{this.busy=false;}
  }

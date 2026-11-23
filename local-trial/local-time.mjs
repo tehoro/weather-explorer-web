@@ -5,11 +5,18 @@ export function displayZone(lat,lon){const mode=timeMode();return mode==='utc'?'
 export function zoneAt(lat,lon,lookup=globalThis.tzlookup){
  try{return lookup(Math.max(-90,Math.min(90,lat)),((lon+180)%360+360)%360-180);}catch{return 'UTC';}
 }
+// Reuse expensive Intl formatters across animation frames and meteogram ticks.
+const formatters=new Map();
+function dateFormatter(locale,options){
+ const key=locale+JSON.stringify(options);if(formatters.has(key))return formatters.get(key);
+ const f=new Intl.DateTimeFormat(locale,options);formatters.set(key,f);
+ if(formatters.size>128)formatters.delete(formatters.keys().next().value);return f;
+}
 export function timeParts(iso,zone){
- const date=new Date(iso),format=options=>new Intl.DateTimeFormat('en-NZ',{timeZone:zone,...options});
+ const date=new Date(iso),format=options=>dateFormatter('en-NZ',{timeZone:zone,...options});
  const offset=format({timeZoneName:'longOffset'}).formatToParts(date).find(p=>p.type==='timeZoneName').value;
  const locale=zone.startsWith('America/')?'en-US':zone.startsWith('Australia/')?'en-AU':zone==='Asia/Kolkata'||zone==='Asia/Calcutta'?'en-IN':'en-GB';
- let name=new Intl.DateTimeFormat(locale,{timeZone:zone,timeZoneName:'short'}).formatToParts(date).find(p=>p.type==='timeZoneName').value;
+ let name=dateFormatter(locale,{timeZone:zone,timeZoneName:'short'}).formatToParts(date).find(p=>p.type==='timeZoneName').value;
  if(zone==='Pacific/Auckland')name=offset==='GMT+13:00'?'NZDT':'NZST';
  if(zone==='Pacific/Chatham')name=offset==='GMT+13:45'?'CHADT':'CHAST';
  return {date:format({year:'numeric',month:'short',day:'numeric'}).format(date),day:format({weekday:'short'}).format(date),hour:format({hour:'numeric',minute:'2-digit',hour12:true}).format(date).toUpperCase(),zone:name,offset,full:format({weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit',hour12:true}).format(date)+' '+name};

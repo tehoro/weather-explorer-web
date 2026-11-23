@@ -964,7 +964,7 @@ computation. Narrow summit caps can remain unresolved by the globe's coarse DEM.
 ### Explore controls and recording (23 November 2026)
 
 Explore uses the Highlights/Past Events action styling, a compact timeline, one
-Clouds switch and view-specific Help. Show controls stays at the top right and
+Clouds switch and view-specific Help. Restore Controls stays at the top right and
 restores the interface. Settings toggles only the sidebar, including during Clean
 view. Neither action moves the camera. Closing a point forecast also resets the meteogram's expanded state.
 Units remain shared with the other modes; `explore-time-mode` independently
@@ -1028,3 +1028,32 @@ fine adjustment near the ground without losing the wide-view range.
 Reset view restores this north-facing arrival camera around the current centre,
 without changing forecast time. Camera readouts use miles for mph wind units
 and kilometres for km/h, m/s or knots (including resolved Automatic units).
+
+
+### Explore pre-sharing review (23 November 2026)
+
+Compared the live Highlights and Past Events controls and units with Explore.
+The outer header now replaces its Help button with Clean View / Restore Controls
+while a landscape is open. The landscape retains its own Help; the redundant
+inner clean-view button is hidden when embedded. Settings remains a separate
+sidebar toggle. Help explains progressive terrain loading and browser caching,
+including private-browsing and cache-eviction limitations.
+
+Performance fixes:
+- Reuse the nine cloud meshes and shader materials between forecast frames;
+  update their texture uniforms. Rebuild geometry only when bounds change;
+  terrain refinement still updates geometry incrementally.
+- Preserve cloud texture-animation time across forecast transitions.
+- Cache bounded Intl date formatters and the terrain exaggeration value.
+- Avoid per-particle colour objects in the wind update and duplicate globe-clock
+  formatting on every frame.
+- Retain a staged newer forecast when video export temporarily prevents adoption.
+
+Validation: all 45 local-trial Node checks pass, including new cloud reuse and
+forecast-adoption deferral checks. Browser-tested orbit plus forecast playback,
+Help, Clean View and independent Settings. No browser console errors observed.
+A 9.1-second pre-change CPU sample included 850 shader-query samples; a
+17-second post-change sample had none. These are diagnostic samples with
+changing terrain/loading state, not a controlled FPS comparison or a guarantee
+of frame rate on other devices. Remaining principal CPU work is particles,
+terrain sampling and label layout; terrain preparation remains worker-based.

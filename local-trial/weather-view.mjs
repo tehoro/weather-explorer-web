@@ -35,13 +35,13 @@ export class WeatherView{
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)this.runRefresh.check();});
  }
  async adoptRun(data,grids,key){
-  if(this.exporting||key!==this.regionKey)return;
+  if(this.exporting||key!==this.regionKey)return false;
   const time=timeAtFrame(this.data.meta.times,this.heldFrame??this.displayFrame??this.frame);if(this.heldFrame!=null)this.heldFrame=frameAtTime(data.meta.times,time);const frame=nearestTime(data.meta.times,time);
   // Invalidate old requests before swapping all fields and the run metadata.
   this.token++;this.prepareId=(this.prepareId||0)+1;this.loading=false;
   this.data.dispose?.();this.data=data;this.prepared={region:key,grids};this.requestedFrame=frame;
   $('forecastTime').max=data.meta.times.length-1;
-  await this.load(frame);this.prepare();
+  await this.load(frame);this.prepare();return true;
  }
  async prepare(){
   if(this.exporting||!this.current||this.loading||this.context().travelling)return;
@@ -120,7 +120,7 @@ export class WeatherView{
  }
  texture(grid,keys){const pressure=keys.includes('pressure')?pressureAnomalies(grid.fields.pressure,grid.n):null;const a=new Float32Array(grid.n*grid.n*4);for(let i=0;i<grid.n*grid.n;i++)keys.forEach((k,j)=>a[i*4+j]=k==='pressure'?pressure[i]:(grid.fields[k]?.[i]??-1));const t=new THREE.DataTexture(a,grid.n,grid.n,THREE.RGBAFormat,THREE.FloatType);t.minFilter=t.magFilter=THREE.LinearFilter;t.needsUpdate=true;return t;}
  build(moved){
-  for(const mesh of this.meshes){this.group.remove(mesh);mesh.geometry.dispose();mesh.material.dispose();}this.meshes=[];
+  const previousBounds=this.bounds;
   for(const t of this.textures||[])t.dispose();
   this.textures=[this.texture(this.previous,['low','middle','high','rain']),this.texture(this.current,['low','middle','high','rain']),this.texture(this.previous,['temperature','pressure','u','v']),this.texture(this.current,['temperature','pressure','u','v'])];
   const context=this.context(),r=this.current.region;this.bounds=context.bounds(r);this.ground=context.ground;
@@ -128,19 +128,23 @@ export class WeatherView{
   const typeTexture=g=>{const t=this.texture(g,['rain','snow','ptype']);t.minFilter=t.magFilter=THREE.NearestFilter;this.textures.push(t);return t;};
   const coverTexture=g=>{const t=this.texture(g,['snowCover','seaIce','snowlineWeighted','snowlineWeight']);t.minFilter=t.magFilter=THREE.LinearFilter;this.textures.push(t);return t;};
   const regionalTexture=g=>{const t=this.texture(g,['snowlineRegionalWeighted','snowlineRegionalWeight','snowlineModelHeight']);t.minFilter=t.magFilter=THREE.LinearFilter;this.textures.push(t);return t;};
-  this.uniforms={regionalA:{value:regionalTexture(this.previous)},regionalB:{value:regionalTexture(this.current)},coverTerrainScale:{value:Number($('terrainScale').value)},coverEnabled:{value:1},coverA:{value:coverTexture(this.previous)},coverB:{value:coverTexture(this.current)},ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
+  const nextUniforms={regionalA:{value:regionalTexture(this.previous)},regionalB:{value:regionalTexture(this.current)},coverTerrainScale:{value:Number($('terrainScale').value)},coverEnabled:{value:1},coverA:{value:coverTexture(this.previous)},coverB:{value:coverTexture(this.current)},ptypeA:{value:typeTexture(this.previous)},ptypeB:{value:typeTexture(this.current)},cloudA:{value:this.textures[0]},cloudB:{value:this.textures[1]},surfaceA:{value:this.textures[2]},surfaceB:{value:this.textures[3]},blend:{value:this.blend},clock:{value:0},mode:{value:0},isobars:{value:0},isobarStep:{value:2},weatherGridSize:{value:this.current.n},extent:{value:new THREE.Vector2(w,h)}};
+  this.uniforms??={};for(const [key,u]of Object.entries(nextUniforms)){if(key==='clock'&&this.uniforms.clock)continue;this.uniforms[key]??={value:u.value};this.uniforms[key].value=u.value;}
+  const sameBounds=previousBounds&&['west','east','north','south'].every(k=>previousBounds[k]===this.bounds[k]);
   const geometry=(alt=0)=>{const g=new THREE.PlaneGeometry(w,h,64,64);g.rotateX(-Math.PI/2);const p=g.attributes.position,uv=g.attributes.uv;for(let i=0;i<p.count;i++){const x=p.getX(i)+(west+east)/2,z=p.getZ(i)+(north+south)/2;p.setXYZ(i,x,Math.max(0,this.ground(x,z))+(alt||.07),z);uv.setY(i,1-uv.getY(i));}g.userData.alt=alt||.07;g.userData.terrainRevision=context.terrainRevision;g.computeBoundingSphere();return g;};
   const vertex=`varying vec2 vUv;varying vec3 cloudPosition;void main(){vUv=uv;cloudPosition=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
   this.surfaceUniforms??={};
   for(const [key,uniform]of Object.entries(this.uniforms)){this.surfaceUniforms[key]??={value:uniform.value};this.surfaceUniforms[key].value=uniform.value;}
   this.surfaceUniforms.weatherBounds??={value:new THREE.Vector4()};this.surfaceUniforms.weatherBounds.value.set(west,north,w,h);
   this.attachSurfaces();
-  this.clouds=[];
+  this.clouds??=[];
   // Broad, derivative-filtered texture avoids fine streaks at grazing angles.
   // Schematic heights and thickness are not forecast cloud bases or tops.
   for(let layer=0;layer<3;layer++)for(let slab=0;slab<3;slab++){
    const uniforms={...this.uniforms,layer:{value:layer},slab:{value:slab},opacity:{value:layer===2?.12:.23}};
    const baseAlt=[.5,4,8][layer]+slab*[.6,.8,.6][layer];
+   const existing=this.clouds[layer*3+slab];
+   if(existing){if(!sameBounds){existing.geometry.dispose();existing.geometry=geometry(baseAlt*(context.cloudScale||1));existing.geometry.userData.baseAlt=baseAlt;}continue;}
    const mesh=new THREE.Mesh(geometry(baseAlt*(context.cloudScale||1)),new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,uniforms,vertexShader:vertex,fragmentShader:`varying vec3 cloudPosition;varying vec2 vUv;uniform sampler2D cloudA,cloudB;uniform float blend,layer,slab,clock,opacity;uniform vec2 extent;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1.,0.)),f.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),f.x),f.y);}
@@ -263,8 +267,8 @@ void main(){vec2 q=cloudPosition.xz/12.+vec2(layer*17.,slab*.35);float footprint
    let p=this.particles[i],u=this.sample('u',p.x,p.z),v=this.sample('v',p.x,p.z);p.x+=u*step*speed;p.z-=v*step*speed;p.age+=step;
    if(p.age>18||p.x<b.west||p.x>b.east||p.z<b.north||p.z>b.south)p=this.particles[i]=this.spawn();
    advanceWindHistory(p,step,firstSample,(x,z)=>Math.max(0,this.ground(x,z))+.01);
-   const strength=clamp(Math.hypot(u,v)/25,0,1),colour=new THREE.Color().setRGB(1,1-strength*.35,.85-strength*.8);
-   for(let j=0;j<L-1;j++){const k=i*(L-1)+j;attrs.start.setXYZ(k,...p.history[j]);attrs.end.setXYZ(k,...p.history[j+1]);attrs.tint.setXYZ(k,colour.r,colour.g,colour.b);attrs.width.setX(k,1+strength*2);attrs.fade.setX(k,(1-j/L)*.9);}
+   const strength=clamp(Math.hypot(u,v)/25,0,1),green=1-strength*.35,blue=.85-strength*.8;
+   for(let j=0;j<L-1;j++){const k=i*(L-1)+j;attrs.start.setXYZ(k,...p.history[j]);attrs.end.setXYZ(k,...p.history[j+1]);attrs.tint.setXYZ(k,1,green,blue);attrs.width.setX(k,1+strength*2);attrs.fade.setX(k,(1-j/L)*.9);}
   }
   if(this.wind.visible)for(const name of ['start','end','tint','width','fade'])updateParticleAttribute(attrs[name],windCount*(L-1));
   if(this.drops.visible){

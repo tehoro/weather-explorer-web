@@ -102,3 +102,5 @@ dialog#helpDialog{width:min(650px,calc(100vw - 36px));font-size:14px}#helpDialog
 #exportDuration{width:85px;margin:0 8px 12px 0}
 
 @media(max-width:700px){.clean .brand{right:2px;top:2px;padding:5px}}
+
+.hostControls #cleanView,.hostControls.clean .brand{display:none}

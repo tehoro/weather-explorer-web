@@ -24,7 +24,8 @@ import {setupUI} from './global-ui.mjs?v=20261123h';
 import {PlaceLabels} from './place-labels.mjs?v=20261123c';
 setupUI();
 const sharedView=readView(location.hash);if(sharedView)restoreControls(document,sharedView.settings);
-const terrainScale=()=>Number(document.getElementById("terrainScale").value);
+let terrainScaleValue=Number(document.getElementById("terrainScale").value);
+const terrainScale=()=>terrainScaleValue;
 const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
 const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,12000),controls=new OrbitControls(camera,renderer.domElement);
@@ -373,14 +374,14 @@ go();zoomFocus.name=params.get('name')||undefined;
 if(sharedView){
  rebasing=true;camera.position.fromArray(sharedView.eye);controls.target.fromArray(sharedView.target);controls.update();rebasing=false;
  zoomFocus=sharedView.focus&&Number.isFinite(sharedView.focus.lat)&&Number.isFinite(sharedView.focus.lon)?sharedView.focus:null;focusRevision=terrainRevision;
- if(sharedView.timeMode)setTimeMode(sharedView.timeMode);document.body.classList.toggle('clean',!!sharedView.clean);$('cleanView').textContent=sharedView.clean?'Show controls':'Clean view';
+ if(sharedView.timeMode)setTimeMode(sharedView.timeMode);document.body.classList.toggle('clean',!!sharedView.clean);$('cleanView').textContent=sharedView.clean?'Restore Controls':'Clean View';
  $('settingsPanel').hidden=!!sharedView.settingsHidden;document.body.classList.toggle('panelClosed',!!sharedView.settingsHidden);$('settingsToggle').setAttribute('aria-expanded',String(!sharedView.settingsHidden));
  for(const [k,v] of Object.entries(sharedView.units||{}))if(Units.CHOICES[k]?.some(c=>c[0]===v)||v==='auto'&&['temperature','wind','rain'].includes(k))Units.setChoice(k,v);
  dispatchEvent(new Event('local-units-change'));update();
 }if(params.get('searchFlight')==='1'){pointForecast.select(anchor.lat,anchor.lon,zoomFocus.name);centreViewport();}
 fetch('/dem/tileList.txt').then(r=>{if(!r.ok)throw Error('Terrain catalogue unavailable');return r.text();}).then(text=>{const available=new Set(text.split(/\s+/).map(s=>s.replace(/\/$/,'')));reader=new TerrainWorker(available);reader.ready.then(()=>{catalogue=available;styleNote();update();}).catch(e=>$('status').textContent=e.message);}).catch(e=>$('status').textContent=e.message);
 
-$('terrainScale').addEventListener('input',()=>{globalRelief.setScale(terrainScale());for(const {mesh}of tiles.values())mesh.scale.y=terrainScale()/1.5;terrainRevision++;focusRevision=-1;syncZoomFocus();keepAboveTerrain();});
+$('terrainScale').addEventListener('input',()=>{terrainScaleValue=Number($('terrainScale').value);globalRelief.setScale(terrainScale());for(const {mesh}of tiles.values())mesh.scale.y=terrainScale()/1.5;terrainRevision++;focusRevision=-1;syncZoomFocus();keepAboveTerrain();});
 
 let sharedPlaybackRestored=false;
 function restoreSharedPlayback(){
