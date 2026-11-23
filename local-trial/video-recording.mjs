@@ -47,6 +47,34 @@ export function compositeVideo(source,canvas,ctx){
     ctx.font='600 13px system-ui';ctx.fillStyle=selected?'#ff817a':'#e8f3fa';ctx.fillText(el.firstChild?.textContent||'',x,r.bottom-3);ctx.beginPath();ctx.arc(x,y,selected?5:2.5,0,Math.PI*2);ctx.fill();
     const temp=el.querySelector('.placeTemperature');if(temp&&!temp.hidden)ctx.fillText(temp.textContent,x,y+23);
    }
-   ctx.textAlign='right';ctx.fillStyle='#fff';ctx.font='600 19px system-ui';ctx.fillText($('clockDate').textContent,innerWidth-22,30);ctx.font='700 32px system-ui';ctx.fillText($('clockHour').textContent,innerWidth-22,70);ctx.font='600 14px system-ui';ctx.fillText($('clockLead').textContent+' · '+$('clockZone').textContent,innerWidth-22,96);
-   ctx.textAlign='left';ctx.font='12px system-ui';ctx.fillText('Weather Explorer · Explore',16,innerHeight-34);ctx.fillText('Data: © '+new Date().getFullYear()+' ECMWF · CC BY 4.0 · Terrain: Copernicus · Land cover: ESA WorldCover · Places: GeoNames',16,innerHeight-15);ctx.restore();
+   ctx.restore();
+   drawVideoBands(ctx,w,h,videoDetails());
+}
+
+export function videoDetails(){
+ const $=id=>document.getElementById(id),text=id=>$(id)?.textContent?.trim()||'';
+ const place=$('pointMarkerName')?.firstChild?.textContent?.trim();
+ const layers=[['windLayer','10 m wind'],['rainLayer','Precipitation'],['cloudLayer','Clouds'],['pressureLayer','Isobars']].filter(([id])=>$(id)?.checked).map(([,name])=>name);
+ const surface=$('surfaceField');if(surface&&surface.value!=='none')layers.push(surface.selectedOptions?.[0]?.textContent||'Surface weather');
+ return {title:place?`${place} · Weather Explorer`:'Weather Explorer · Explore',description:layers.join(' · ')||'Terrain and landscape',date:text('clockDate'),hour:text('clockHour'),zone:text('clockZone'),lead:text('clockLead'),run:text('modelRun')};
+}
+
+// Output-space typography and safe margins are independent of the browser window.
+// Both live capture and frame-by-frame export use the same presentation.
+export function drawVideoBands(ctx,w,h,details){
+ const scale=Math.min(w/1280,h/720),pad=24*scale,top=92*scale,bottom=142*scale;
+ ctx.save();ctx.shadowBlur=0;ctx.textAlign='left';ctx.textBaseline='alphabetic';
+ ctx.fillStyle='rgba(8,14,19,0.88)';ctx.fillRect(0,0,w,top);ctx.fillRect(0,h-bottom,w,bottom);
+ const line=(text,y,size,colour='#e6edf2',weight=500)=>{
+  ctx.fillStyle=colour;ctx.font=`${weight} ${size*scale}px system-ui`;
+  ctx.fillText(text,pad,y,w-2*pad);
+ };
+ line(details.title,pad+26*scale,26,'#e6edf2',700);
+ line(details.description,pad+54*scale,17,'#b8c7d1');
+ line(`${details.date} · ${details.hour} · ${details.zone}`,h-bottom+35*scale,25,'#e6edf2',700);
+ line(`${details.lead} h · IFS Open Data${details.run?' · '+details.run:''}`,h-bottom+63*scale,16,'#b8c7d1');
+ line('Weather Explorer · weatherexplorer.neilgordon.me',h-bottom+91*scale,17);
+ line('Data: © '+new Date().getFullYear()+' ECMWF · CC BY 4.0 · Interpolated and unit-converted',h-bottom+112*scale,13,'#b8c7d1');
+ line('Terrain: Copernicus · Land cover: ESA WorldCover · Places: GeoNames',h-12*scale,12,'#b8c7d1');
+ ctx.restore();
 }

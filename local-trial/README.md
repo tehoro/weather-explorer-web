@@ -1057,3 +1057,14 @@ A 9.1-second pre-change CPU sample included 850 shader-query samples; a
 changing terrain/loading state, not a controlled FPS comparison or a guarantee
 of frame rate on other devices. Remaining principal CPU work is particles,
 terrain sampling and label layout; terrain preparation remains worker-based.
+
+### Video presentation (23 November 2026)
+
+Live recording and smooth export share output-space title and footer bands,
+matching Highlights' presentation. The title names the selected place and active
+weather layers; it does not invent a researched forecast narrative. The footer
+shows forecast date/time/time zone, lead, model run, website and data/terrain
+credits. Text uses safe margins and bounded widths independently of browser size.
+Verified with a five-second orbit/playback MP4: 1920×1080, 30 fps, 150 frames.
+All 46 local-trial checks pass, including layout bounds at landscape, square and
+portrait sizes. Existing downloaded videos are not modified.
