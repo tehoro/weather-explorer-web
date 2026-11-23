@@ -38,11 +38,11 @@ export class PrecipitationStreaks{
    if(!p||p.y<0||Math.hypot(p.x-c.target.x,p.z-c.target.z)>radius*1.3){const angle=Math.random()*Math.PI*2,r=Math.sqrt(Math.random())*radius;p=this.particles[i]={x:c.target.x+r*Math.cos(angle),z:c.target.z+r*Math.sin(angle),y:Math.random()*top,seed:Math.random(),phase:Math.random()*6.28};}
    if(p.x<b.west||p.x>b.east||p.z<b.north||p.z>b.south){p.y=-1;continue;}
    const total=view.sample('rain',p.x,p.z),snow=view.sample('snow',p.x,p.z),fraction=Math.max(0,Math.min(1,snow/Math.max(.001,total))),isSnow=(i*.61803398875)%1<fraction;
-   const fall=top/(isSnow?7:1.5),u=view.sample('u',p.x,p.z),v=view.sample('v',p.x,p.z);
-   // Scale illustrative advection with the falling layer, so wind remains
-   // legible at wide zoom. Snow spends longer aloft and travels farther.
-   const drift=top*.04,flutter=isSnow?top*.025:0;
-   p.phase+=dt;const dx=u*drift+Math.sin(p.phase*1.7)*flutter,dz=-v*drift+Math.cos(p.phase*1.3)*flutter;
+   const fall=top/(isSnow?8+3*p.seed:1.5),u=view.sample('u',p.x,p.z),v=view.sample('v',p.x,p.z);
+   // Snow uses the reference's stronger sway-to-wind ratio. Independent
+   // phases and rates give smooth wandering without random frame-to-frame jumps.
+   const drift=isSnow?length*.24:top*.04,flutter=isSnow?length*.75:0;
+   p.phase+=dt*(isSnow?.8+.4*p.seed:1);const dx=u*drift+Math.sin(p.phase*1.7)*flutter,dz=-v*drift+Math.cos(p.phase*1.3)*flutter;
    p.y-=dt*fall;p.x+=dt*dx;p.z+=dt*dz;
    if(total<.05||p.seed>Math.min(1,Math.sqrt(total/8))||p.y<0)continue;
    const ground=Math.max(0,view.ground(p.x,p.z)),y=ground+.025+p.y;

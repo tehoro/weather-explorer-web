@@ -48,3 +48,16 @@ console.log(`${projections} rotated-camera rain/snow direction checks passed (ho
 rain=snow=0;particles.update(view,1/30);assert.equal(particles.rainGeometry.instanceCount,0);assert.equal(particles.snowGeometry.drawRange.count,0);
 particles.visible(false);assert.equal(particles.rain.visible,false);assert.equal(particles.snow.visible,false);
 console.log('Rain-only, snow-only, dry conditions, terrain clearance and visibility passed.');
+
+// Calm-air flakes wander independently, with slower, varied descent.
+particles.visible(true);particles.count=2;rain=snow=8;
+view.sample=k=>k==='rain'||k==='snow'?8:0;
+particles.particles=[{x:0,z:0,y:2,seed:0,phase:0},{x:0,z:0,y:2,seed:.8,phase:2}];
+for(let i=0;i<30;i++)particles.update(view,1/30);
+const [a,b]=particles.particles;
+assert.ok(Math.hypot(a.x-b.x,a.z-b.z)>.05,'flakes do not sway in formation');
+assert.ok(a.y<b.y&&a.y>1.5,'fall speed varies gently between flakes');
+const oldX=a.x;
+for(let i=0;i<90;i++)particles.update(view,1/30);
+assert.ok(a.x<oldX,'calm-air sway changes direction smoothly');
+console.log('Independent snow sway, changing direction and varied slow descent passed.');
