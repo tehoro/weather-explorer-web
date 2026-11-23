@@ -21,7 +21,8 @@ export class PrecipitationStreaks{
     #include <colorspace_fragment>
    }`}));
   this.snowGeometry=new THREE.BufferGeometry();this.snowGeometry.setAttribute('position',new THREE.Float32BufferAttribute(new Float32Array(this.count*3),3));
-  this.snow=new THREE.Points(this.snowGeometry,new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{pixelRatio:{value:1},size:{value:30}},vertexShader:`uniform float pixelRatio,size;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;gl_PointSize=clamp(size/max(.01,-mv.z),1.5,6.)*pixelRatio;}`,fragmentShader:`void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;gl_FragColor=vec4(1.,1.,1.,.95*(1.-smoothstep(.3,.5,r)));}`}));
+  // Keep distant flakes readable: at least five CSS pixels, including on Retina.
+  this.snow=new THREE.Points(this.snowGeometry,new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{pixelRatio:{value:1},size:{value:30}},vertexShader:`uniform float pixelRatio,size;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;gl_PointSize=clamp(size/max(.01,-mv.z),5.,9.)*pixelRatio;}`,fragmentShader:`void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;gl_FragColor=vec4(1.,1.,1.,.95*(1.-smoothstep(.3,.5,r)));}`}));
   for(const obj of [this.rain,this.snow]){obj.frustumCulled=false;obj.visible=false;group.add(obj);}
  }
  visible(on){this.rain.visible=this.snow.visible=on;}
@@ -48,6 +49,6 @@ export class PrecipitationStreaks{
    if(isSnow)sa.setXYZ(ns++,p.x,y,p.z);
    else{ra.setXYZ(nr,p.x,y,p.z);ea.setXYZ(nr++,p.x-dx*length/fall,y+length,p.z-dz*length/fall);}
   }
-  this.rainGeometry.instanceCount=nr;this.rain.material.uniforms.viewport.value.set(globalThis.innerWidth||1280,globalThis.innerHeight||720);this.snowGeometry.setDrawRange(0,ns);updateParticleAttribute(ra,nr);updateParticleAttribute(ea,nr);updateParticleAttribute(sa,ns);this.snow.material.uniforms.pixelRatio.value=Math.min(devicePixelRatio,2);this.snow.material.uniforms.size.value=.024*(globalThis.innerHeight||720);
+  this.rainGeometry.instanceCount=nr;this.rain.material.uniforms.viewport.value.set(globalThis.innerWidth||1280,globalThis.innerHeight||720);this.snowGeometry.setDrawRange(0,ns);updateParticleAttribute(ra,nr);updateParticleAttribute(ea,nr);updateParticleAttribute(sa,ns);this.snow.material.uniforms.pixelRatio.value=Math.min(devicePixelRatio,2);this.snow.material.uniforms.size.value=.12*(globalThis.innerHeight||720);
  }
 }
