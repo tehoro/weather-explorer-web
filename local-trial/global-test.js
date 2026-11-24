@@ -220,6 +220,13 @@ placeLabels=new PlaceLabels(camera,weatherContext,(lat,lon)=>({x:wrap(lon-anchor
 pointForecast=new PointForecast(weatherView,flyToPoint);weatherView.pointForecast=pointForecast;
 // Panel visibility never changes the camera. Reframe only on explicit centring.
 const pointMarker=document.createElement('div');pointMarker.id='pointMarker';pointMarker.hidden=true;const pointMarkerName=document.createElement('span');pointMarkerName.id='pointMarkerName';pointMarker.append(pointMarkerName);document.body.append(pointMarker);
+pointMarker.setAttribute('role','button');pointMarker.tabIndex=0;pointMarker.title='Clear selected point';pointMarker.setAttribute('aria-label','Clear selected point');
+function clearSelectedPoint(){
+ clearTimeout(pointClickTimer);lastPicked=null;lastPickTime=0;zoomFocus=null;focusRevision=-1;flight=null;approachStart=null;
+ $('pointClose').click();updatePointMarker();
+}
+pointMarker.onclick=clearSelectedPoint;
+pointMarker.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();clearSelectedPoint();}};
 const placeTemperatures=new PlaceTemperatures(weatherView,placeLabels,()=>{const p=zoomFocus||pointForecast?.location;return p&&!pointMarker.hidden?{...p,name:p.name||'Selected location',element:pointMarkerName}:null;});
 function updatePointMarker(){
  const p=zoomFocus||pointForecast?.location;if(!p){if(typeof pointMarker!=='undefined')pointMarker.hidden=true;return;}
