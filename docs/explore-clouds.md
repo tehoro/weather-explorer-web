@@ -7,7 +7,7 @@ volumes. The opening globe keeps its existing broad-scale cloud depiction.
 a catch-up/retry. Its failure cannot block an ordinary forecast. It checks the
 current R2 run, downloads indexed ECMWF Open Data humidity, temperature and
 geopotential at 12 pressure levels, low/middle/high cloud amounts, surface
-pressure, 2 m temperature/dew point, model orography, total and convective rain.
+pressure, 2 m temperature/dew point, model orography, total and convective rain, and total-column cloud liquid water (`tclw`) and ice water (`tciw`).
 AWS is preferred, with the official ECMWF mirror as fallback. No API inference,
 paid model calls, per-user server processing, or wind-drift fields are involved.
 
@@ -19,11 +19,11 @@ vary with the input weather; coefficients are not refitted per run.
 
 Volumes use 128 MSL height nodes over 0–20 km and 0.5/1/2 degree spatial levels.
 Twenty-degree tiles have shared edges, filtered coarse levels and polar averaging.
-Four byte channels contain density, a reserved zero channel, approximate-placement
-flag and illustrative convective texture weight. Original comparison data are not
+Four byte channels contain liquid and ice display extinction (each scaled to 12/km),
+an approximate-placement flag and illustrative convective texture weight. Original comparison data are not
 published. A real current-run test frame was about 27 MB compressed across all LODs.
 
-Each frame/LOD is packed into `global-data/RUN/cloud-v1/STEP/LOD/tiles.bin`, with
+Each frame/LOD is packed into `global-data/RUN/cloud-v2/STEP/LOD/tiles.bin`, with
 `tiles.json` offsets. The run-scoped cloud manifest is uploaded only after all
 validated frames and packs succeed. The existing current/previous forecast-run
 retention also removes obsolete cloud packs. Re-run the workflow to retry failures;
@@ -105,3 +105,34 @@ terrain depth pass and mathematically identical texture-read reuse still apply.
 `node local-trial/test-cloud-rendering.mjs` checks cache invalidation, output sizes,
 full-quality export and renderer-state restoration after errors. Existing cloud
 handover tests continue to cover three-hour boundaries and unavailable tiles.
+
+## Column water and optical thickness
+
+Version 2 retains the humidity-guided height envelope and IFS band constraints.
+Within that envelope, each column's liquid and ice totals (kg/m²) are distributed
+vertically using cloud-density weights and a temperature preference. Liquid preference
+rises linearly from zero at −40°C to one at −5°C; ice uses the complement. Each phase
+is normalised to its own column total before display scaling. If its preferred
+phase has no support, it uses the existing cloud support. Columns with no cloud
+support remain empty rather than inventing heights. This is an inferred vertical
+distribution of actual column condensate, not a model condensate profile.
+
+Illustrative display extinction coefficients are 15 m²/kg for liquid and 3 m²/kg
+for ice. Total extinction is capped at 12/km before eight-bit encoding; small
+values can quantise to zero. These deliberately softened choices match the private
+trial, not calibrated particle sizes or full radiative transfer. Coarse spatial
+levels filter both phase extinction channels. Spatial and temporal interpolation
+occurs before calculating the ice fraction used for shading. Ice-rich cloud has
+softer shadows and less rounded texture, allowing higher cloud to look thinner.
+
+Optical thickness accumulates extinction along a ray; opacity then follows
+1 − exp(−optical thickness). The renderer uses an illustrative horizontal path
+scaling, procedural texture and simplified lighting. Finally the opacity slider
+scales the integrated cloud transparency, with the existing stronger-from-below
+behaviour. It remains possible to see terrain through cloud. These rendering
+choices mean apparent image coverage is not guaranteed to equal the input fractions.
+
+The two extra fields are downloaded only during preprocessing. There is no
+additional browser voxel channel or raw-field processing. Live half-resolution
+cloud rendering and full-resolution video export remain. The version-1 size and
+timing figures above are historical; version-2 measurements will differ.

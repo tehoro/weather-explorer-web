@@ -20,7 +20,7 @@ async function frame(job,step,stats){
  const keys=[...new Set(points.map(p=>p.key))],tiles=new Map();
  let next=0;
  await Promise.all(Array.from({length:Math.min(4,keys.length)},async()=>{
-  while(next<keys.length){const key=keys[next++],url=`/global-data/${run}/cloud-v1/${String(step).padStart(3,'0')}/${level}/${key}.bin.gz`;
+  while(next<keys.length){const key=keys[next++],url=`/global-data/${run}/cloud-v2/${String(step).padStart(3,'0')}/${level}/${key}.bin.gz`;
    tiles.set(key,await tile(url,side*side*V*4,stats));}
  }));
  const out=new Uint8Array(G*V*G*4);

@@ -1,3 +1,4 @@
+import {CAMERA_CLEARANCE_KM,meshHeight,nearGroundPlane,skylineClearance} from './camera-ground.mjs';
 import {timeMode,setTimeMode} from './local-time.mjs';
 import {setupSmoothExport,exportFrame,cancellable} from './video-export.mjs';
 import {setupRecording} from './video-recording.mjs';
@@ -30,7 +31,7 @@ const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
 const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,12000),controls=new OrbitControls(camera,renderer.domElement);
 controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
-controls.zoomToCursor=false;controls.screenSpacePanning=false;controls.minDistance=4;controls.maxDistance=3200;controls.maxPolarAngle=Math.PI/2+.2;controls.minPolarAngle=0;
+controls.zoomToCursor=false;controls.screenSpacePanning=false;controls.minDistance=.02;controls.maxDistance=3200;controls.maxPolarAngle=Math.PI/2+.2;controls.minPolarAngle=0;
 scene.add(new THREE.HemisphereLight(0xc2eaff,0x293a22,2.2));const sun=new THREE.DirectionalLight(0xffefd8,2.6);sun.position.set(-200,400,-150);scene.add(sun);
 let anchor={lat:-41.1,lon:174.8},serial=0,catalogue,active=0,timer,rebasing=false,lastWeather='',failures=new Map();
 const tiles=new Map(),needed=new Map(),pending=new Set();let queue=[],waterQueue=[],waterActive=0,reader,terrainKey='',terrainRevision=0;
@@ -46,7 +47,7 @@ let exporting=false;
 function liveFrame(now){const dt=Math.min(.1,(now-lastRender)/1000);lastRender=now;tickFlight(now);syncZoomFocus(dt);tickOrbit(now);keepAboveTerrain();updateCameraSettings(now);weatherView?.tick(dt);restoreSharedPlayback();pointForecast?.update();placeLabels?.tick(dt);updatePointMarker();placeTemperatures.tick(dt);sendViewTime(now);if(approaching&&!readySent&&localPreviewReady(globalRelief.mesh,weatherView?.current,now-approachLoadStart)){readySent=true;parent.postMessage({type:'local-terrain-ready'},'http://127.0.0.1:8091');}
  if(approachStart!==null){const t=matchMedia('(prefers-reduced-motion: reduce)').matches?1:Math.min(1,(now-approachStart)/2200),e=t*t*(3-2*t),d=240+(ARRIVAL.height-240)*e;camera.position.copy(controls.target).add(new THREE.Vector3(0,d,ARRIVAL.south*e));controls.update();if(t===1){approachStart=null;focusRevision=-1;syncZoomFocus();update();}}// Keep depth precision at wide zoom: a fixed 30 m near plane makes low
  // clouds and the sea round to the same depth, producing horizontal bands.
- const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
+ const near=nearGroundPlane(camera.position.distanceTo(controls.target),camera.position.y-cameraGroundHeight(camera.position.x,camera.position.z));
  if(Math.abs(camera.near-near)>near*.01){camera.near=near;camera.updateProjectionMatrix();}
  globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera,exporting||!!recordingResolution);else renderer.render(scene,camera);recordFrame(now);}
 renderer.setAnimationLoop(liveFrame);
@@ -179,7 +180,7 @@ function go(lat=anchor.lat,lon=anchor.lon){stopOrbit();zoomFocus=null;flight=nul
  anchor={lat,lon:wrap(lon)};positionBackdrop();if(weatherView)weatherView.regionKey=null;lastWeather='';serial++;for(const {mesh}of tiles.values())dispose(mesh);tiles.clear();terrainRevision++;needed.clear();failures.clear();queue=[];
  rebasing=true;controls.target.set(0,groundHeight(0,0),0);camera.position.copy(controls.target).add(new THREE.Vector3(0,approaching&&!readySent?240:ARRIVAL.height,approaching&&!readySent?0:ARRIVAL.south));zoomFocus={lat,lon};focusRevision=-1;controls.update();rebasing=false;update();}
 setupSearch($('search'),$('matches'),searchFlight);
-$('viewAngle').onchange=()=>{if($('viewAngle').value==='low'){camera.position.y=groundHeight(camera.position.x,camera.position.z)+.5*terrainScale();controls.update();keepAboveTerrain();update();return;}const d=camera.position.distanceTo(controls.target),angle=controls.getAzimuthalAngle(),polar=$('viewAngle').value==='top'?0:Math.atan2(.82,.57);camera.position.copy(controls.target).add(new THREE.Vector3(d*Math.sin(polar)*Math.sin(angle),d*Math.cos(polar),d*Math.sin(polar)*Math.cos(angle)));controls.update();update();};
+$('viewAngle').onchange=()=>{if($('viewAngle').value==='low'){camera.position.y=skylineClearance(camera.position.x,camera.position.z,controls.target.x,controls.target.z,terrainScale(),cameraGroundHeight);controls.target.y=Math.max(groundHeight(controls.target.x,controls.target.z),camera.position.y);controls.update();keepAboveTerrain();update();return;}const d=camera.position.distanceTo(controls.target),angle=controls.getAzimuthalAngle(),polar=$('viewAngle').value==='top'?0:Math.atan2(.82,.57);camera.position.copy(controls.target).add(new THREE.Vector3(d*Math.sin(polar)*Math.sin(angle),d*Math.cos(polar),d*Math.sin(polar)*Math.cos(angle)));controls.update();update();};
 function retryTerrain(){reader?.clear();failures.clear();for(const key of waterMissing){const old=tiles.get(key);if(old)waterQueue.push(old);}waterMissing.clear();pumpWater();update();}
 $('retry').onclick=()=>{retryDelay=15000;retryTerrain();};
 let retryDelay=15000;
@@ -198,6 +199,11 @@ function groundHeight(x,z){
  const lat=anchor.lat-z/111.2,lon=anchor.lon+x/(111.2*cos()),best=terrainIndex.find(lat,lon);
  if(!best)return globalRelief.height(lat,lon);if(best.mesh.userData.ocean)return 0;
  const {p,mesh,dx,dy}=best;return sample(mesh.userData.a,p.cells+3,p.cells+3,1+dx/p.span*p.cells,1+dy/p.span*p.cells)*.001*terrainScale();
+}
+function cameraGroundHeight(x,z){
+ const fallback=groundHeight(x,z),best=terrainIndex.find(anchor.lat-z/111.2,anchor.lon+x/(111.2*cos()));
+ if(!best||best.mesh.userData.ocean)return fallback;
+ return meshHeight(best.mesh,best.p.cells,best.dx/best.p.span*best.p.cells,best.dy/best.p.span*best.p.cells);
 }
 function weatherContext(){
  const c=centre(),distance=camera.position.distanceTo(controls.target),points=cameraFootprint(),xs=orbit?[-orbit.coverage,orbit.coverage]:points.map(p=>p[0]),zs=orbit?[-orbit.coverage,orbit.coverage]:points.map(p=>p[1]),scale=111.2*cos();
@@ -310,10 +316,10 @@ for(const id of ['viewAngle','north','in','out'])$(id).addEventListener('click',
 for(const b of document.querySelectorAll('[data-pan]'))b.addEventListener('click',()=>{stopOrbit();flight=null;approachStart=null;});
 $('viewAngle').addEventListener('change',stopOrbit);
 
-// Keep about 500 real metres above the exaggerated terrain.
+// Keep 10 physical metres above the actual displayed terrain triangles.
 function keepAboveTerrain(){
- const floor=groundHeight(camera.position.x,camera.position.z)+.5*terrainScale();
- if(camera.position.y<floor){camera.position.y=floor;if(orbit){stopOrbit();$("status").textContent="Orbit stopped: terrain crosses the camera altitude.";}controls.update();}
+ const floor=cameraGroundHeight(camera.position.x,camera.position.z)+CAMERA_CLEARANCE_KM*terrainScale();
+ if(camera.position.y<floor){camera.position.y=floor;if(orbit){stopOrbit();$("status").textContent="Orbit stopped: terrain crosses the camera altitude.";}controls.update();camera.position.y=Math.max(camera.position.y,floor);}
 }
 // Logarithmic sliders give useful control near the ground and at continental scale.
 let lastCameraSettings=0;
@@ -323,7 +329,7 @@ function updateCameraSettings(now=performance.now(),force=false){
  if(!force&&(!$('viewSettings').open||now-lastCameraSettings<200))return;
  lastCameraSettings=now;
  const distance=Math.hypot(camera.position.x-controls.target.x,camera.position.z-controls.target.z);
- const height=camera.position.y,clearance=height-groundHeight(camera.position.x,camera.position.z);
+ const height=camera.position.y,clearance=(height-cameraGroundHeight(camera.position.x,camera.position.z))/terrainScale();
  const miles=Units.unit('m/s')==='mph',format=km=>`${(miles?km/1.609344:km).toFixed(km<1?2:1)} ${miles?'mi':'km'}`;
  $('resetViewDescription').textContent=`Default: ${format(ARRIVAL.south)} south, ${format(ARRIVAL.height)} above the centred location, facing north.`;
  $('cameraDistance').value=kmSlider(distance);$('cameraAltitude').value=kmSlider(height);
@@ -452,7 +458,7 @@ setupSmoothExport(renderer.domElement,{
     if(pair!==key){w.previous=grids.get(lo);w.current=grids.get(hi)||w.previous;w.frame=grids.has(hi)?hi:lo;w.fromFrame=lo;w.timeTransition=w.frame!==lo;w.blend=f-lo;w.build(false);pair=key;}
     w.blend=w.timeTransition?f-lo:1;
     tickOrbit(base+seconds*1000);w.tick(dt);await w.volumeClouds?.ensure(cloudSignal);placeLabels.tick(dt);updatePointMarker();placeTemperatures.tick(dt);
-    const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);camera.near=near;camera.updateProjectionMatrix();
+    const near=nearGroundPlane(camera.position.distanceTo(controls.target),camera.position.y-cameraGroundHeight(camera.position.x,camera.position.z));camera.near=near;camera.updateProjectionMatrix();
     globalRelief.update(anchor,controls.target,cameraFootprint());prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera,exporting||!!recordingResolution);else renderer.render(scene,camera);
    },
    async restore(){
