@@ -70,4 +70,10 @@ about 67 MB. The opening globe does not currently request these volumes.
 These sizes exclude terrain and ordinary forecast data. The finest source cloud
 field is 0.5°; close-range procedural texture is illustrative, not added forecast
 resolution. The renderer bounds its decoded tile cache to 48 MiB and builds two
-65×128×65 RGBA textures for the active view.
+65×128×65 RGBA textures per interval. It retains at most three interval pairs
+(about 12.4 MiB of texture data), including the displayed pair, and prefetches
+the following interval. At a three-hour boundary it reuses the shared endpoint
+until the next pair is ready, rather than flashing the standard clouds. A failed
+request still enables the standard fallback for that unavailable interval.
+`node local-trial/test-cloud-handover.mjs` exercises delayed and failed requests,
+forward/backward boundaries, cache limits and isolation between runs.

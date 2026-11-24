@@ -7,10 +7,14 @@ const TOP=20,G=65,V=128;
 const texture=raw=>{const t=new THREE.Data3DTexture(new Uint8Array(raw),G,V,G);t.format=THREE.RGBAFormat;t.minFilter=t.magFilter=THREE.LinearFilter;t.unpackAlignment=1;t.needsUpdate=true;return t;};
 export class CloudVolumes{
  constructor(weather){
-  this.weather=weather;this.serial=0;this.lod=0;this.readyKey='';this.pending='';this.retry=0;this.manifests=new Map();
+  this.weather=weather;this.serial=0;this.lod=0;this.readyKey='';this.pending='';this.retry=0;this.manifests=new Map();this.pairs=new Map();
   this.worker=new Worker(new URL('./cloud-volume-worker.mjs',import.meta.url),{type:'module'});
-  this.worker.onmessage=({data:r})=>{if(r.id!==this.serial)return;clearTimeout(this.deadline);this.pending='';if(r.error){this.fallback();return;}this.u.texA.value?.dispose();this.u.texB.value?.dispose();this.u.texA.value=texture(r.a);this.u.texB.value=texture(r.b);this.readyKey=this.requestKey;this.retry=0;};
-  this.worker.onerror=()=>{this.pending='';this.fallback();};
+  this.worker.onmessage=({data:r})=>{if(r.id!==this.serial)return;clearTimeout(this.deadline);this.pending='';if(r.error){this.failedRequest();return;}
+   const pair={...this.requestInfo,a:texture(r.a),b:texture(r.b)};this.pairs.set(this.requestKey,pair);this.retry=0;this.failedKey='';
+   // Keep the displayed pair and one neighbour on either side. Never dispose a bound texture.
+   while(this.pairs.size>3){const key=[...this.pairs.keys()].find(k=>k!==this.readyKey&&k!==this.requestKey);const old=this.pairs.get(key);old.a.dispose();old.b.dispose();this.pairs.delete(key);}
+  };
+  this.worker.onerror=()=>this.failedRequest();
   const noise=new THREE.Data3DTexture(detailNoise(),48,48,48);noise.format=THREE.RedFormat;noise.minFilter=noise.magFilter=THREE.LinearFilter;noise.wrapS=noise.wrapT=noise.wrapR=THREE.RepeatWrapping;noise.unpackAlignment=1;noise.needsUpdate=true;
   this.depth=new THREE.WebGLRenderTarget(1,1);this.depth.depthTexture=new THREE.DepthTexture(1,1,THREE.UnsignedIntType);
   this.u={texA:{value:null},texB:{value:null},detailMap:{value:noise},mixTime:{value:0},standardBlend:{value:1},volumeReady:{value:0},standardA:{value:null},standardB:{value:null},weatherUV:{value:new THREE.Vector4()},enabledBands:{value:new THREE.Vector3(1,1,1)},opacity:{value:.65},tint:{value:0},fixedMode:{value:0},areaWidth:{value:1},areaSize:{value:new THREE.Vector2()},top:{value:TOP},detailEnabled:{value:1},adaptiveOpacity:{value:1},groundSize:{value:G},groundMap:{value:null},terrainDepth:{value:this.depth.depthTexture},viewport:{value:new THREE.Vector2()},cameraToLocal:{value:new THREE.Matrix4()},inverseProjection:{value:new THREE.Matrix4()},camLocal:{value:new THREE.Vector3()},cameraFar:{value:12000},logarithmicDepth:{value:1}};
@@ -21,6 +25,7 @@ export class CloudVolumes{
   const status=document.createElement('p');status.id='cloudStatus';status.innerHTML='<small>Standard cloud layers.</small>';document.getElementById('cloudOpacity').after(status);this.status=status;
  }
  setStatus(text){if(this.status.textContent!==text)this.status.textContent=text;}
+ failedRequest(){this.failedKey=this.requestKey;if(this.readyKey){clearTimeout(this.deadline);this.pending='';this.serial++;this.retry=performance.now()+60000;}else this.fallback();}
  fallback(){clearTimeout(this.deadline);this.pending='';this.serial++;this.readyKey='';this.u.volumeReady.value=0;this.retry=performance.now()+60000;this.setStatus('Standard cloud layers · detailed cloud data unavailable.');}
  bind(){const w=this.weather,c=w.context(),b=w.bounds,r=w.current.region,margin=100;
   const dx=margin/(b.east-b.west)*r.lonSpan,dy=margin/(b.south-b.north)*r.latSpan;
@@ -33,17 +38,27 @@ export class CloudVolumes{
  }
  updateGround(c){const w=this.weather,b=this.bounds,key=JSON.stringify(b)+'/'+c.terrainRevision+'/'+document.getElementById('terrainScale').value;if(key===this.groundKey)return;this.groundKey=key;const a=new Float32Array(G*G),scale=Number(document.getElementById('terrainScale').value)||1;for(let j=0;j<G;j++)for(let i=0;i<G;i++)a[j*G+i]=Math.max(0,c.ground(b.west+i/(G-1)*(b.east-b.west),b.north+j/(G-1)*(b.south-b.north)))/scale;this.u.groundMap.value?.dispose();const t=new THREE.DataTexture(a,G,G,THREE.RedFormat,THREE.FloatType);t.minFilter=t.magFilter=THREE.LinearFilter;t.needsUpdate=true;this.u.groundMap.value=t;}
  async manifest(run){let entry=this.manifests.get(run);if(entry&&entry.expires>performance.now())return entry.value;const r=await fetch(await forecastUrl(`/global-data/${run}/cloud-v1/manifest.json`),{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('Cloud manifest unavailable');const m=await r.json();if(m.version!==1||m.run!==run||m.vertical!==V||m.topKm!==TOP||m.channels!==4)throw Error('Invalid cloud manifest');this.manifests.set(run,{value:m,expires:performance.now()+300000});return m;}
- async request(key,i,j,region,level){const id=++this.serial;this.pending=key;this.requestKey=key;clearTimeout(this.deadline);this.deadline=setTimeout(()=>{if(id===this.serial)this.fallback();},45000);try{const m=await this.manifest(this.weather.data.meta.run);if(id!==this.serial)return;const steps=[this.weather.data.meta.steps[i],this.weather.data.meta.steps[j]];if(!steps.every(s=>m.steps.includes(s)))throw Error('Cloud time unavailable');this.worker.postMessage({id,run:m.run,steps,region,G,V,level,res:m.levels[level]});}catch(e){if(id===this.serial){this.pending='';this.fallback();}}}
+ async request(key,i,j,region,level,domain){const id=++this.serial;this.pending=key;this.requestKey=key;this.requestInfo={i,domain};clearTimeout(this.deadline);this.deadline=setTimeout(()=>{if(id===this.serial)this.failedRequest();},45000);try{const m=await this.manifest(this.weather.data.meta.run);if(id!==this.serial)return;const steps=[this.weather.data.meta.steps[i],this.weather.data.meta.steps[j]];if(!steps.every(s=>m.steps.includes(s)))throw Error('Cloud time unavailable');this.worker.postMessage({id,run:m.run,steps,region,G,V,level,res:m.levels[level]});}catch(e){if(id===this.serial){this.pending='';this.failedRequest();}}}
  tick(){const w=this.weather;if(!w.current)return;const c=w.context(),b=w.bounds;this.mesh.scale.y=TOP*(c.cloudScale||1);this.mesh.position.y=TOP*(c.cloudScale||1)/2;this.updateGround(c);const states=['cloudLow','cloudMiddle','cloudHigh'].map(id=>+document.getElementById(id).checked);this.u.enabledBands.value.set(...states);this.u.opacity.value=Number(document.getElementById('cloudOpacity').value)/100;this.mesh.visible=states.some(Boolean)&&this.u.opacity.value>0;this.u.standardBlend.value=w.blend;
-  const f=w.displayFrame??w.frame,i=Math.min(w.data.meta.steps.length-2,Math.floor(f)),j=i+1;this.lod=chooseLod(c.distance,this.lod);const key=w.data.meta.run+'/'+i+'/'+JSON.stringify(this.region)+'/'+this.lod;
-  this.u.mixTime.value=Math.max(0,Math.min(1,f-i));this.u.volumeReady.value=+(key===this.readyKey);
-  if(this.u.volumeReady.value)this.setStatus('Humidity-guided cloud layers · terrain-aware.');
-  else if(!this.retry)this.setStatus('Standard cloud layers · preparing detailed clouds…');
-  if(this.mesh.visible&&key!==this.readyKey&&!this.pending&&performance.now()>=this.retry)void this.request(key,i,j,this.region,this.lod);
+  const f=w.displayFrame??w.frame,i=Math.min(w.data.meta.steps.length-2,Math.floor(f));this.lod=chooseLod(c.distance,this.lod);
+  const domain=w.data.meta.run+'/'+JSON.stringify(this.region)+'/'+this.lod,key=domain+'/'+i;this.desiredKey=key;
+  const pair=this.pairs.get(key);
+  if(pair){this.readyKey=key;this.u.texA.value=pair.a;this.u.texB.value=pair.b;}
+  const active=this.pairs.get(this.readyKey),holding=key!==this.failedKey&&active&&active.domain===domain&&Math.abs(active.i-i)<=1;
+  this.u.mixTime.value=Math.max(0,Math.min(1,f-(active?.i??i)));this.u.volumeReady.value=+(!!pair||!!holding);
+  if(pair)this.setStatus('Humidity-guided cloud layers · terrain-aware.');
+  else if(holding)this.setStatus('Humidity-guided cloud layers · holding last time while loading…');
+  else if(this.retry)this.setStatus('Standard cloud layers · detailed cloud data unavailable.');
+  else this.setStatus('Standard cloud layers · preparing detailed clouds…');
+  if(this.mesh.visible&&!this.pending&&performance.now()>=this.retry){
+   // Fetch the next interval while displaying this one, including when paused.
+   const next=pair?i+1:i,nextKey=domain+'/'+next;
+   if(next<w.data.meta.steps.length-1&&!this.pairs.has(nextKey))void this.request(nextKey,next,next+1,this.region,this.lod,domain);
+  }
  }
  async ensure(signal){
   this.tick();
-  while(this.mesh.visible&&this.pending){signal?.throwIfAborted();await new Promise(resolve=>setTimeout(resolve,30));this.tick();}
+  while(this.mesh.visible&&!this.pairs.has(this.desiredKey)&&this.pending){signal?.throwIfAborted();await new Promise(resolve=>setTimeout(resolve,30));this.tick();}
   signal?.throwIfAborted();this.tick();
  }
  render(renderer,scene,camera){
