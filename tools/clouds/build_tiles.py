@@ -66,13 +66,17 @@ def coarse(a,stride):
  out[0]=np.rint(out[0].mean(axis=1,keepdims=True));out[-1]=np.rint(out[-1].mean(axis=1,keepdims=True))
  return out
 
-def write_frame(run,step):
+def write_frame(run,step,arrays=None):
  directory=OUT/run/f'{step:03}';done=directory/'ready.json'
  if done.exists():return json.loads(done.read_text())
  if shutil.disk_usage(HERE).free<2_000_000_000:raise RuntimeError('Less than 2 GB free; stopping cloud tile build')
  start=time.monotonic();f=read_frame(HERE/'data'/run/f'{step:03}.bin.gz')
  regime=np.frombuffer(gzip.decompress((HERE/'data'/run/f'{step:03}.regime.gz').read_bytes()),dtype='u1').reshape(361,720)
- a=volume(f,regime);size=0;count=0
+ a=volume(f,regime)
+ if arrays is not None:
+  from condensate import apply_condensate
+  a=apply_condensate(a,arrays)
+ size=0;count=0
  for lod,res in enumerate(LEVELS):
   b=coarse(a,round(res/.5));side=round(TILE/res);nx=b.shape[2]
   folder=directory/str(lod);folder.mkdir(parents=True,exist_ok=True)

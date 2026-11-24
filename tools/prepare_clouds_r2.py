@@ -12,7 +12,7 @@ from cloud_model import build_frame
 from regimes import morphology
 import build_tiles
 from publish_explore_r2 import PREFIX,read_json
-VERSION=1
+VERSION=2
 
 def prepare(run,meta,root):
     build_tiles.HERE=root;build_tiles.OUT=root/'tiles-v1'
@@ -37,14 +37,19 @@ def prepare(run,meta,root):
                 match=[r for r in rows if r['param']==p and (surface or str(r.get('levelist'))==str(l)) and str(r['step'])==str(step)]
                 if len(match)!=1:raise ValueError(f'Missing {p}/{l} at {step}')
                 jobs.append((run,step,p,l,rel,match[0]))
+        rel,rows=index(run,step,False)
+        for p in ['tclw','tciw']:
+            match=[r for r in rows if r['param']==p and str(r['step'])==str(step)]
+            if len(match)!=1:raise ValueError(f'Missing column condensate {p} at {step}')
+            jobs.append((run,step,p,0,rel,match[0]))
         with cf.ThreadPoolExecutor(max_workers=6) as pool:values={(p,l):a for p,l,a in pool.map(field,jobs)}
         arrays={p:np.stack([values[p,l] for l in LEVELS]) for p in ['r','t','gh']}
-        arrays.update({p:values[p,0] for p in ['lcc','mcc','hcc','sp','2t','2d']})
+        arrays.update({p:values[p,0] for p in ['lcc','mcc','hcc','sp','2t','2d','tclw','tciw']})
         source=root/'input.npz';np.savez(source,**arrays);build_frame(run,step,source,root)
         cp,tp=precip(step);pc,pt=precip(step-3)
         regime=morphology(arrays['t'],arrays['gh'],arrays['sp'],np.maximum(0,cp-pc),np.maximum(0,tp-pt))
         (root/'data'/run/f'{step:03}.regime.gz').write_bytes(gzip.compress(np.rint(regime*255).astype('u1').tobytes()))
-        stats.append(build_tiles.write_frame(run,step))
+        stats.append(build_tiles.write_frame(run,step,arrays))
         # Validate every output before it can be uploaded.
         for lod,res in enumerate(build_tiles.LEVELS):
             side=round(20/res)+1
@@ -53,7 +58,7 @@ def prepare(run,meta,root):
     return stats
 
 def publish(client,bucket,run,meta,root):
-    prefix=PREFIX+run+'/cloud-v1/'
+    prefix=PREFIX+run+'/cloud-v2/'
     # Pack each LOD/frame: hundreds of HTTP objects become three range-addressable packs.
     def upload(pair):
         step,lod=pair
@@ -68,13 +73,13 @@ def publish(client,bucket,run,meta,root):
         list(pool.map(upload,[(step,lod) for step in meta['steps'] for lod in range(3)]))
     latest=read_json(client,bucket,PREFIX+'latest.json')
     if run not in {latest['run'],latest.get('previous_run')}:raise RuntimeError('Run expired during cloud preparation; not publishing its manifest')
-    manifest={'version':VERSION,'run':run,'steps':meta['steps'],'levels':[.5,1,2],'vertical':128,'topKm':20,'channels':4,'packed':True}
+    manifest={'version':VERSION,'run':run,'steps':meta['steps'],'levels':[.5,1,2],'vertical':128,'topKm':20,'channels':4,'packed':True,'optics':'column-liquid-ice','extinctionMaxKm':12,'displayCoefficients':[15,3]}
     client.put_object(Bucket=bucket,Key=prefix+'manifest.json',Body=json.dumps(manifest).encode(),ContentType='application/json',CacheControl='no-store')
 
 def main():
     client=boto3.client('s3',endpoint_url=os.environ['R2_ENDPOINT'],region_name='auto',aws_access_key_id=os.environ['R2_ACCESS_KEY_ID'],aws_secret_access_key=os.environ['R2_SECRET_ACCESS_KEY']);bucket=os.environ['R2_BUCKET']
     latest=read_json(client,bucket,PREFIX+'latest.json');run=latest['run']
-    existing=read_json(client,bucket,PREFIX+run+'/cloud-v1/manifest.json')
+    existing=read_json(client,bucket,PREFIX+run+'/cloud-v2/manifest.json')
     if existing and existing.get('version')==VERSION:print('Current cloud volume already complete.');return
     meta=read_json(client,bucket,PREFIX+run+'/manifest.json')
     if not meta or meta['run']!=run:raise ValueError('Forecast manifest mismatch')
