@@ -9,3 +9,9 @@ for(const [w,h] of [[1920,1080],[1280,642],[720,1280],[1080,1080]]){
  assert(calls.some(c=>c.text.includes('23 Nov 2026')&&c.y>h/2));
 }
 console.log('Video title, forecast footer, website and attribution fit all tested aspect ratios.');
+
+const timestamps=[];const ctx={save(){},restore(){},fillRect(){},fillText(text){if(text.includes('NZDT'))timestamps.push({text,font:this.font});}};
+for(const hour of ['Wed 3:11 PM','Wed 3:29 PM','Wed 9:59 PM','Wed 10:00 PM'])drawVideoBands(ctx,1920,1080,{title:'Test',description:'Clouds',date:'25 Nov 2026',hour,zone:'NZDT · Pacific/Auckland',lead:'T+38',run:''});
+assert(timestamps.every(t=>t.font.includes('monospace')));
+assert.equal(new Set(timestamps.map(t=>t.text.length)).size,1);
+console.log('Video timestamp has fixed-width digits and a reserved two-column hour.');

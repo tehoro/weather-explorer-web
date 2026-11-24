@@ -65,13 +65,15 @@ export function drawVideoBands(ctx,w,h,details){
  const scale=Math.min(w/1280,h/720),pad=24*scale,top=92*scale,bottom=142*scale;
  ctx.save();ctx.shadowBlur=0;ctx.textAlign='left';ctx.textBaseline='alphabetic';
  ctx.fillStyle='rgba(8,14,19,0.88)';ctx.fillRect(0,0,w,top);ctx.fillRect(0,h-bottom,w,bottom);
- const line=(text,y,size,colour='#e6edf2',weight=500)=>{
-  ctx.fillStyle=colour;ctx.font=`${weight} ${size*scale}px system-ui`;
+ const line=(text,y,size,colour='#e6edf2',weight=500,family='system-ui')=>{
+  ctx.fillStyle=colour;ctx.font=`${weight} ${size*scale}px ${family}`;
   ctx.fillText(text,pad,y,w-2*pad);
  };
  line(details.title,pad+26*scale,26,'#e6edf2',700);
  line(details.description,pad+54*scale,17,'#b8c7d1');
- line(`${details.date} · ${details.hour} · ${details.zone}`,h-bottom+35*scale,25,'#e6edf2',700);
+ // Reserve two hour columns so 9:59 → 10:00 cannot shift the timezone.
+ const hour=details.hour.replace(/\b(\d):(?=\d{2})/,' $1:');
+ line(`${details.date} · ${hour} · ${details.zone}`,h-bottom+35*scale,25,'#e6edf2',700,'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace');
  line(`${details.lead} h · IFS Open Data${details.run?' · '+details.run:''}`,h-bottom+63*scale,16,'#b8c7d1');
  line('Weather Explorer · weatherexplorer.neilgordon.me',h-bottom+91*scale,17);
  line('Data: © '+new Date().getFullYear()+' ECMWF · CC BY 4.0 · Interpolated and unit-converted',h-bottom+112*scale,13,'#b8c7d1');
