@@ -1,3 +1,4 @@
+import {setLoadingVisible} from './loading-visibility.mjs';
 import {CloudVolumes} from './cloud-volumes.mjs';
 import {snowCoverShader} from './snow-cover-shader.mjs?v=20261123f';
 import {advanceWindHistory} from './wind-history.mjs';
@@ -47,7 +48,7 @@ export class WeatherView{
  async prepare(){
   if(this.exporting||!this.current||this.loading||this.context().travelling)return;
   const id=this.prepareId=(this.prepareId||0)+1,region=this.regionKey;
-  this.preparing=true;this.monitoringTerrain=true;$('prepareStatus').hidden=false;$('retryBuffer').hidden=true;
+  this.preparing=true;this.monitoringTerrain=true;setLoadingVisible($('prepareStatus'),true);$('retryBuffer').hidden=true;
   const valid=()=>!this.exporting&&id===this.prepareId&&region===this.regionKey;
   const grids=this.prepared?.region===region?this.prepared.grids:new Map([[this.frame,this.current]]);this.prepared={region,grids};let done=false,error=null;
   // All times for this viewport, with imminent frames first. Never download a global forecast here.
@@ -61,7 +62,7 @@ export class WeatherView{
     if(done&&!this.detailStartedForPrepare?.has(id)){this.detailStartedForPrepare=new Set([id]);void this.refineWeather(grids,valid,this.region);}
     if(done)this.preparing=false;
     // Failures and counts belong in Loading details, not over the map.
-    $('prepareStatus').hidden=done&&(terrain.failed>0||terrain.ready===terrain.total);
+    setLoadingVisible($('prepareStatus'),!(done&&(terrain.failed>0||terrain.ready===terrain.total)));
     if(done&&!terrain.failed&&terrain.ready===terrain.total&&terrain.total)return;
     await new Promise(resolve=>setTimeout(resolve,300));
    }
@@ -97,7 +98,7 @@ export class WeatherView{
   const c=this.context(),r=c.region,key=[r.west,r.north,r.lonSpan,r.latSpan].map(v=>v.toFixed(3)).join('/');
   const terrain=c.preloadStatus(),changed=terrain.key!==this.terrainKey;this.terrainKey=terrain.key;
   if(!force&&key===this.regionKey){if(changed&&!this.monitoringTerrain&&!this.loading&&terrain.ready<terrain.total)this.prepare();return;}
-  this.data.setRegion?.(JSON.stringify(r));this.regionKey=key;this.region=r;this.prepareId=(this.prepareId||0)+1;this.preparing=true;this.prepared=null;$('prepareStatus').hidden=false;$('prepareStatus').textContent='Loading weather for this view… You can keep moving around.';
+  this.data.setRegion?.(JSON.stringify(r));this.regionKey=key;this.region=r;this.prepareId=(this.prepareId||0)+1;this.preparing=true;this.prepared=null;setLoadingVisible($('prepareStatus'),true);$('prepareStatus').textContent='Loading weather for this view… You can keep moving around.';
   // Keep the previous forecast moving in its own geographic footprint. Rebase
   // its geometry with the camera instead of applying old weather to new land.
   if(this.current){const b=c.bounds(this.current.region);if(!this.bounds||b.west!==this.bounds.west||b.north!==this.bounds.north||b.east!==this.bounds.east)this.build(true);}
