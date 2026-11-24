@@ -55,7 +55,8 @@ export class WeatherView{
   try{
    while(valid()){
     const terrain=this.context().preloadStatus();
-    $('prepareStatus').textContent=done?'Refining map detail…':'Loading forecast…';
+    const percent=terrain.total?Math.floor(100*terrain.ready/terrain.total):0;
+    $('prepareStatus').textContent=done?`Refining map detail · ${percent}%`:'Loading forecast…';
     if(error)throw error;
     if(done&&!this.detailStartedForPrepare?.has(id)){this.detailStartedForPrepare=new Set([id]);void this.refineWeather(grids,valid,this.region);}
     if(done)this.preparing=false;
