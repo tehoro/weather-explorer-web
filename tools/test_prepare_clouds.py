@@ -19,7 +19,7 @@ class Publication(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);self.fixture(root);c=Client();publish(c,'test','2026112312',{'steps':[3]},root)
    self.assertTrue(c.calls[-1]['Key'].endswith('manifest.json'));self.assertEqual(len(c.calls),7)
-   index=json.loads(c.calls[1]['Body']);self.assertEqual(len(index),162)
+   index=json.loads(next(x['Body'] for x in c.calls if x['Key'].endswith('/0/tiles.json')));self.assertEqual(len(index),162)
    self.assertEqual(sorted(index.values()),[[i*7,7] for i in range(162)])
  def test_failure_does_not_advertise(self):
   with tempfile.TemporaryDirectory() as d:

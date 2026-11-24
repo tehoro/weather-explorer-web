@@ -55,14 +55,17 @@ def prepare(run,meta,root):
 def publish(client,bucket,run,meta,root):
     prefix=PREFIX+run+'/cloud-v1/'
     # Pack each LOD/frame: hundreds of HTTP objects become three range-addressable packs.
-    for step in meta['steps']:
-        for lod in range(3):
-            folder=root/'tiles-v1'/run/f'{step:03}'/str(lod);entries={};pack=bytearray()
-            for p in sorted(folder.glob('*.bin.gz')):
-                raw=p.read_bytes();entries[p.name]=[len(pack),len(raw)];pack.extend(raw)
-            if len(entries)!=162:raise ValueError('Incomplete cloud frame')
-            for name,body in [('tiles.bin',bytes(pack)),('tiles.json',json.dumps(entries).encode())]:
-                client.put_object(Bucket=bucket,Key=prefix+f'{step:03}/{lod}/'+name,Body=body,ContentType='application/json' if name.endswith('json') else 'application/octet-stream',CacheControl='public, max-age=31536000, immutable')
+    def upload(pair):
+        step,lod=pair
+        folder=root/'tiles-v1'/run/f'{step:03}'/str(lod);entries={};pack=bytearray()
+        for p in sorted(folder.glob('*.bin.gz')):
+            raw=p.read_bytes();entries[p.name]=[len(pack),len(raw)];pack.extend(raw)
+        if len(entries)!=162:raise ValueError('Incomplete cloud frame')
+        for name,body in [('tiles.bin',bytes(pack)),('tiles.json',json.dumps(entries).encode())]:
+            client.put_object(Bucket=bucket,Key=prefix+f'{step:03}/{lod}/'+name,Body=body,ContentType='application/json' if name.endswith('json') else 'application/octet-stream',CacheControl='public, max-age=31536000, immutable')
+    # Bounded uploads avoid several minutes of serial object-storage latency.
+    with cf.ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(upload,[(step,lod) for step in meta['steps'] for lod in range(3)]))
     latest=read_json(client,bucket,PREFIX+'latest.json')
     if run not in {latest['run'],latest.get('previous_run')}:raise RuntimeError('Run expired during cloud preparation; not publishing its manifest')
     manifest={'version':VERSION,'run':run,'steps':meta['steps'],'levels':[.5,1,2],'vertical':128,'topKm':20,'channels':4,'packed':True}
