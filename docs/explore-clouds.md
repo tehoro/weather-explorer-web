@@ -53,3 +53,21 @@ Checks: cloud overlap/coverage and unresolved layers, stability guidance, tile
 shape/decompression, packed offsets, manifest-last publication and failed uploads;
 local packaged viewer with real current-run frames and intentionally unavailable
 cloud data. Actual Actions duration and mobile performance require measurement.
+
+## First published run measurements
+
+The 2026-11-23 12 UTC run produced 760,219,426 compressed bytes for 28 times
+and all three levels. Its first Actions build took about 15½ minutes, including
+about 5½ minutes of serial upload. Subsequent code uses six bounded upload tasks;
+its end-to-end timing has not yet been measured.
+
+For times +33/+36, two NZ-area tiles (`8-6`, `9-6`) plus pack indexes require
+about 75 KB at 2°, 190 KB at 1°, or 470 KB at 0.5°. Across the whole timeline
+those are about 1.1, 2.8 and 6.7 MB respectively, approximately 10.5 MB if all
+levels are visited. Exact amounts vary with weather, extent and tile boundaries.
+A whole-world pair at the coarsest level is about 4.8 MB; its full timeline is
+about 67 MB. The opening globe does not currently request these volumes.
+These sizes exclude terrain and ordinary forecast data. The finest source cloud
+field is 0.5°; close-range procedural texture is illustrative, not added forecast
+resolution. The renderer bounds its decoded tile cache to 48 MiB and builds two
+65×128×65 RGBA textures for the active view.
