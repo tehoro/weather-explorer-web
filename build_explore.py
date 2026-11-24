@@ -41,7 +41,12 @@ def build(site, relay):
     scripts=sorted(p for p in dest.iterdir() if p.suffix in {'.html','.mjs','.js','.css'})
     version=hashlib.sha256(b''.join(p.read_bytes() for p in scripts)).hexdigest()[:12]
     for p in scripts:
-        p.write_text(re.sub(r'\?v=[A-Za-z0-9_-]+', '?v='+version, p.read_text()))
+        s=re.sub(r'\?v=[A-Za-z0-9_-]+', '?v='+version, p.read_text())
+        # Version every local import and worker, including newly added modules.
+        # Mixing cached controls with new renderers can otherwise break saved views.
+        s=re.sub(r"(['\"])(\./[^'\"\s?]+\.(?:mjs|js|css))(?:\?v=[A-Za-z0-9_-]+)?\1",
+                 lambda m:m[1]+m[2]+'?v='+version+m[1],s)
+        p.write_text(s)
     data=dest/'data';data.mkdir(exist_ok=True)
     archive=Path('/tmp/weather-explorer-cities500.zip')
     if not archive.exists():
