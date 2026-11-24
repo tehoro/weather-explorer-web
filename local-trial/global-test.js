@@ -48,7 +48,7 @@ function liveFrame(now){const dt=Math.min(.1,(now-lastRender)/1000);lastRender=n
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
  if(Math.abs(camera.near-near)>near*.01){camera.near=near;camera.updateProjectionMatrix();}
- globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera);else renderer.render(scene,camera);recordFrame(now);}
+ globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera,exporting||!!recordingResolution);else renderer.render(scene,camera);recordFrame(now);}
 renderer.setAnimationLoop(liveFrame);
 const cos=()=>Math.max(.015,Math.cos(anchor.lat*Math.PI/180));
 function centre(){return {lat:Math.max(-89.85,Math.min(89.85,anchor.lat-controls.target.z/111.2)),lon:wrap(anchor.lon+controls.target.x/(111.2*cos()))};}
@@ -453,7 +453,7 @@ setupSmoothExport(renderer.domElement,{
     w.blend=w.timeTransition?f-lo:1;
     tickOrbit(base+seconds*1000);w.tick(dt);await w.volumeClouds?.ensure(cloudSignal);placeLabels.tick(dt);updatePointMarker();placeTemperatures.tick(dt);
     const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);camera.near=near;camera.updateProjectionMatrix();
-    globalRelief.update(anchor,controls.target,cameraFootprint());prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera);else renderer.render(scene,camera);
+    globalRelief.update(anchor,controls.target,cameraFootprint());prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera,exporting||!!recordingResolution);else renderer.render(scene,camera);
    },
    async restore(){
     // No asynchronous export request may replace restored weather after cancellation.

@@ -3,6 +3,7 @@ import {forecastUrl} from './forecast-host.mjs';
 import {chooseLod} from './cloud-tile-grid.mjs';
 import {detailNoise} from './cloud-detail.mjs';
 import {vertex,fragment} from './cloud-volume-shader.mjs';
+import {composite} from './cloud-composite.mjs';
 const TOP=20,G=65,V=128;
 const texture=raw=>{const t=new THREE.Data3DTexture(new Uint8Array(raw),G,V,G);t.format=THREE.RGBAFormat;t.minFilter=t.magFilter=THREE.LinearFilter;t.unpackAlignment=1;t.needsUpdate=true;return t;};
 export class CloudVolumes{
@@ -21,7 +22,7 @@ export class CloudVolumes{
   this.material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:this.u,vertexShader:vertex,fragmentShader:fragment,transparent:true,depthWrite:false,depthTest:false,side:THREE.BackSide});
   this.material.userData.logDepthReady=true;
   this.mesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),this.material);this.mesh.renderOrder=2;this.mesh.frustumCulled=false;weather.group.add(this.mesh);
-  this.mesh.onBeforeRender=(renderer,scene,camera)=>{this.mesh.updateMatrixWorld();this.u.camLocal.value.copy(camera.position);this.mesh.worldToLocal(this.u.camLocal.value);this.u.cameraToLocal.value.copy(this.mesh.matrixWorld).invert().multiply(camera.matrixWorld);this.u.inverseProjection.value.copy(camera.projectionMatrixInverse);this.u.cameraFar.value=camera.far;this.u.logarithmicDepth.value=+renderer.capabilities.logarithmicDepthBuffer;renderer.getDrawingBufferSize(this.u.viewport.value);};
+  this.mesh.onBeforeRender=(renderer,scene,camera)=>{this.mesh.updateMatrixWorld();this.u.camLocal.value.copy(camera.position);this.mesh.worldToLocal(this.u.camLocal.value);this.u.cameraToLocal.value.copy(this.mesh.matrixWorld).invert().multiply(camera.matrixWorld);this.u.inverseProjection.value.copy(camera.projectionMatrixInverse);this.u.cameraFar.value=camera.far;this.u.logarithmicDepth.value=+renderer.capabilities.logarithmicDepthBuffer;const target=renderer.getRenderTarget();if(target)this.u.viewport.value.set(target.width,target.height);else renderer.getDrawingBufferSize(this.u.viewport.value);};
   const status=document.createElement('p');status.id='cloudStatus';status.innerHTML='<small>Standard cloud layers.</small>';document.getElementById('cloudOpacity').after(status);this.status=status;
  }
  setStatus(text){if(this.status.textContent!==text)this.status.textContent=text;}
@@ -61,12 +62,57 @@ export class CloudVolumes{
   while(this.mesh.visible&&!this.pairs.has(this.desiredKey)&&this.pending){signal?.throwIfAborted();await new Promise(resolve=>setTimeout(resolve,30));this.tick();}
   signal?.throwIfAborted();this.tick();
  }
- render(renderer,scene,camera){
+ render(renderer,scene,camera,fullQuality=this.weather.exporting){
   if(!this.mesh.visible||!this.weather.group.visible){renderer.render(scene,camera);return;}
-  const size=renderer.getDrawingBufferSize(new THREE.Vector2());if(this.depth.width!==size.x||this.depth.height!==size.y)this.depth.setSize(size.x,size.y);
-  const terrain=new Set(this.weather.context().terrainMeshes()),hidden=[];
-  scene.traverse(o=>{if(o.visible&&(o.isMesh||o.isLine||o.isPoints||o.isSprite)&&!terrain.has(o)){hidden.push(o);o.visible=false;}});
-  const target=renderer.getRenderTarget();try{renderer.setRenderTarget(this.depth);renderer.render(scene,camera);}finally{renderer.setRenderTarget(target);for(const o of hidden)o.visible=true;}
-  renderer.render(scene,camera);
+  const size=renderer.getDrawingBufferSize(this.renderSize??=new THREE.Vector2());
+  camera.updateMatrixWorld();scene.updateMatrixWorld();
+  const context=this.weather.context(),terrain=context.terrainMeshes();
+  // Geometry, projection and viewport determine depth. Forecast colours do not.
+  const depthKey=[size.x,size.y,context.terrainRevision,...camera.matrixWorld.elements,...camera.projectionMatrix.elements,
+   ...terrain.flatMap(o=>[o.id,o.visible,...o.matrixWorld.elements]),this.mesh.scale.y].join('/');
+  const target=renderer.getRenderTarget(),hidden=[];
+  const isolate=keep=>scene.traverse(o=>{if(o.visible&&(o.isMesh||o.isLine||o.isPoints||o.isSprite)&&!keep.has(o)){hidden.push(o);o.visible=false;}});
+  const restore=()=>{for(const o of hidden)o.visible=true;hidden.length=0;};
+  if(depthKey!==this.depthKey){
+   if(this.depth.width!==size.x||this.depth.height!==size.y)this.depth.setSize(size.x,size.y);
+   // Detailed tiles have baked positions. Skip their lighting, snow and colour
+   // shading for depth; keep custom/displaced materials on their original path.
+   const swapped=[];this.depthMaterials??=new Map();
+   const depthTerrain=terrain.filter(o=>Array.isArray(o.material)||o.material.depthWrite);
+   for(const o of depthTerrain){const m=o.material;
+    if(m.isMeshStandardMaterial&&!m.displacementMap&&!m.alphaTest){
+     let d=this.depthMaterials.get(m.side);if(!d){d=new THREE.MeshDepthMaterial({side:m.side,colorWrite:false});this.depthMaterials.set(m.side,d);}
+     swapped.push([o,m]);o.material=d;
+    }
+   }
+   isolate(new Set(depthTerrain));
+   try{renderer.setRenderTarget(this.depth);renderer.render(scene,camera);this.depthKey=depthKey;}
+   finally{renderer.setRenderTarget(target);restore();for(const [o,m] of swapped)o.material=m;}
+  }
+  // Export always uses the original full-resolution, 80-sample path.
+  if(fullQuality){renderer.render(scene,camera);return;}
+  if(!this.cloudTarget){
+   this.cloudTarget=new THREE.WebGLRenderTarget(1,1,{depthBuffer:false,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter});
+   this.compositeMaterial=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:{...this.u,cloudImage:{value:this.cloudTarget.texture},cloudSize:{value:new THREE.Vector2()}},
+    vertexShader:vertex,fragmentShader:fragment.replace('void main(){if(opacity','void traceCloud(){if(opacity')+composite,
+    transparent:true,depthWrite:false,depthTest:false,side:THREE.BackSide});
+   this.compositeMaterial.userData.logDepthReady=true;
+  }
+  const width=Math.max(1,Math.ceil(size.x/2)),height=Math.max(1,Math.ceil(size.y/2));
+  const cloudKey=depthKey+'/'+[this.readyKey,this.u.mixTime.value,this.u.standardBlend.value,this.u.volumeReady.value,this.u.opacity.value,
+   ...this.u.enabledBands.value.toArray(),this.u.detailEnabled.value,this.u.adaptiveOpacity.value,this.groundKey,
+   this.weather.displayFrame??this.weather.frame,this.u.standardA.value?.uuid,this.u.standardB.value?.uuid,this.u.tint.value,this.u.fixedMode.value,...this.u.weatherUV.value.toArray(),...this.mesh.matrixWorld.elements].join('/');
+  if(cloudKey!==this.cloudKey){
+   if(this.cloudTarget.width!==width||this.cloudTarget.height!==height)this.cloudTarget.setSize(width,height);
+   this.compositeMaterial.uniforms.cloudSize.value.set(width,height);
+   const background=scene.background,alpha=renderer.getClearAlpha(),colour=renderer.getClearColor(new THREE.Color()).clone();
+   isolate(new Set([this.mesh]));scene.background=null;
+   // Store straight colour/alpha; the normal scene composite blends it once.
+   const blending=this.material.blending;this.material.blending=THREE.NoBlending;
+   try{renderer.setClearColor(0,0);renderer.setRenderTarget(this.cloudTarget);renderer.render(scene,camera);this.cloudKey=cloudKey;}
+   finally{this.material.blending=blending;scene.background=background;renderer.setClearColor(colour,alpha);renderer.setRenderTarget(target);restore();}
+  }
+  this.mesh.material=this.compositeMaterial;
+  try{renderer.render(scene,camera);}finally{this.mesh.material=this.material;}
  }
 }

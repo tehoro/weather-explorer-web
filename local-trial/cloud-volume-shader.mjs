@@ -5,20 +5,19 @@ uniform vec3 camLocal;in vec3 localPosition;out vec4 fragColor;
 vec2 hitBox(vec3 o,vec3 d){vec3 a=(vec3(-.5)-o)/d,b=(vec3(.5)-o)/d;vec3 lo=min(a,b),hi=max(a,b);return vec2(max(max(lo.x,lo.y),lo.z),min(min(hi.x,hi.y),hi.z));}
 float floorAt(vec2 uv){return texture(groundMap,(uv*(groundSize-1.)+.5)/groundSize).r;}
 float band(float z,float lo,float hi){return clamp(min((z-lo)/.2,(hi-z)/.2),0.,1.);}
-vec2 cloudAt(vec3 uv){
- if(any(lessThan(uv,vec3(0.)))||any(greaterThan(uv,vec3(1.))))return vec2(0.);
+vec3 cloudAt(vec3 uv){
+ if(any(lessThan(uv,vec3(0.)))||any(greaterThan(uv,vec3(1.))))return vec3(0.);
  float edge=smoothstep(0.,.025,min(min(uv.x,1.-uv.x),min(uv.z,1.-uv.z)));
- if(volumeReady<.5){vec2 st=clamp(weatherUV.xy+uv.xz*weatherUV.zw,0.,1.);vec3 c=mix(texture(standardA,st).rgb,texture(standardB,st).rgb,standardBlend)*enabledBands;float z=uv.y*top-floorAt(uv.xz);return vec2(max(max(c.r*band(z,.3,1.8),c.g*band(z,3.,5.4)),c.b*band(z,7.,10.4))*edge,0.);}
+ if(volumeReady<.5){vec2 st=clamp(weatherUV.xy+uv.xz*weatherUV.zw,0.,1.);vec3 c=mix(texture(standardA,st).rgb,texture(standardB,st).rgb,standardBlend)*enabledBands;float z=uv.y*top-floorAt(uv.xz);return vec3(max(max(c.r*band(z,.3,1.8),c.g*band(z,3.,5.4)),c.b*band(z,7.,10.4))*edge,0.,.3);}
  vec3 tc=(uv*(vec3(65.,128.,65.)-1.)+.5)/vec3(65.,128.,65.);vec4 d=mix(texture(texA,tc),texture(texB,tc),mixTime);
  float z=uv.y*top;float enabled=z<3.?enabledBands.x:z<7.?enabledBands.y:enabledBands.z;
- return vec2(d.r*edge*enabled,d.b);
+ return vec3(d.r*edge*enabled,d.b,d.a);
 }
-float roundedDetail(vec3 uv){
+float roundedDetail(vec3 uv,float regime){
  vec3 km=vec3((uv.x-.5)*areaSize.x,uv.y*top,(uv.z-.5)*areaSize.y);
  float distanceKm=length((uv-.5-camLocal)*vec3(areaSize.x,top,areaSize.y));
  float near=1.-smoothstep(25.,180.,distanceKm);
  if(near<.001||detailEnabled<.5)return 1.;
- vec3 tc=(uv*(vec3(65.,128.,65.)-1.)+.5)/vec3(65.,128.,65.);float regime=volumeReady>.5?mix(texture(texA,tc).a,texture(texB,tc).a,mixTime):.3;
  float strength=near*regime*(1.-smoothstep(7.,10.,km.y));
  if(strength<.01)return 1.;
  // Broad, stationary distortion breaks the repeated tile without extra fetches.
@@ -37,7 +36,7 @@ vec3 localGround=(cameraToLocal*viewPoint).xyz;bounds.y=min(bounds.y,dot(localGr
 if(bounds.x>=bounds.y)discard;
 float dt=(bounds.y-bounds.x)/80.;float jitter=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453);vec3 p=camLocal+dir*(bounds.x+dt*jitter);
 float distanceKm=length(dir*vec3(areaSize.x*.12,top,areaSize.y*.12))*dt;vec3 colour=vec3(0.);float alpha=0.;
-for(int i=0;i<80;i++){vec3 uv=p+.5;vec2 c=cloudAt(uv);if(c.x>.002){float a=1.-exp(-c.x*roundedDetail(uv)*distanceKm*1.5);vec3 light=vec3(-.7/areaSize.x,1./top,-.3/areaSize.y);float shade=exp(-(cloudAt(uv+light*.3).x+cloudAt(uv+light*.9).x)*1.5);vec3 lit=mix(vec3(.38,.45,.54),vec3(.96,.98,1.),shade);lit=mix(lit,vec3(1.,.52,.73),tint*c.y*(1.-fixedMode));colour+=(1.-alpha)*a*lit;alpha+=(1.-alpha)*a;if(alpha>.98)break;}p+=dir*dt;}
+for(int i=0;i<80;i++){vec3 uv=p+.5;vec3 c=cloudAt(uv);if(c.x>.002){float a=1.-exp(-c.x*roundedDetail(uv,c.z)*distanceKm*1.5);vec3 light=vec3(-.7/areaSize.x,1./top,-.3/areaSize.y);float shade=exp(-(cloudAt(uv+light*.3).x+cloudAt(uv+light*.9).x)*1.5);vec3 lit=mix(vec3(.38,.45,.54),vec3(.96,.98,1.),shade);lit=mix(lit,vec3(1.,.52,.73),tint*c.y*(1.-fixedMode));colour+=(1.-alpha)*a*lit;alpha+=(1.-alpha)*a;if(alpha>.98)break;}p+=dir*dt;}
 if(alpha<.002)discard;vec3 physicalDir=normalize(dir*vec3(areaSize.x,top,areaSize.y));
 float clearance=(camLocal.y+.5)*top-floorAt(clamp(camLocal.xz+.5,0.,1.));
 float beneath=max(smoothstep(-.02,.18,physicalDir.y),(1.-smoothstep(.1,1.5,clearance))*(1.-smoothstep(.02,.2,-physicalDir.y)));

@@ -77,3 +77,31 @@ until the next pair is ready, rather than flashing the standard clouds. A failed
 request still enables the standard fallback for that unavailable interval.
 `node local-trial/test-cloud-handover.mjs` exercises delayed and failed requests,
 forward/backward boundaries, cache limits and isolation between runs.
+
+## Live rendering performance (24 November 2026)
+
+Live clouds are traced at half the drawing-buffer width and height, retaining
+80 steps and the existing shading. A depth-weighted reconstruction composites
+straight-alpha cloud colour into the normal scene, before precipitation and
+wind trails. At depth discontinuities with no suitable neighbouring sample it
+traces the individual pixel at full resolution, preserving mountain edges.
+Terrain and labels remain full resolution; opacity and below-cloud behaviour
+use the same uniforms in both paths. The standard three-band fallback uses the
+same renderer.
+
+Terrain depth is cached until camera/projection, viewport, terrain revision,
+mesh transforms/visibility or height exaggeration changes. Baked detailed tiles
+use a depth-only material; custom/displaced materials retain their original
+vertex shader. Objects that do not write depth are omitted from this pass.
+The cloud image is also reused while camera, terrain and cloud state are unchanged,
+so wind and rain can animate without retracing stationary clouds. Forecast changes,
+opacity, band selection and newly loaded cloud pairs invalidate the image.
+Density, approximation flags and convective weights share each RGBA texture read.
+
+Both live recording and smooth export explicitly select the original full-resolution
+80-step ray marcher. They do not upscale the lower-resolution preview. The cheaper
+terrain depth pass and mathematically identical texture-read reuse still apply.
+
+`node local-trial/test-cloud-rendering.mjs` checks cache invalidation, output sizes,
+full-quality export and renderer-state restoration after errors. Existing cloud
+handover tests continue to cover three-hour boundaries and unavailable tiles.
