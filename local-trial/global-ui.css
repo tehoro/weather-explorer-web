@@ -107,3 +107,12 @@ dialog#helpDialog{width:min(650px,calc(100vw - 36px));font-size:14px}#helpDialog
 
 #pointMarker::after{content:"";position:absolute;inset:-8px;border-radius:50%}
 #pointMarker:focus-visible{outline:2px solid #9dc9ed;outline-offset:5px}
+
+/* Keep loading progress out of the scene, beside the playback controls. */
+#prepareStatus{position:fixed;right:16px;bottom:16px;max-width:min(310px,calc((100vw - 680px)/2 - 32px));padding:7px 9px;font-size:12px;line-height:1.3;z-index:8;pointer-events:none;overflow-wrap:anywhere}
+@media(max-width:1150px){
+ #prepareStatus{bottom:16px;max-width:calc(100% - 32px);padding:4px 7px;font-size:11px}
+ body:has(#prepareStatus:not([hidden])):not(.clean) #playback{bottom:44px}
+ body:has(#prepareStatus:not([hidden])):not(.clean) #timeline{bottom:89px}
+}
+@media(max-width:700px){body:has(#prepareStatus:not([hidden])):not(.clean) #timeline{bottom:85px}}

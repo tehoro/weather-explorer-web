@@ -34,7 +34,7 @@ export function setupUI(){
   el.addEventListener('change',()=>{try{localStorage.setItem('local-'+id,el.value);}catch{}});
  }
  const refresh=document.createElement('p');refresh.id='runRefreshStatus';refresh.setAttribute('role','status');refresh.hidden=true;weather.prepend(refresh);
- const loading=document.createElement('div');loading.id='prepareStatus';loading.className='glass';loading.setAttribute('role','status');loading.hidden=true;loading.style.cssText='position:fixed;left:20px;top:90px;max-width:340px;padding:12px;z-index:8;pointer-events:none';document.body.append(loading);
+ const loading=document.createElement('div');loading.id='prepareStatus';loading.className='glass';loading.setAttribute('role','status');loading.hidden=true;document.body.append(loading);
  const retryBuffer=document.createElement('button');retryBuffer.id='retryBuffer';retryBuffer.textContent='Retry loading this view';retryBuffer.hidden=true;weather.append(retryBuffer);
  const location=document.createElement('details');location.open=true;location.innerHTML='<summary>Location</summary>';
  const weatherDetail=document.createElement('p');weatherDetail.id='weatherDetailStatus';weatherDetail.textContent='Preparing global weather preview…';$('weatherControls').append(weatherDetail);
