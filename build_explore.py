@@ -1,4 +1,4 @@
-"""Package the unlisted Explore preview and shared globe assets for static Pages."""
+"""Package Explore and shared globe assets for static Pages."""
 import argparse
 import json
 import re
@@ -34,10 +34,10 @@ def build(site, relay):
         if p.name=='globe-clouds.mjs':s=s.replace("fetch('data/globe/meta.json')","fetch('../data/globe/meta.json')").replace('`data/${this.meta.path}', '`../data/${this.meta.path}')
         if p.name=='shared-units.mjs':s='// Display units already share the Highlights origin.\nexport function syncUnits(){}\n'
         if p.name=='terrain-raster.mjs':s=s.replace('this.base+`/remote/${kind}/${name}.tif`',json.dumps(relay.rstrip('/'))+'+`/${kind}/${name}.tif`')
-        if p.name.endswith('.html'):s=s.replace('<head>','<head><meta name="robots" content="noindex,nofollow">').replace('Private trial','Preview')
+        if p.name.endswith('.html'):s=s.replace('<span class="private">Private trial</span>','').replace('Explore preview','Explore').replace('EXPLORE PREVIEW','EXPLORE')
         p.write_text(s)
     (dest/'forecast-host.json').write_text(json.dumps({'baseUrl':'https://weatherdata.neilgordon.me/global-data'}))
-    # One content fingerprint invalidates cached imports after any preview change.
+    # One content fingerprint invalidates cached imports after any Explore change.
     scripts=sorted(p for p in dest.iterdir() if p.suffix in {'.html','.mjs','.js','.css'})
     version=hashlib.sha256(b''.join(p.read_bytes() for p in scripts)).hexdigest()[:12]
     for p in scripts:
@@ -58,7 +58,7 @@ def build(site, relay):
     if not (data/'search').exists():search(archive,data/'search')
     catalogue=data/'tileList.txt'
     if not catalogue.exists():subprocess.run(['curl','-fL','--retry','3','--max-time','60','https://copernicus-dem-90m.s3.amazonaws.com/tileList.txt','-o',str(catalogue)],check=True)
-    print('Packaged unlisted Explore preview at /explore/')
+    print('Packaged Explore at /explore/')
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--site',type=Path,default=ROOT/'site');p.add_argument('--relay',required=True);a=p.parse_args();build(a.site,a.relay)

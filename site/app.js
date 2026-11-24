@@ -2193,9 +2193,10 @@ function renderList() {
   const main = S.entries.filter((e) => !e.requested && !e.past), req = S.entries.filter((e) => e.requested);
   const past = S.entries.filter((e) => e.past);
   const shared = S.shared && !S.entries.includes(S.shared) ? [S.shared] : [];
-  const tabs = past.length ? `<div class="list-tabs" role="tablist">
+  const tabs = `<div class="list-tabs" role="tablist" aria-label="Weather Explorer views">
       <button role="tab" data-tab="now" aria-selected="${S.tab !== "past"}">Highlights</button>
-      <button role="tab" data-tab="past" aria-selected="${S.tab === "past"}">Past events</button></div>` : "";
+      <button role="tab" data-tab="past" aria-selected="${S.tab === "past"}">Past events</button>
+      ${OFFLINE ? "" : `<button role="tab" data-tab="explore" aria-selected="false">Explore</button>`}</div>`;
   el.innerHTML = tabs + (S.tab === "past" && past.length ? pastList(past)
     : (shared.length ? `<h2>Shared with you</h2>${shared.map(row).join("")}` : "")
       + `<h2>Highlights</h2>${main.map(row).join("")}` + (req.length ? `<h2>Requested</h2>${req.map(row).join("")}` : ""));
@@ -2209,6 +2210,7 @@ function renderList() {
   }
   for (const b of el.querySelectorAll(".list-tabs button")) {
     b.onclick = () => {
+      if (b.dataset.tab === "explore") { location.href = "explore/"; return; }
       if (b.dataset.tab === "past") { if (S.overview !== "past") location.hash = "past"; return; }
       if (S.overview !== "now") location.hash = "now";
     };

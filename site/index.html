@@ -139,10 +139,21 @@
       for interesting weather and picks about a dozen highlights. At that time the newest forecast is the 12 UTC run,
       which goes out 15 days, and "chance of …" maps come from the ensemble of the same run. The model writes a short
       explanation for each highlight and sets up one or more animated scenes from the forecast. The new highlights
-      appear here within about an hour. People using the companion iPhone app can also request an event; those appear
+      appear after research and processing finish; the update time is shown on the page. People using the companion iPhone app can also request an event; those appear
       under <b>Requested</b> for two days.</p>
     <p>This is model guidance, chosen and written automatically, not an official forecast or warning. For those, see
       your National Meteorological Service.</p>
+
+    <h3>Three ways to explore</h3>
+    <p><b>Highlights</b> presents current weather stories. <b>Past events</b> replays historical weather.
+      <b>Explore</b> opens <a href="explore/">the Explore globe</a> at /explore/, where you can choose any location
+      and view the latest available IFS forecast over a three-dimensional landscape. Use the tabs to switch modes.
+      Explore has its own Help on the globe and in the landscape view.</p>
+    <p>In Explore, search for a place or click a named location to fly there, starting at Now.
+      Terrain becomes more detailed as it loads. Play the forecast, orbit the view, inspect point forecasts and
+      meteograms, share a view or export a video. Cloud heights and texture are inferred from model fields;
+      the detailed landscape does not downscale the forecast. Display units are shared between modes;
+      Explore remembers its own time-zone choice.</p>
 
     <h3>Choosing what to watch</h3>
     <ul>
@@ -181,7 +192,7 @@
       <li>Drag to pan; scroll, pinch or use <b>+</b> and <b>−</b> to zoom.</li>
       <li><b>Target</b> button: back to the whole scene.</li>
       <li><b>Full screen</b> button: the map and timeline fill the screen (Esc or the same button to return).</li>
-      <li><b>Layers</b> button: dark, light, satellite or relief background (satellite imagery: NASA Blue Marble).</li>
+      <li><b>Layers</b> button: dark, light, satellite, relief or Explore landscape background (satellite imagery: NASA Blue Marble).</li>
       <li><b>Explore landscape</b> uses the same terrain shading and land-cover colours as Explore. Available forecast snow and sea ice nearest the time you opened the page stay fixed during playback; they are not the cover at the forecast time. Past events use the landscape without current snow/ice. If unavailable, the Relief background remains visible.</li>
       <li><b>Relief</b> shows the lie of the land, lit from the north-west: greens for low ground, browns for hills and
         mountains, pale grey and white for the highest ground and the ice sheets of Greenland and Antarctica, and darker
@@ -241,8 +252,7 @@
 
     <h3>Data</h3>
     <p>Forecasts: ECMWF IFS (HRES and ENS) from ECMWF Open Data, © ECMWF, CC BY 4.0, regridded and converted. Map outlines:
-      Natural Earth. Relief: NOAA ETOPO 2022. Satellite imagery: NASA Blue Marble via GIBS. New highlights appear at
-      about 22 UTC.</p>
+      Natural Earth. Relief: NOAA ETOPO 2022. Satellite imagery: NASA Blue Marble via GIBS. Highlights are researched daily from about 22 UTC and published after processing.</p>
     <p>Globe terrain: NOAA ETOPO1, public domain, sampled at 5 arc minutes. Land cover:
       © ESA WorldCover project 2021, <a href="https://esa-worldcover.org/en/data-access" target="_blank" rel="noopener">CC BY 4.0</a>.
       Contains modified Copernicus Sentinel data (2021), processed by ESA WorldCover consortium.
@@ -252,8 +262,8 @@
 
     <h3>About</h3>
     <p>A prototype developed by Neil Gordon as an ECMWF Visiting Scientist, with ECMWF's support; not an official ECMWF
-      product or service. The code was written by Claude Opus 5.5 (Anthropic), provided through ECMWF's enterprise
-      account, at Neil Gordon's direction, and is open source under the MIT Licence:
+      product or service. The code was developed with Claude (Anthropic) and OpenAI Codex at Neil Gordon's direction,
+      and is open source under the MIT Licence:
       <a href="https://github.com/tehoro/weather-explorer-web" target="_blank" rel="noopener">web viewer</a> and
       <a href="https://github.com/tehoro/weather-explorer-backend" target="_blank" rel="noopener">backend</a>.</p>
   </div>

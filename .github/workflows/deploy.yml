@@ -78,7 +78,7 @@ jobs:
           live=$(curl -fsS https://weatherexplorer.neilgordon.me/data/history/index.json 2>/dev/null | sha256sum | cut -c1-64)
           if [ -n "$here" ] && [ "$here" != "$live" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
 
-      - name: Package unlisted Explore and shared globe
+      - name: Package Explore and shared globe
         run: uv run --frozen build_explore.py --relay "${{ vars.EXPLORE_TERRAIN_RELAY }}"
 
       - name: Stamp the release into file names
@@ -195,7 +195,7 @@ jobs:
           rm -rf site/data/history
           if [ -d history ]; then mkdir -p site/data && cp -r history site/data/history; fi
 
-      - name: Package unlisted Explore and shared globe
+      - name: Package Explore and shared globe
         run: uv run --frozen build_explore.py --relay "${{ vars.EXPLORE_TERRAIN_RELAY }}"
 
       - name: Stamp the release into file names
