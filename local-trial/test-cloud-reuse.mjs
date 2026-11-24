@@ -17,11 +17,11 @@ const document={createElement:()=>({})},$=()=>element;
 let bounds={west:0,east:10,north:0,south:10};
 const context={bounds:()=>({...bounds}),ground:()=>0,terrainRevision:1,cloudScale:1};
 const owner={context:()=>context,current:{region:{},n:3},previous:{},meshes:[],group:{add(){}},texture:()=>({dispose(){}}),attachSurfaces(){},spawn:()=>({}),spawnRain:()=>({}),wind:{},drops:{},particles:[{}],data:{meta:{}},options(){}};
-const build=new Function('THREE','$','document','typeLegend','IsobarLines','N','return ({'+method+'}).build;')(THREE,$,document,()=>'',class{},1);
-build.call(owner);const mesh=owner.clouds[0],uniform=mesh.material.uniforms.cloudB,texture=uniform.value;
-assert.equal(geometries,9);assert.equal(materials,9);
-build.call(owner);assert.equal(owner.clouds[0],mesh);assert.equal(geometries,9);assert.equal(materials,9);assert.equal(disposed,0);
-assert.equal(mesh.material.uniforms.cloudB,uniform);assert.notEqual(uniform.value,texture);
+let volumes=0,bindings=0;
+class CloudVolumes{constructor(){volumes++;}bind(){bindings++;}}
+const build=new Function('THREE','$','document','typeLegend','IsobarLines','N','CloudVolumes','return ({'+method+'}).build;')(THREE,$,document,()=>'',class{},1,CloudVolumes);
+build.call(owner);const cloud=owner.volumeClouds,texture=owner.textures[0];
+build.call(owner);assert.equal(owner.volumeClouds,cloud);assert.equal(volumes,1);assert.equal(bindings,2);assert.notEqual(owner.textures[0],texture);
 bounds={west:0,east:20,north:0,south:20};build.call(owner);
-assert.equal(geometries,18);assert.equal(disposed,9);assert.equal(materials,9);assert.equal(owner.clouds[0],mesh);
-console.log('Forecast changes reuse cloud meshes/materials; moving changes only geometry; texture uniforms stay live.');
+assert.equal(owner.volumeClouds,cloud);assert.equal(volumes,1);assert.equal(bindings,3);
+console.log('Forecast and region changes reuse the volume renderer and rebind weather textures.');

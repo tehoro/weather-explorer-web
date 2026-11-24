@@ -1,0 +1,33 @@
+name: Prepare Explore clouds
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Prepare Explore forecast data']
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '23 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: explore-cloud-publisher
+  cancel-in-progress: false
+jobs:
+  clouds:
+    if: vars.EXPLORE_R2_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Check cloud reconstruction and publication
+        run: |
+          uv run --frozen --with boto3 python -m unittest discover -s tools -p test_prepare_clouds.py
+          uv run --frozen python -m unittest discover -s tools/clouds -p "test_*.py"
+      - name: Prepare optional cloud volumes and publish manifest last
+        run: uv run --frozen --with boto3 tools/prepare_clouds_r2.py

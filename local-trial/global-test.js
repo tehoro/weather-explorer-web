@@ -48,7 +48,7 @@ function liveFrame(now){const dt=Math.min(.1,(now-lastRender)/1000);lastRender=n
  // clouds and the sea round to the same depth, producing horizontal bands.
  const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);
  if(Math.abs(camera.near-near)>near*.01){camera.near=near;camera.updateProjectionMatrix();}
- globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);renderer.render(scene,camera);recordFrame(now);}
+ globalRelief.update(anchor,controls.target,cameraFootprint());installations.shift()?.();prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera);else renderer.render(scene,camera);recordFrame(now);}
 renderer.setAnimationLoop(liveFrame);
 const cos=()=>Math.max(.015,Math.cos(anchor.lat*Math.PI/180));
 function centre(){return {lat:Math.max(-89.85,Math.min(89.85,anchor.lat-controls.target.z/111.2)),lon:wrap(anchor.lon+controls.target.x/(111.2*cos()))};}
@@ -205,7 +205,7 @@ function weatherContext(){
  const east=Math.min(west+359,Math.ceil((c.lon+Math.min(2400,Math.max(...xs))/scale)*4)/4),south=Math.max(-90,Math.floor((c.lat-Math.min(2400,Math.max(...zs))/111.2)*4)/4);
  const coarseSightGrid={left:-180*scale-anchor.lon*scale,right:180*scale-anchor.lon*scale,top:(anchor.lat-90)*111.2,bottom:(anchor.lat+90)*111.2,stepX:scale/12,stepZ:111.2/12,
    height:(x,z)=>globalRelief.height(anchor.lat-z/111.2,anchor.lon+x/scale)};
-  return {travelling:!!flight,cloudScale:Number($("cloudScale").value),focusedPlace:zoomFocus,markedPlace:zoomFocus||pointForecast?.location,orbiting:!!orbit,placeMesh:(x,z)=>{groundHeight(x,z);return terrainIndex.find(anchor.lat-z/111.2,anchor.lon+x/scale)?.mesh;},coarseSightGrid,preloadStatus,terrainRevision,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainHeight:(lat,lon)=>groundHeight(wrap(lon-anchor.lon)*scale,(anchor.lat-lat)*111.2)*1000/terrainScale(),terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
+  return {travelling:!!flight,cloudScale:terrainScale(),focusedPlace:zoomFocus,markedPlace:zoomFocus||pointForecast?.location,orbiting:!!orbit,placeMesh:(x,z)=>{groundHeight(x,z);return terrainIndex.find(anchor.lat-z/111.2,anchor.lon+x/scale)?.mesh;},coarseSightGrid,preloadStatus,terrainRevision,camera,projectPlace:(lat,lon)=>({x:wrap(lon-anchor.lon)*scale,z:(anchor.lat-lat)*111.2}),centre:c,distance,target:controls.target,ground:groundHeight,terrainHeight:(lat,lon)=>groundHeight(wrap(lon-anchor.lon)*scale,(anchor.lat-lat)*111.2)*1000/terrainScale(),terrainMeshes:()=>[...[...tiles.values()].map(t=>t.mesh),...(globalRelief.mesh?[globalRelief.mesh]:[]),...(backdrop?[backdrop]:[])],region:{west,north,lonSpan:Math.max(.25,east-west),latSpan:Math.max(.25,north-south)},bounds:r=>{
   const w=wrap(r.west-anchor.lon)*scale;return {west:w,east:w+r.lonSpan*scale,north:(anchor.lat-r.north)*111.2,south:(anchor.lat-r.north+r.latSpan)*111.2};
  }};
 }
@@ -431,9 +431,10 @@ setupSmoothExport(renderer.domElement,{
   // Orbit can be enabled immediately before export, before its streaming refresh.
   w.region=weatherContext().region;w.regionKey=[w.region.west,w.region.north,w.region.lonSpan,w.region.latSpan].map(v=>v.toFixed(3)).join('/');w.data.setRegion?.(JSON.stringify(w.region));
   renderer.setPixelRatio(Math.min(1920/innerWidth,1080/innerHeight));
-  const grids=new Map();let pair=null;
+  const grids=new Map();let pair=null,cloudSignal;
   return {
    async prepare(seconds,signal,say){
+    cloudSignal=signal;
     const end=exportFrame(start,seconds,speed,w.data.meta.times.length-1,saved.playing),frames=[];
     for(let f=Math.floor(start);f<=Math.ceil(end);f++)frames.push(f);
     for(const [i,f]of frames.entries()){
@@ -450,9 +451,9 @@ setupSmoothExport(renderer.domElement,{
     const f=exportFrame(start,seconds,speed,w.data.meta.times.length-1,saved.playing),lo=Math.floor(f),hi=Math.min(w.data.meta.times.length-1,lo+1),key=lo+'/'+hi;
     if(pair!==key){w.previous=grids.get(lo);w.current=grids.get(hi)||w.previous;w.frame=grids.has(hi)?hi:lo;w.fromFrame=lo;w.timeTransition=w.frame!==lo;w.blend=f-lo;w.build(false);pair=key;}
     w.blend=w.timeTransition?f-lo:1;
-    tickOrbit(base+seconds*1000);w.tick(dt);placeLabels.tick(dt);updatePointMarker();placeTemperatures.tick(dt);
+    tickOrbit(base+seconds*1000);w.tick(dt);await w.volumeClouds?.ensure(cloudSignal);placeLabels.tick(dt);updatePointMarker();placeTemperatures.tick(dt);
     const near=Math.max(.03,camera.position.distanceTo(controls.target)*.005);camera.near=near;camera.updateProjectionMatrix();
-    globalRelief.update(anchor,controls.target,cameraFootprint());prepareSceneDepth(scene);renderer.render(scene,camera);
+    globalRelief.update(anchor,controls.target,cameraFootprint());prepareSceneDepth(scene);if(weatherView?.volumeClouds)weatherView.volumeClouds.render(renderer,scene,camera);else renderer.render(scene,camera);
    },
    async restore(){
     // No asynchronous export request may replace restored weather after cancellation.
