@@ -26,7 +26,7 @@ setupUI();
 const sharedView=readView(location.hash);if(sharedView)restoreControls(document,sharedView.settings);
 let terrainScaleValue=Number(document.getElementById("terrainScale").value);
 const terrainScale=()=>terrainScaleValue;
-const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#234557');
+const $=id=>document.getElementById(id),scene=new THREE.Scene();scene.background=new THREE.Color('#9dc9ed');
 const renderer=new THREE.WebGLRenderer({antialias:true,logarithmicDepthBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(renderer.domElement);
 const camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.03,12000),controls=new OrbitControls(camera,renderer.domElement);
 controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
