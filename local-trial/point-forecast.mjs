@@ -1,12 +1,12 @@
 import {meteogram,compassDirection,chartLayout} from './meteogram.mjs?v=20261123c';
-import {displayPoint,snapForecast,windReadout} from './point-values.mjs';
+import {displayPoint,snapForecast,windReadout,pointElevation} from './point-values.mjs?v=20261124a';
 import {displayZone,timeParts,forecastMoment} from './local-time.mjs';
 import {typeName,typeColour,typeLegend} from './precipitation-type.mjs?v=20261123c';
 import {syncUnits} from './shared-units.mjs';
 export class PointForecast{
  constructor(weather,fly){
   this.weather=weather;this.fly=fly;this.token=0;this.rows=new Map();this.panel=document.createElement('section');this.panel.id='pointForecast';this.panel.className='glass';this.panel.hidden=true;
-  this.panel.innerHTML='<div class="panelHeading"><h2 id="pointTitle">Point forecast</h2><button id="pointClose" aria-label="Close point forecast">×</button></div><div id="pointCoordinates"></div><div id="pointTime"></div><div id="pointTotal"></div><div id="pointValues"></div><div class="pointActions"><button id="pointFly">Centre here</button><button id="pointExpand" aria-expanded="false">Show meteogram</button></div><div id="pointChart" hidden></div><p id="pointStatus"></p>';
+  this.panel.innerHTML='<div class="panelHeading"><h2 id="pointTitle">Point forecast</h2><button id="pointClose" aria-label="Close point forecast">×</button></div><div id="pointCoordinates"></div><div id="pointHeights"></div><div id="pointTime"></div><div id="pointTotal"></div><div id="pointValues"></div><div class="pointActions"><button id="pointFly">Centre here</button><button id="pointExpand" aria-expanded="false">Show meteogram</button></div><div id="pointChart" hidden></div><p id="pointStatus"></p>';
   document.body.append(this.panel);const $=id=>this.panel.querySelector('#'+id);
   $('pointClose').onclick=()=>{this.token++;this.location=null;this.panel.hidden=true;$('pointChart').hidden=true;this.panel.classList.remove('expanded');$('pointExpand').textContent='Show meteogram';$('pointExpand').setAttribute('aria-expanded','false');this.panel.style.width='';this.panel.style.height='';this.panel.style.top='';dispatchEvent(new Event('point-selection-change'));};
   $('pointFly').onclick=()=>this.fly(this.location);
@@ -33,10 +33,16 @@ export class PointForecast{
  }
  update(){
   if(!this.location)return;const w=this.weather;if(!w.data.meta)return;
-  const centre=w.context().centre,dlon=((centre.lon-this.location.lon+540)%360)-180;
+  const context=w.context(),centre=context.centre,dlon=((centre.lon-this.location.lon+540)%360)-180;
   this.panel.querySelector('#pointFly').hidden=Math.abs(centre.lat-this.location.lat)<.0001&&Math.abs(dlon)<.0001;
   if(this.data!==w.data){void this.load();return;}
   const frame=w.displayFrame??w.frame,a=Math.floor(frame),b=Math.min(a+1,w.data.meta.times.length-1),t=frame-a,zone=displayZone(this.location.lat,this.location.lon),moment=forecastMoment(w.data.meta,frame);
+  const heightKey=[this.location.lat,this.location.lon,context.terrainRevision,w.data.meta.run,this.rows.size,Units.unit('m/s')].join('/');
+  if(heightKey!==this.heightKey){
+   this.heightKey=heightKey;
+   const terrain=context.terrainHeight?.(this.location.lat,this.location.lon),model=[...this.rows.values()].find(r=>Number.isFinite(r.modelHeight))?.modelHeight;
+   this.panel.querySelector('#pointHeights').textContent='Terrain height: '+pointElevation(terrain,Units)+' · Nearest IFS grid height: '+pointElevation(model,Units)+' (above MSL)';
+  }
   const key=[Math.floor(moment.time/60000),this.rows.size,Units.choice('temperature'),Units.choice('wind'),Units.choice('rain'),zone].join('/');
   if(key===this.key)return;this.key=key;
   this.panel.querySelector('#pointTime').textContent=timeParts(moment.time,zone).full+(zone==='UTC'?'':' · '+zone);

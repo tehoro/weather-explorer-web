@@ -11,3 +11,9 @@ export function windReadout(u,v,gust,units,direction){
  const speed=Math.round(units.convert(Math.hypot(u,v),'m/s'));
  return 'Wind: '+direction+' '+speed+(Number.isFinite(gust)?' g '+Math.round(units.convert(Math.max(gust,Math.hypot(u,v)),'m/s')):'')+' '+units.unit('m/s');
 }
+
+export function pointElevation(metres,units){
+ if(!Number.isFinite(metres))return 'Unavailable';
+ const feet=units.unit('m/s')==='mph';
+ return Math.round(feet?metres/0.3048:metres).toLocaleString()+' '+(feet?'ft':'m');
+}

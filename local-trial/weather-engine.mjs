@@ -102,6 +102,7 @@ export class WeatherData{
  async point(frame,lat,lon){
   const p=tilePoint(lat,lon),a=await this.tile(frame,p.x,p.y),out={};
   for(const k of FIELDS)out[k]=sampleField(k,a[k],101,p.col,p.row);
+  out.modelHeight=this.meta.surface_cover?.format===3?a.snowlineModelHeight[Math.round(p.row)*101+Math.round(p.col)]*1000:null;
   if(this.meta.point_fields){
    const extra=decodeTile(await this.bytes(`/global-data/${this.meta.run}/${this.meta.point_fields.path}/${String(this.meta.steps[frame]).padStart(3,'0')}/${String(p.x).padStart(2,'0')}-${String(p.y).padStart(2,'0')}.bin.gz`),this.meta.point_fields);
    for(const [k,values]of Object.entries(extra))out[k]=bilinear(values,101,p.col,p.row);
