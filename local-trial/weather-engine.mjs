@@ -74,9 +74,11 @@ export class WeatherData{
   return new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
  }
  async globalFrame(frame){
+  // Disk storage retains the full forecast; only nearby decoded frames need RAM.
+  if(this.global.has(frame)){const value=this.global.get(frame);this.global.delete(frame);this.global.set(frame,value);return value;}
   if(!this.global.has(frame)){
    const promise=this.bytes(`/global-data/${this.meta.run}/${this.meta.global_preview.path}/${String(this.meta.steps[frame]).padStart(3,'0')}.bin.gz`).then(async bytes=>{const a=decodeTile(bytes,this.meta,361*181);a.ptype=this.meta.ptype_path?new Uint8Array(await this.bytes(`/global-data/${this.meta.run}/${this.meta.ptype_path}/${String(this.meta.steps[frame]).padStart(3,'0')}/global.bin.gz`)):new Float32Array(361*181).fill(-1);Object.assign(a,await this.surfaceCover(frame,'global.bin.gz',361*181));return a;});
-   this.global.set(frame,promise);promise.catch(()=>this.global.delete(frame));
+   this.global.set(frame,promise);while(this.global.size>4)this.global.delete(this.global.keys().next().value);promise.catch(()=>this.global.delete(frame));
   }
   return this.global.get(frame);
  }

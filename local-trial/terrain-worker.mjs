@@ -11,7 +11,7 @@ onmessage=async({data:{id,method,args}})=>{
   else if(method==='colour')value=colourTile(...args);
   else if(method==='prepare'){const [p,a,ocean,mode]=args;value={...terrainGeometry(p,a,ocean),...colourTile({p,a,ocean},mode)};}
   else throw Error('Unknown terrain job');
-  const buffers=value instanceof Float32Array?[value.buffer]:Object.values(value||{}).filter(ArrayBuffer.isView).map(a=>a.buffer);
+  const buffers=ArrayBuffer.isView(value)?[value.buffer]:Object.values(value||{}).filter(ArrayBuffer.isView).map(a=>a.buffer);
   postMessage({id,value,hits:reader.saved.hits},[...new Set(buffers)]);
  }catch(e){postMessage({id,error:e.message});}
 };

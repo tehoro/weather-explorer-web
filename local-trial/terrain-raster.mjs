@@ -1,3 +1,4 @@
+import {DecodedBlockCache} from './decoded-block-cache.mjs';
 import {wrap,demName,waterName} from './terrain-stream.mjs';
 import {TerrainCache,terrainCacheKey} from './terrain-cache.mjs?v=20261124a';
 export const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
@@ -26,7 +27,7 @@ export async function terrainRange(url,start,end,timeoutMs=25000){
 }
 // Browser byte cache + GeoTIFF decoded-block cache; reuse image objects as well.
 export class RasterReader{
- constructor(G,base='',catalogue=new Set()){this.G=G;this.base=base;this.catalogue=catalogue;this.files=new Map();this.saved=new TerrainCache();}
+ constructor(G,base='',catalogue=new Set()){this.G=G;this.base=base;this.catalogue=catalogue;this.files=new Map();this.blocks=new DecodedBlockCache();this.saved=new TerrainCache();}
  async file(kind,name){
   const key=kind+'/'+name;
   if(this.files.has(key)){const f=this.files.get(key);this.files.delete(key);this.files.set(key,f);return f;}
@@ -38,17 +39,17 @@ export class RasterReader{
    const b=await request;while(bytes.size>32)bytes.delete(bytes.keys().next().value);
    return b.slice(offset-start,offset-start+length);
   }))};
-  const promise=this.G.GeoTIFF.fromSource(source,{cache:true}).then(t=>({t,images:new Map(),count:t.getImageCount()}));this.files.set(key,promise);
+  const promise=this.G.GeoTIFF.fromSource(source,{cache:false}).then(t=>({t,images:new Map(),count:t.getImageCount()}));this.files.set(key,promise);
   try{const result=await promise;while(this.files.size>12)this.files.delete(this.files.keys().next().value);return result;}catch(e){this.files.delete(key);throw e;}
  }
- async image(file,i){if(!file.images.has(i))file.images.set(i,file.t.getImage(i));return file.images.get(i);}
+ async image(file,i){if(!file.images.has(i))file.images.set(i,file.t.getImage(i).then(image=>this.blocks.wrap(image)));return file.images.get(i);}
  async grid(kind,p,size,{halo=0,centres=false}={}){
   const key=terrainCacheKey(kind,p,size,{halo,centres}),cached=await this.saved.get(key);
-  if(cached)return cached;
+  if(cached)return kind==='water'&&!(cached instanceof Uint8Array)?Uint8Array.from(cached):cached;
   const step=p.span/(centres?size:size-1),outSize=size+halo*2;
   const xs=Array.from({length:outSize},(_,i)=>wrap(Math.round((p.west+(i-halo+(centres?.5:0))*step)*1e10)/1e10));
   const ys=Array.from({length:outSize},(_,i)=>clamp(Math.round((p.south+p.span-(i-halo+(centres?.5:0))*step)*1e10)/1e10,-90,90));
-  const groups=new Map(),out=new Float32Array(outSize*outSize);
+  const groups=new Map(),out=kind==='water'?new Uint8Array(outSize*outSize):new Float32Array(outSize*outSize);
   for(let y=0;y<outSize;y++)for(let x=0;x<outSize;x++){
    const name=sourceName(kind,ys[y],xs[x]);if(kind==='dem'&&!this.catalogue.has(name))continue;
    if(!groups.has(name))groups.set(name,[]);groups.get(name).push(y*outSize+x);

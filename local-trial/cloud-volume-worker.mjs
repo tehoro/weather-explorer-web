@@ -17,20 +17,23 @@ async function tile(url,expected,stats){
 async function frame(job,step,stats){
  const {region,G,V,level,res,run}=job,side=Math.round(20/res)+1;
  const points=[];for(let j=0;j<G;j++)for(let i=0;i<G;i++)points.push(tilePoint(region.north-j/(G-1)*region.latSpan,region.west+i/(G-1)*region.lonSpan,res));
- const keys=[...new Set(points.map(p=>p.key))],tiles=new Map();
+ const groups=new Map();points.forEach((p,n)=>{if(!groups.has(p.key))groups.set(p.key,[]);groups.get(p.key).push(n);});
+ const keys=[...groups.keys()],out=new Uint8Array(G*V*G*4);
  let next=0;
+ // Assemble each source tile immediately: a wide view must not retain every
+ // decoded tile in addition to the bounded reuse cache.
  await Promise.all(Array.from({length:Math.min(4,keys.length)},async()=>{
   while(next<keys.length){const key=keys[next++],url=`/global-data/${run}/cloud-v2/${String(step).padStart(3,'0')}/${level}/${key}.bin.gz`;
-   tiles.set(key,await tile(url,side*side*V*4,stats));}
- }));
- const out=new Uint8Array(G*V*G*4);
- for(let n=0;n<points.length;n++){
-  const p=points[n],a=tiles.get(p.key),ix=Math.min(side-2,Math.floor(p.x)),iy=Math.min(side-2,Math.floor(p.y)),u=p.x-ix,v=p.y-iy,i=n%G,j=Math.floor(n/G);
-  for(let z=0;z<V;z++){
-   const q=((iy*V+z)*side+ix)*4,d=(i+G*(z+V*j))*4,dy=V*side*4;
-   for(let c=0;c<4;c++)out[d+c]=Math.round((a[q+c]*(1-u)+a[q+4+c]*u)*(1-v)+(a[q+dy+c]*(1-u)+a[q+dy+4+c]*u)*v);
+   const a=await tile(url,side*side*V*4,stats);
+   for(const n of groups.get(key)){
+    const p=points[n],ix=Math.min(side-2,Math.floor(p.x)),iy=Math.min(side-2,Math.floor(p.y)),u=p.x-ix,v=p.y-iy,i=n%G,j=Math.floor(n/G);
+    for(let z=0;z<V;z++){
+     const q=((iy*V+z)*side+ix)*4,d=(i+G*(z+V*j))*4,dy=V*side*4;
+     for(let c=0;c<4;c++)out[d+c]=Math.round((a[q+c]*(1-u)+a[q+4+c]*u)*(1-v)+(a[q+dy+c]*(1-u)+a[q+dy+4+c]*u)*v);
+    }
+   }
   }
- }
+ }));
  stats.tiles+=keys.length;return out;
 }
 self.onmessage=async({data:job})=>{

@@ -162,7 +162,7 @@ function prune(){
  for(const [key,{mesh}]of tiles){mesh.visible=needed.has(key)||!complete;mesh.position.y=needed.has(key)?0:-.03;}
  const distance=({mesh})=>mesh.geometry.boundingSphere.center.clone().multiply(mesh.scale).distanceTo(controls.target);
  const old=[...tiles].filter(([k])=>!needed.has(k)).sort((a,b)=>distance(b[1])-distance(a[1]));
- while(tiles.size>needed.size+36&&old.length){const [key,{mesh}]=old.shift();dispose(mesh);tiles.delete(key);}
+ while(tiles.size>needed.size+(complete?8:36)&&old.length){const [key,{mesh}]=old.shift();dispose(mesh);tiles.delete(key);}
 }
 function update(){
  if(exporting)return;
