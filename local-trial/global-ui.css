@@ -79,7 +79,7 @@ aside{top:70px;bottom:160px;right:16px}
 .timelineHeading{font-size:12px}.timelineEnds{font-size:10px}#forecastTime{margin:7px 0}.timelineHeading #forecastLead{display:none}
 #playback,.panelClosed #playback,body.clean #playback{left:50%;bottom:14px;width:min(680px,calc(100% - 32px));justify-content:center;border-radius:0 0 8px 8px;padding:6px;border-top:0;gap:5px}
 #playback button,#playback select{font-size:12px;padding:7px 9px}body.clean #playback{border-radius:8px;border-top:1px solid var(--edge)}
-footer{bottom:165px}.panelBody label{line-height:1.5}.layers [hidden]{display:none!important}
+footer,.panelClosed footer{left:8px;bottom:2px;line-height:1.2;max-width:calc(100% - 16px)}.panelBody label{line-height:1.5}.layers [hidden]{display:none!important}
 .actionPanel{position:fixed;right:20px;top:62px;padding:16px;width:min(380px,calc(100vw - 32px));z-index:12}.actionPanel p{font-size:13px}.actionPanel h2{font-size:17px}.actionPanel input{width:100%}.actionPanel[hidden]{display:none}
 #shareClose{float:right;padding:2px 9px}#videoDownload{display:inline-block;padding:10px}#videoDownload[hidden]{display:none}
 #recordingStop{position:fixed;left:50%;top:65px;transform:translateX(-50%);z-index:15;background:#6b2026;color:white;font-size:13px}#recordingStop[hidden]{display:none}
