@@ -20,7 +20,9 @@ assert.deepEqual(clouds.worker.job.steps,[6,9],'next interval prefetched');
 const endpoint=clouds.u.texB.value;
 await tick(1.001);assert.equal(clouds.u.volumeReady.value,1,'delayed reply must not flash standard clouds');
 assert.equal(clouds.u.texB.value,endpoint);assert.equal(clouds.u.mixTime.value,1,'hold shared endpoint, not reset blend');
-reply();await tick(1.01);assert.equal(clouds.u.volumeReady.value,1);assert.ok(Math.abs(clouds.u.mixTime.value-.01)<1e-8);
+let exportReady=false;const exportWait=clouds.ensure(new AbortController().signal).then(()=>exportReady=true);
+await new Promise(r=>setTimeout(r,40));assert.equal(exportReady,false,'saved video waits for the exact pair rather than recording the held endpoint');
+reply();await exportWait;assert.equal(exportReady,true);await tick(1.01);assert.equal(clouds.u.volumeReady.value,1);assert.ok(Math.abs(clouds.u.mixTime.value-.01)<1e-8);
 // Failed speculative work must leave the currently displayed interval intact.
 clouds.worker.onmessage({data:{id:clouds.worker.job.id,error:'network'}});
 await tick(1.5);assert.equal(clouds.u.volumeReady.value,1);

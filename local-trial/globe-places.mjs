@@ -16,10 +16,12 @@ export class GlobePlaces{
   await Promise.all(Array.from({length:3},async()=>{while(jobs.length){const k=jobs.shift();try{const r=await fetch(`data/places/${k}.json`);if(r.ok)this.cache.set(k,await r.json());}catch{}}}));
   while(this.cache.size>160)this.cache.delete(this.cache.keys().next().value);
  }
- tick(dt){
+ tick(dt,travelling=false){
   this.camera.updateMatrixWorld();this.globe.updateMatrixWorld();
   // Keep selected labels glued to their geographic points on every rendered frame.
   for(const el of this.layer.children){const row=this.positions.get(el.dataset.id);if(!row)continue;const world=this.vector(row.lat,row.lon).applyQuaternion(this.globe.quaternion),visible=world.dot(this.camera.position)>1.03,p=world.project(this.camera);el.hidden=!visible||Math.abs(p.x)>1||Math.abs(p.y)>1;el.style.transform=`translate(${(p.x+1)*this.host.clientWidth/2}px,${(1-p.y)*this.host.clientHeight/2}px)`;}
+  // During a flight retain existing names; only their projected position/visibility changes.
+  if(travelling)return;
   this.elapsed+=dt;if(this.elapsed<.8)return;this.elapsed=0;
   const local=this.camera.position.clone().normalize().applyQuaternion(this.globe.quaternion.clone().invert());this.nearby(local);
   const width=this.host.clientWidth,height=this.host.clientHeight,origin=this.host.getBoundingClientRect(),blocked=[];
