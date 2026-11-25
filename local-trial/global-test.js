@@ -99,8 +99,10 @@ function rebase(){
 }
 function preloadStatus(){return {key:terrainKey,...terrainReadiness(needed,tiles,failures,waterMissing)};}
 function status(){const c=centre(),d=detail(camera.position.distanceTo(controls.target)),s=preloadStatus();
- $('status').textContent=`${c.lat.toFixed(4)}°, ${c.lon.toFixed(4)}°\nAutomatic detail · about ${Math.round(d.span*111200/d.cells)} m sampling\nTerrain elevation: ${s.elevation}/${s.total} patches\nWater & land cover: ${s.ready}/${s.total} patches (including ocean)\n${s.failed?s.terrainFailed+' elevation and '+s.coverFailed+' water/land-cover patches waiting for automatic retry.':s.ready===s.total?'All detail for this view is ready.':'Loading detail for this view…'}`;
+ $('status').textContent=`${c.lat.toFixed(4)}°, ${c.lon.toFixed(4)}°\nNearby detail · about ${Math.round(d.span*111200/d.cells)} m sampling\nTerrain elevation: ${s.elevation}/${s.total} patches\nWater & land cover: ${s.ready}/${s.total} patches (including ocean)\n${s.failed?s.terrainFailed+' elevation and '+s.coverFailed+' water/land-cover patches waiting for automatic retry.':s.ready===s.total?'All detail for this view is ready.':'Loading detail for this view…'}`;
  $('retry').hidden=s.failed===0;
+ const counts=new Map();for(const p of needed.values())if(p.background)counts.set(p.cells,(counts.get(p.cells)||0)+1);
+ $('status').textContent+=`\nRequested detail: ${[...needed.values()].filter(p=>!p.background).length} nearby; distant meshes: ${[...counts].sort((a,b)=>b[0]-a[0]).map(([cells,n])=>`${n} at ${cells}×${cells}`).join(', ')||'none'}. Global relief covers the remaining horizon.`;
  if(reader)$('status').textContent+=`\n${reader.saved.hits} terrain/land-cover grids reused from browser storage.`;
 }
 const installations=[];
@@ -167,8 +169,10 @@ function prune(){
 function update(){
  if(exporting)return;
  if(!catalogue||(approaching&&!readySent)){weatherView?.refresh();placeLabels?.refresh();return;}rebase();const c=centre(),distance=camera.position.distanceTo(controls.target),wanted=viewTiles(c.lat,c.lon,distance,cameraFootprint(),{
+  matrix:new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).multiply(new THREE.Matrix4().makeTranslation(controls.target.x,0,controls.target.z)).elements,
+  width:renderer.domElement.width,height:renderer.domElement.height,
   eye:[camera.position.x-controls.target.x,camera.position.y,camera.position.z-controls.target.z],
-  previous:new Map([...needed.values()].filter(p=>p.background&&p.span===1).map(p=>[`${p.west}/${p.south}`,p.cells])),
+  previous:new Map([...tiles.values()].map(t=>t.p).filter(p=>p.background&&p.span===1).map(p=>[`${p.west}/${p.south}`,p.cells])),
   focal:renderer.domElement.height/(2*Math.tan(camera.fov*Math.PI/360)),scale:terrainScale(),relief:(west,south)=>globalRelief.range(west,south)
  });
  needed.clear();for(const p of wanted)needed.set(p.key,p);

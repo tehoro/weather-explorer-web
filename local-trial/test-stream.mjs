@@ -60,3 +60,15 @@ assert.ok(boundary,'Detail hysteresis preserves a patch near a threshold');
 console.log(`Screen-space LOD: flat oblique test ${original.length} → ${adaptive.length} patches; near detail, skyline, viewport sizing and hysteresis passed.`);
 
 assert.equal(distantDetail(distant,{...low,eye:[0,18,0]},flat,25),25,'Reuse an existing finer patch instead of downloading a coarser duplicate');
+const THREE=await import('./assets/three.module.js');
+const {projectedTerrain}=await import('./terrain-stream.mjs');
+function screenView(height){
+ const camera=new THREE.PerspectiveCamera(42,1440/830,.01,12000);camera.position.set(0,height,50);camera.lookAt(0,.25,0);camera.updateMatrixWorld();
+ return {eye:[0,height,50],matrix:new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse).elements,width:2880,height:1660,focal:1660/(2*Math.tan(21*Math.PI/180)),scale:1,relief:()=>({min:.2,max:.3})};
+}
+const horizonView=screenView(.27),highView=screenView(18.25);
+assert.equal(projectedTerrain([-10,100,10,120],flat,horizonView).width,0,'Behind-camera ground is rejected');
+const lowPatches=viewTiles(44.4001,-79.6663,50,poly,horizonView),highPatches=viewTiles(44.4001,-79.6663,53,poly,highView);
+assert.ok(lowPatches.length<highPatches.length,'A horizon-level view requests fewer patches than an elevated view');
+assert.equal(distantDetail([-55,-800,55,-700],horizonView,{min:.2,max:4}),25,'A projected mountain skyline retains detail');
+console.log(`Camera-projected test: elevated ${highPatches.length}, horizon-level ${lowPatches.length} patches (synthetic flat relief).`);

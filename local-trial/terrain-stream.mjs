@@ -26,12 +26,35 @@ export function intersectsFootprint(rect,polygon){
  for(const [x,y] of axes){const a=box.map(p=>p[0]*x+p[1]*y),b=polygon.map(p=>p[0]*x+p[1]*y);if(Math.max(...a)<Math.min(...b)||Math.max(...b)<Math.min(...a))return false;}
  return true;
 }
+// Conservative projected bounds of a terrain box, including its relief. Coordinates
+// are relative to the view centre horizontally and above sea level vertically.
+export function projectedTerrain(rect,range,view){
+ if(!view.matrix)return null;
+ const m=view.matrix,points=[];
+ for(const x of [rect[0],rect[2]])for(const z of [rect[1],rect[3]])for(const y of [range.min,range.max+.25*(view.scale||1)]){
+  points.push([m[0]*x+m[4]*y+m[8]*z+m[12],m[1]*x+m[5]*y+m[9]*z+m[13],m[2]*x+m[6]*y+m[10]*z+m[14],m[3]*x+m[7]*y+m[11]*z+m[15]]);
+ }
+ // Reject only when every corner is outside the same clipping plane.
+ if([0,1,2].some(axis=>points.every(p=>p[axis]<-p[3])||points.every(p=>p[axis]>p[3])))return {width:0,height:0};
+ if(points.some(p=>p[3]<=.01))return null; // Camera intersects the box: retain detail.
+ const xs=points.map(p=>p[0]/p[3]),ys=points.map(p=>p[1]/p[3]);
+ return {width:Math.max(0,Math.min(1,Math.max(...xs))-Math.max(-1,Math.min(...xs)))*view.width/2,
+  height:Math.max(0,Math.min(1,Math.max(...ys))-Math.max(-1,Math.min(...ys)))*view.height/2};
+}
 // Screen-space estimate for distant ground. Use the nearest edge, and reserve
 // extra height for relief missing from the coarse overview, to protect skylines.
 export function distantDetail(rect,view,range,previous=0){
  const [x,y,z]=view.eye,dx=Math.max(rect[0]-x,0,x-rect[2]),dz=Math.max(rect[1]-z,0,z-rect[3]);
  const height=Math.max(.01,y-range.min),distance=Math.max(1,Math.hypot(dx,dz,height)),pixels=view.focal/distance;
- const area=(rect[2]-rect[0])*(rect[3]-rect[1])*pixels*pixels*Math.min(1,height/distance);
+ let area=(rect[2]-rect[0])*(rect[3]-rect[1])*pixels*pixels*Math.min(1,height/distance);
+ const projected=projectedTerrain(rect,range,view);
+ if(projected){
+  if(!projected.width||!projected.height)return 0;
+  area=projected.width*projected.height;
+  // A thin strip at the horizon already has global relief underneath it.
+  // Including elevation in the box keeps prominent ridges out of this test.
+  if(distance>150&&projected.height<(previous?1.5:2.5))return 0;
+ }
  const skyline=(range.max-range.min+.25*(view.scale||1))*pixels;
  if(distance>300&&area<(previous?32:48)&&skyline<1)return 0; // Existing global relief is sufficient here.
  if(skyline>=2||distance<150)return 25;
