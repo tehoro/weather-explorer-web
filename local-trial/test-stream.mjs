@@ -37,3 +37,26 @@ for(const lon of [-122.5,179.8])for(const distance of [20,60,80]){
  assert.ok(patches.length<=256);
 }
 console.log('Continuous fine/coarse terrain coverage near San Francisco and the date line passed.');
+const {distantDetail}=await import('./terrain-stream.mjs');
+const flat={min:0,max:.05},mountain={min:0,max:4};
+const distant=[-55,-1555,55,-1445],low={eye:[0,1,0],focal:1000,scale:1};
+assert.equal(distantDetail(distant,low,flat),0,'Subpixel distant flat ground uses global relief');
+assert.equal(distantDetail(distant,low,mountain),25,'Visible mountain relief retains full background detail');
+assert.equal(distantDetail([-55,-100,55,0],low,flat),25,'Nearby ground retains detail');
+assert.ok(distantDetail(distant,{...low,focal:5000},flat)>0,'Larger output requests more detail');
+const poly=[[-5000,-8000],[5000,-8000],[80,40],[-80,40]];
+const original=viewTiles(43.65,-79.38,53,poly),adaptive=viewTiles(43.65,-79.38,53,poly,{...low,eye:[0,5,50],relief:()=>flat});
+assert.deepEqual(adaptive.filter(p=>!p.background),original.filter(p=>!p.background),'Near terrain is unchanged');
+assert.deepEqual(adaptive.filter(p=>p.transition),original.filter(p=>p.transition),'Transition patches keep continuous coverage');
+assert.ok(adaptive.length<original.length);
+assert.ok(adaptive.reduce((n,p)=>n+p.cells*p.cells,0)<original.reduce((n,p)=>n+p.cells*p.cells,0));
+// Around a threshold the current detail is retained, avoiding orbit churn.
+let boundary;
+for(let d=150;d<1500;d++){
+ const r=[-55,-d-55,55,-d+55],v={eye:[0,18,0],focal:1000,scale:1};
+ if(distantDetail(r,v,flat)===12&&distantDetail(r,v,flat,25)===25){boundary=true;break;}
+}
+assert.ok(boundary,'Detail hysteresis preserves a patch near a threshold');
+console.log(`Screen-space LOD: flat oblique test ${original.length} → ${adaptive.length} patches; near detail, skyline, viewport sizing and hysteresis passed.`);
+
+assert.equal(distantDetail(distant,{...low,eye:[0,18,0]},flat,25),25,'Reuse an existing finer patch instead of downloading a coarser duplicate');

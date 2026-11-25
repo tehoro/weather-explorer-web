@@ -64,5 +64,14 @@ export class GlobalRelief{
   this.uniforms.anchor.value.set(anchor.lon,anchor.lat);this.uniforms.longitudeScale.value=scale;
   this.uniforms.extent.value.set((west+east)/2,(north+south)/2,east-west,south-north);
  }
+ // Cache overview elevation ranges, not camera-dependent detail decisions.
+ range(west,south){
+  if(!this.heights)return {min:0,max:9*this.scale};
+  this.ranges??=new Map();const key=west+'/'+south;let range=this.ranges.get(key);
+  if(!range){let min=Infinity,max=0;for(let y=0;y<=12;y++)for(let x=0;x<=12;x++){
+   const h=reliefHeight(this.heights,south+y/12,west+x/12)*.001;min=Math.min(min,h);max=Math.max(max,h);
+  }range={min,max};this.ranges.set(key,range);if(this.ranges.size>1024)this.ranges.delete(this.ranges.keys().next().value);}
+  return {min:range.min*this.scale,max:range.max*this.scale};
+ }
  height(lat,lon){return this.heights?reliefHeight(this.heights,lat,lon)*.001*this.scale:0;}
 }

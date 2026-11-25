@@ -166,7 +166,11 @@ function prune(){
 }
 function update(){
  if(exporting)return;
- if(!catalogue||(approaching&&!readySent)){weatherView?.refresh();placeLabels?.refresh();return;}rebase();const c=centre(),distance=camera.position.distanceTo(controls.target),wanted=viewTiles(c.lat,c.lon,distance,cameraFootprint());
+ if(!catalogue||(approaching&&!readySent)){weatherView?.refresh();placeLabels?.refresh();return;}rebase();const c=centre(),distance=camera.position.distanceTo(controls.target),wanted=viewTiles(c.lat,c.lon,distance,cameraFootprint(),{
+  eye:[camera.position.x-controls.target.x,camera.position.y,camera.position.z-controls.target.z],
+  previous:new Map([...needed.values()].filter(p=>p.background&&p.span===1).map(p=>[`${p.west}/${p.south}`,p.cells])),
+  focal:renderer.domElement.height/(2*Math.tan(camera.fov*Math.PI/360)),scale:terrainScale(),relief:(west,south)=>globalRelief.range(west,south)
+ });
  needed.clear();for(const p of wanted)needed.set(p.key,p);
  terrainKey=[...needed.keys()].sort().join('|');
  prune();

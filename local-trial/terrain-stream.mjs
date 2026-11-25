@@ -26,7 +26,24 @@ export function intersectsFootprint(rect,polygon){
  for(const [x,y] of axes){const a=box.map(p=>p[0]*x+p[1]*y),b=polygon.map(p=>p[0]*x+p[1]*y);if(Math.max(...a)<Math.min(...b)||Math.max(...b)<Math.min(...a))return false;}
  return true;
 }
-export function viewTiles(lat,lon,distance,footprint){
+// Screen-space estimate for distant ground. Use the nearest edge, and reserve
+// extra height for relief missing from the coarse overview, to protect skylines.
+export function distantDetail(rect,view,range,previous=0){
+ const [x,y,z]=view.eye,dx=Math.max(rect[0]-x,0,x-rect[2]),dz=Math.max(rect[1]-z,0,z-rect[3]);
+ const height=Math.max(.01,y-range.min),distance=Math.max(1,Math.hypot(dx,dz,height)),pixels=view.focal/distance;
+ const area=(rect[2]-rect[0])*(rect[3]-rect[1])*pixels*pixels*Math.min(1,height/distance);
+ const skyline=(range.max-range.min+.25*(view.scale||1))*pixels;
+ if(distance>300&&area<(previous?32:48)&&skyline<1)return 0; // Existing global relief is sufficient here.
+ if(skyline>=2||distance<150)return 25;
+ const samples=Math.sqrt(area)/3;
+ // Reuse already requested finer patches rather than download a coarser copy.
+ // A small margin on upgrades avoids churn during orbit/tilt.
+ if(previous===25)return 25;
+ if(previous===12&&samples<=14.4)return 12;
+ if(previous===6&&samples<=7.2)return 6;
+ return samples>12?25:samples>6?12:6;
+}
+export function viewTiles(lat,lon,distance,footprint,view=null){
  const near=wantedTiles(lat,lon,distance),cos=Math.max(.015,Math.cos(lat*Math.PI/180));
  const occupied=new Map();
  for(const p of near){const key=`${Math.floor(p.west)}/${Math.floor(p.south)}`;if(!occupied.has(key))occupied.set(key,[]);occupied.get(key).push(p);}
@@ -48,7 +65,10 @@ export function viewTiles(lat,lon,distance,footprint){
     const r=[(x+i*.25-lon)*111.2*cos,(lat-south-.25)*111.2,(x+(i+1)*.25-lon)*111.2*cos,(lat-south)*111.2];
     if(intersectsFootprint(r,footprint))far.push({west,south,span:.25,cells:25,key:`${west}/${south}/0.25/25`,distance:d,background:true,transition:true});
    }
-  }else far.push({west:w,south:y,span:1,cells:25,key:`${w}/${y}/1/25`,distance:d,background:true});
+  }else{
+   const cells=view?distantDetail(rect,view,view.relief(w,y),view.previous?.get(`${w}/${y}`)):25;
+   if(cells)far.push({west:w,south:y,span:1,cells,key:`${w}/${y}/1/${cells}`,distance:d,background:true});
+  }
  }
  return near.concat(far.sort((a,b)=>Number(!!b.transition)-Number(!!a.transition)||a.distance-b.distance).slice(0,192));
 }
