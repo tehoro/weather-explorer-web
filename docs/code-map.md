@@ -1,8 +1,9 @@
 # Code map
 
-A guide to finding your way round the viewer's code. There is no build step and no framework:
-the files in `site/` are exactly what the browser runs. Open the live site
-(https://tehoro.github.io/weather-explorer-web/) with your browser's developer tools beside this
+A guide to finding your way round the viewer's code. There is no JavaScript framework or bundler. Highlights sources live in `site/`;
+Explore sources live in `local-trial/` and are packaged into generated `site/explore/`
+by `build_explore.py`. See the [Explore code map and architecture](../README.md#explore-worldwide-3d-forecasts). Open the live site
+(https://weatherexplorer.neilgordon.me/) with your browser's developer tools beside this
 map.
 
 For the meaning of terms (HRES, GRIB2, CAP, Lambert projection, LUT...), see the backend's

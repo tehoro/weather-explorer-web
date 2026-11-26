@@ -1,17 +1,17 @@
 # Local development trial
 
-> **Development checkpoint — 20 November 2026.** The current trial supports
-> worldwide terrain and weather, global location search, forecast clouds on the
-> globe, and a staged globe-to-regional transition. The early sections below
-> describe the original NZ experiment; later sections record the worldwide work.
-> This directory is separate from `site/` and is not deployed by GitHub Pages.
-> Saving it in the public web repository preserves the code, not a private copy
-> of the generated forecast datasets.
+> **Current status — 27 November 2026:** this directory contains the production
+> Explore source. `build_explore.py` packages the browser modules into generated
+> `site/explore/`, deployed by GitHub Pages. See the [main README](../README.md#explore-worldwide-3d-forecasts),
+> [R2 operations](../docs/explore-r2.md) and [cloud design](../docs/explore-clouds.md)
+> for the current implementation and local static-preview instructions.
+>
+> The sections below are **historical development notes**, beginning with the
+> original local NZ experiment. Their old ports, layer choices and deployment
+> descriptions are not instructions for the current public release. Generated
+> forecast datasets are not committed; production data are served from R2.
 
-Local-only Weather Explorer experiment for Cook Strait to Manawatū Gorge and
-the Southern Alps. Nothing in this directory is included in the production
-GitHub Pages workflow: that workflow deploys `site/`, not this directory.
-There are no Replit changes, new production endpoints or paid model calls.
+## Original local experiment (historical)
 
 From `web/`:
 

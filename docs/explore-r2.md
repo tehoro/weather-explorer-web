@@ -1,7 +1,7 @@
 # Explore forecast storage in Cloudflare R2
 
-Status: live on Cloudflare R2, with preparation in GitHub Actions and the unlisted
-viewer at `/explore/`. The setup steps below are retained for recovery.
+Status: live on Cloudflare R2, with preparation in GitHub Actions and the public
+Explore tab at `/explore/`. The setup steps below are retained for recovery.
 
 ## Owner setup
 
@@ -28,17 +28,14 @@ viewer at `/explore/`. The setup steps below are retained for recovery.
      `https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com`
    - `EXPLORE_R2_ENABLED`: `true` when ready to run the prepared workflow.
 
-Tell the coding agent when these settings exist. The agent will run the first
-publication and verify browser CORS/range downloads before switching Explore's
-`forecast-host.json` to
-`{"baseUrl":"https://weatherdata.neilgordon.me/global-data"}`.
-The checked-in default remains the local `/global-data` server until then.
-The workflow must be on the default branch for scheduled runs. Do not merge just
-to activate scheduling before the wider Explore release is ready.
+The production packager writes `forecast-host.json` pointing to
+`https://weatherdata.neilgordon.me/global-data`. For a fork, configure your own
+public forecast host in `build_explore.py`. Keep local preview origins in the
+bucket CORS policy. Workflows must be on the default branch to run on schedule.
 
 ## Retention and publishing
 
-`explore-data.yml` checks at minutes 17 and 47 of every UTC hour, after each
+`explore-data.yml` checks at minutes 11 and 41 of every UTC hour, after each
 completed main-branch “Sync and deploy” workflow, and on manual request. It builds
 only when a newer complete IFS cycle is available through +84 hours.
 It is disabled unless `EXPLORE_R2_ENABLED` is `true`. Runs are serialised and a
@@ -63,15 +60,16 @@ expire the last usable forecasts. Do not run a second independent publisher.
 Latest uses `Cache-Control: no-store`; dated packs are immutable. Do not configure
 a Cache Everything rule that overrides latest.json's cache headers. An optional
 future cache rule can target only dated run paths. CORS is not access control:
-these forecast files are publicly readable, as expected for the unlisted preview.
+these forecast files are publicly readable, as expected for the public viewer.
 
 ## Contents and costs
 
 Prepared 0.1° IFS surface weather, cloud fractions, precipitation type, point
 forecast extras, snow/sea-ice display and snowline fields, plus coarse global
 previews and manifests. No raw GRIB, credentials, user locations or full global
-terrain archive. Current and previous packages total about 2.6 GB; transient
-preparation/upload can temporarily add another run.
+terrain archive. Cloud volumes are stored alongside each run under `cloud-v2/`. Package sizes vary
+with the weather and format; transient preparation/upload can add another run.
+Consult R2 storage metrics for current usage rather than treating old measurements as limits.
 
 R2 Standard includes 10 GB-month, 1 million Class A requests and 10 million Class B
 requests monthly; egress is free. Allowances are account-wide. This preview should
@@ -83,10 +81,12 @@ Official setup references:
 - https://developers.cloudflare.com/r2/api/tokens/
 - https://developers.cloudflare.com/r2/pricing/
 
-## Unlisted Explore release
+## Public Explore release
 
 The Pages build packages `local-trial/` at `/explore/` with `build_explore.py`.
-There is no public Explore tab; share the direct URL with preview testers.
+Explore is the third public tab beside Highlights and Past events; it links to `/explore/`.
+`local-trial/` is the production source despite its historical directory name.
+Generated `site/explore/` is gitignored and rebuilt in Actions.
 Both this preview and the Highlights globe use the same relief, land cover,
 surface snow/ice rendering and published globe cloud frames.
 
@@ -124,3 +124,26 @@ Each ordinary check also verifies the public latest pointer and manifest against
 the selected run, with bounded retries, and records the served run in the Actions
 summary. A stale public response fails the job instead of silently reporting
 success. The previous complete run remains available during preparation.
+
+## Checking readiness and recovering a missed refresh
+
+- Forecast: Actions → **Prepare Explore forecast data** → **Run workflow**.
+- Clouds: Actions → **Prepare Explore clouds** → **Run workflow**, once the new
+  forecast is published. The normal completion trigger does this automatically;
+  an hourly schedule at UTC minute 26 also retries.
+- Check `https://weatherdata.neilgordon.me/global-data/latest.json`, then the
+  indicated `RUN/manifest.json` and `RUN/cloud-v2/manifest.json`. Both manifests
+  must name the same run and all 28 steps (3 to 84 hours). A successful no-change
+  job is not evidence that a newer upstream run has been published.
+- Cloud status below the opacity slider identifies the prepared liquid/ice
+  volumes or the standard three-band fallback. Missing clouds do not block weather.
+- Check the **event** and timestamp in Actions history to distinguish an actual
+  scheduled check from a manual or workflow-completion check. Missing schedule
+  events have occurred even with active workflows; enabling them is not proof of
+  recovery. On 26 November NZDT their cron entries were renewed and the workflows
+  re-enabled after a missed interval. Manual publication and cloud handoff were
+  verified; this does not guarantee future half-hourly execution.
+
+Site source changes require a Pages deployment. New forecast/cloud packs do not:
+they advance the R2 run data independently. Open landscape views periodically
+check for new runs and retry missing cloud volumes.

@@ -59,7 +59,7 @@ cloud data. Actual Actions duration and mobile performance require measurement.
 The 2026-11-23 12 UTC run produced 760,219,426 compressed bytes for 28 times
 and all three levels. Its first Actions build took about 15½ minutes, including
 about 5½ minutes of serial upload. Subsequent code uses six bounded upload tasks;
-its end-to-end timing has not yet been measured.
+the version-2 measurement below includes those uploads.
 
 For times +33/+36, two NZ-area tiles (`8-6`, `9-6`) plus pack indexes require
 about 75 KB at 2°, 190 KB at 1°, or 470 KB at 0.5°. Across the whole timeline
@@ -136,3 +136,13 @@ The two extra fields are downloaded only during preprocessing. There is no
 additional browser voxel channel or raw-field processing. Live half-resolution
 cloud rendering and full-resolution video export remain. The version-1 size and
 timing figures above are historical; version-2 measurements will differ.
+
+## Verified version-2 publication (26 November 2026 NZDT)
+
+For IFS 2026112506, the cloud job ran from 17:35 to 17:51 UTC on 25 November
+(about 16 minutes) and published 355,919,523 compressed tile bytes. These are
+run-specific measurements, not a fixed download size. Public verification checked
+all 84 pack indexes (28 times × three resolutions), 162 tile entries per pack,
+and a representative compressed range from each pack, including its decoded
+volume dimensions. The weather and cloud manifests named the same run and steps.
+The browser only downloads the ranges needed for its current view and time pair.
